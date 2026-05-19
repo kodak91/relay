@@ -1,7 +1,18 @@
+import { useState } from 'react';
 import useAppStore from '../../store/appStore';
 import { useTasks } from '../../hooks/useTasks';
 import { useMessages } from '../../hooks/useMessages';
-import { useState } from 'react';
+
+const CATCHUP_TYPES = ['approval', 'decision', 'vote', 'update', 'announce', 'meeting'];
+
+const TYPE_LABELS = {
+  approval: '승인',
+  decision: '결정',
+  vote: '투표',
+  update: '보고',
+  announce: '공지',
+  meeting: '회의',
+};
 
 export default function RightSidebar({ onJumpToMessage }) {
   const { role, setRole, activeProject, user } = useAppStore();
@@ -17,8 +28,10 @@ export default function RightSidebar({ onJumpToMessage }) {
   ];
 
   const myTasks = tasks.filter((t) => !t.done);
-
   const isLead = user?.role === 'lead';
+
+  // 따라잡기: all special-type messages (non-text, non-casual)
+  const catchupMessages = messages.filter((m) => CATCHUP_TYPES.includes(m.type));
 
   return (
     <aside className="col-right">
@@ -34,26 +47,77 @@ export default function RightSidebar({ onJumpToMessage }) {
       </div>
 
       {role === 'lead'
-        ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} onJump={onJumpToMessage} isLead={isLead} />
-        : <TaskSidebar tasks={tasks} projectId={activeProject} />
+        ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} catchup={catchupMessages} onJump={onJumpToMessage} isLead={isLead} />
+        : <TaskSidebar tasks={tasks} projectId={activeProject} catchup={catchupMessages} onJump={onJumpToMessage} />
       }
     </aside>
   );
 }
 
-function ConfirmSidebar({ pending, held, onJump, isLead }) {
+function CatchupSection({ messages, onJump }) {
+  const [open, setOpen] = useState(false);
+  const [dismissed, setDismissed] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('catchup_dismissed') || '[]')); }
+    catch { return new Set(); }
+  });
+
+  const dismiss = (id) => {
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      localStorage.setItem('catchup_dismissed', JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  const visible = messages.filter((m) => !dismissed.has(m.id));
+
+  return (
+    <div className="r-section">
+      <div className="r-hd" style={{ cursor: 'pointer' }} onClick={() => setOpen((v) => !v)}>
+        <h4>⚡ 따라잡기</h4>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span className="cnt">{visible.length}건</span>
+          <span style={{ fontSize: 10, color: 'var(--ink-mute)' }}>{open ? '▲' : '▼'}</span>
+        </div>
+      </div>
+      {open && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {visible.length === 0 && (
+            <p style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center', padding: '10px 0' }}>모두 확인했습니다 ✓</p>
+          )}
+          {visible.map((m) => (
+            <div key={m.id} className="catchup-item">
+              <label className="catchup-check">
+                <input type="checkbox" onChange={() => dismiss(m.id)} />
+              </label>
+              <div className="catchup-body" onClick={() => onJump && onJump(m.id)}>
+                <span className="catchup-tag">{TYPE_LABELS[m.type] || m.type}</span>
+                <span className="catchup-text">{m.title || m.text?.slice(0, 36) || '(내용 없음)'}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConfirmSidebar({ pending, held, catchup, onJump, isLead }) {
   return (
     <div className="right-body">
+      <CatchupSection messages={catchup} onJump={onJump} />
+
       <div className="r-section">
         <div className="r-hd">
           <h4>⚡ 결정·승인 대기</h4>
           <span className="cnt">{pending.length}건</span>
         </div>
-        {pending.length === 0 && held.length === 0 ? (
+        {pending.length === 0 && held.length === 0 && (
           <p style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center', padding: '16px 0' }}>
             대기 중인 항목이 없습니다 ✓
           </p>
-        ) : null}
+        )}
         {pending.map((item) => (
           <div key={item.id} className={'r-card ' + item.kind} onClick={() => onJump && onJump(item.id)}>
             <div className="r-tag">{item.tag}</div>
@@ -61,11 +125,10 @@ function ConfirmSidebar({ pending, held, onJump, isLead }) {
             <div className="r-foot">
               <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{item.ts}</span>
               <div className="actions">
-                {isLead ? (
-                  item.kind === 'approval' ? <button>결정하기 →</button> : <button>선택하기 →</button>
-                ) : (
-                  <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>검토 대기 중</span>
-                )}
+                {isLead
+                  ? <button>{item.kind === 'approval' ? '결정하기 →' : '선택하기 →'}</button>
+                  : <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>검토 대기 중</span>
+                }
               </div>
             </div>
           </div>
@@ -101,7 +164,7 @@ function ConfirmSidebar({ pending, held, onJump, isLead }) {
   );
 }
 
-function TaskSidebar({ tasks, projectId }) {
+function TaskSidebar({ tasks, projectId, catchup, onJump }) {
   const { addTask, toggleTask } = useTasks(projectId);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const myTasks = tasks.filter((t) => !t.done);
@@ -115,6 +178,8 @@ function TaskSidebar({ tasks, projectId }) {
 
   return (
     <div className="right-body">
+      <CatchupSection messages={catchup} onJump={onJump} />
+
       <div className="r-section">
         <div className="r-hd">
           <h4>📋 내 태스크</h4>

@@ -42,5 +42,17 @@ export function useMessages(projectId) {
     await updateDoc(doc(db, 'projects', projectId, 'messages', messageId), fields);
   };
 
-  return { messages, loading, sendMessage, addReply, updateMessageField };
+  const confirmMessage = async (projectId, messageId, uid) => {
+    await updateDoc(doc(db, 'projects', projectId, 'messages', messageId), {
+      confirmedBy: arrayUnion(uid),
+    });
+  };
+
+  const nudgeMessage = async (projectId, messageId) => {
+    await updateDoc(doc(db, 'projects', projectId, 'messages', messageId), {
+      nudgedAt: serverTimestamp(),
+    });
+  };
+
+  return { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage };
 }

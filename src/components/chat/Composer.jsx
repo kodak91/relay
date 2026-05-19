@@ -8,6 +8,7 @@ const SLASH_MAP = {
   '\\보고': 'update',
   '\\공지': 'announce',
   '\\잡담': 'casual',
+  '\\회의': 'meeting',
 };
 
 const MESSAGE_TYPES = [
@@ -18,9 +19,9 @@ const MESSAGE_TYPES = [
   { id: 'update',   label: '중간 보고', icon: '◆',  slash: '\\보고' },
   { id: 'announce', label: '공지',      icon: '📢', slash: '\\공지' },
   { id: 'casual',   label: '잡담',      icon: '☕', slash: '\\잡담' },
+  { id: 'meeting',  label: '회의',      icon: '📋', slash: '\\회의' },
 ];
 
-// 결정 안건 빌더 (설문형)
 function DecisionBuilder({ title, setTitle, options, setOptions }) {
   const addOption = () => setOptions([...options, '']);
   const removeOption = (i) => { if (options.length <= 2) return; setOptions(options.filter((_, idx) => idx !== i)); };
@@ -58,9 +59,49 @@ function DecisionBuilder({ title, setTitle, options, setOptions }) {
       <button
         style={{ marginTop: 8, border: '1px dashed var(--border)', borderRadius: 'var(--r-2)', padding: '5px 12px', fontSize: 12, color: 'var(--ink-3)', background: 'transparent', cursor: 'pointer', width: '100%' }}
         onClick={addOption}
-      >
-        + 안건 추가
-      </button>
+      >+ 항목 추가</button>
+    </div>
+  );
+}
+
+function VoteBuilder({ title, setTitle, options, setOptions }) {
+  const addOption = () => setOptions([...options, '']);
+  const removeOption = (i) => { if (options.length <= 2) return; setOptions(options.filter((_, idx) => idx !== i)); };
+  const updateOption = (i, v) => setOptions(options.map((o, idx) => idx === i ? v : o));
+
+  return (
+    <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span>◉</span> 투표
+      </div>
+      <input
+        style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '7px 10px', fontSize: 13, background: 'var(--surface-2)', outline: 'none', marginBottom: 8 }}
+        placeholder="투표 제목을 입력하세요…"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {options.map((opt, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--surface-3)', color: 'var(--ink-3)', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '1.5px solid var(--border)' }}>
+              {i + 1}
+            </span>
+            <input
+              style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '6px 10px', fontSize: 13, background: 'var(--surface-2)', outline: 'none' }}
+              placeholder={`선택지 ${i + 1}`}
+              value={opt}
+              onChange={(e) => updateOption(i, e.target.value)}
+            />
+            {options.length > 2 && (
+              <button style={{ border: 0, background: 'transparent', color: 'var(--ink-mute)', fontSize: 16, lineHeight: 1, cursor: 'pointer' }} onClick={() => removeOption(i)}>×</button>
+            )}
+          </div>
+        ))}
+      </div>
+      <button
+        style={{ marginTop: 8, border: '1px dashed var(--border)', borderRadius: 'var(--r-2)', padding: '5px 12px', fontSize: 12, color: 'var(--ink-3)', background: 'transparent', cursor: 'pointer', width: '100%' }}
+        onClick={addOption}
+      >+ 선택지 추가</button>
     </div>
   );
 }
@@ -71,17 +112,19 @@ export default function Composer({ onSend }) {
   const [importance, setImportance] = useState(0);
   const [polishing, setPolishing] = useState(false);
   const [showAI, setShowAI] = useState(false);
-  // 결정 전용 상태
+
   const [decisionTitle, setDecisionTitle] = useState('');
   const [decisionOptions, setDecisionOptions] = useState(['', '']);
+  const [voteTitle, setVoteTitle] = useState('');
+  const [voteOptions, setVoteOptions] = useState(['', '']);
 
   const isCasual = type === 'casual';
   const isDecision = type === 'decision';
+  const isVote = type === 'vote';
   const isApproval = type === 'approval';
   const startsDoubleSlash = text.startsWith('//');
   const showAccentSend = type !== 'text' && type !== 'casual';
 
-  // 슬래시 커맨드 감지 (\승인, \결정 등)
   useEffect(() => {
     const matched = SLASH_MAP[text.trim()];
     if (matched) {
@@ -111,6 +154,22 @@ export default function Composer({ onSend }) {
       });
       setDecisionTitle('');
       setDecisionOptions(['', '']);
+      setType('text');
+      return;
+    }
+
+    if (isVote) {
+      if (!voteTitle.trim()) return;
+      const validOpts = voteOptions.filter((o) => o.trim());
+      if (validOpts.length < 2) return;
+      onSend({
+        type: 'vote',
+        title: voteTitle.trim(),
+        options: validOpts.map((o, i) => ({ id: String.fromCharCode(97 + i), text: o.trim(), votes: [] })),
+        tags: [],
+      });
+      setVoteTitle('');
+      setVoteOptions(['', '']);
       setType('text');
       return;
     }
@@ -153,18 +212,20 @@ export default function Composer({ onSend }) {
     setType(t);
     setText('');
     if (t !== 'decision') { setDecisionTitle(''); setDecisionOptions(['', '']); }
+    if (t !== 'vote') { setVoteTitle(''); setVoteOptions(['', '']); }
   };
 
   const tags = text.match(/#\S+/g) || [];
   const canSend = isDecision
     ? (decisionTitle.trim() && decisionOptions.filter((o) => o.trim()).length >= 2)
+    : isVote
+    ? (voteTitle.trim() && voteOptions.filter((o) => o.trim()).length >= 2)
     : text.trim();
 
   return (
     <div className={'composer' + (isCasual ? ' casual-mode' : '')}>
       <div className={'box' + (isCasual ? ' casual' : '') + (startsDoubleSlash ? ' polish-mode' : '')}>
 
-        {/* 결정 빌더 */}
         {isDecision && (
           <DecisionBuilder
             title={decisionTitle} setTitle={setDecisionTitle}
@@ -172,8 +233,14 @@ export default function Composer({ onSend }) {
           />
         )}
 
-        {/* 배너들 */}
-        {isCasual && !isDecision && (
+        {isVote && (
+          <VoteBuilder
+            title={voteTitle} setTitle={setVoteTitle}
+            options={voteOptions} setOptions={setVoteOptions}
+          />
+        )}
+
+        {isCasual && !isDecision && !isVote && (
           <div className="casual-banner">
             <span className="dot" /> 잡담 모드 · 이 메시지는 <b>1시간 뒤 자동 삭제</b>됩니다
           </div>
@@ -183,9 +250,9 @@ export default function Composer({ onSend }) {
             ✓ 승인 요청 <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>— 전송하면 컨펌 대기로 이동합니다</span>
           </div>
         )}
-        {startsDoubleSlash && !polishing && !isDecision && (
+        {startsDoubleSlash && !polishing && !isDecision && !isVote && (
           <div className="polish-banner">
-            <span className="ai-dot-sm" /> AI 정중 톤 변환 · <b>Enter</b>로 다듬기
+            <span className="ai-dot-sm" /> 매너모드 · <b>Enter</b>로 정중하게 변환
           </div>
         )}
         {polishing && (
@@ -193,19 +260,18 @@ export default function Composer({ onSend }) {
             <span className="ai-typing"><span /><span /><span /></span> AI가 메시지를 다듬고 있어요…
           </div>
         )}
-        {tags.length > 0 && !isDecision && (
+        {tags.length > 0 && !isDecision && !isVote && (
           <div className="tags-mini">{tags.map((t, i) => <span key={i} className="tag">{t}</span>)}</div>
         )}
 
-        {/* 텍스트 입력 (결정 모드엔 숨김) */}
-        {!isDecision && (
+        {!isDecision && !isVote && (
           <div className="ta-wrap">
             <textarea
               className="ta"
               placeholder={
                 isCasual ? '팀에게 가볍게 한마디… (1시간 뒤 사라짐)'
                 : isApproval ? '승인 요청 내용을 입력하세요… (마크다운 지원)'
-                : '메시지 입력… (// + Enter: AI 다듬기 · \\승인 \\결정 \\투표 등으로 유형 전환)'
+                : '메시지 입력…  // : 매너모드   \\버튼명: 버튼 호출   #태그명 : 태그 달기'
               }
               rows={Math.min(6, Math.max(1, text.split('\n').length))}
               value={text}
@@ -232,7 +298,6 @@ export default function Composer({ onSend }) {
           </div>
         )}
 
-        {/* 하단 액션바 */}
         <div className="actions">
           <div className="type-chips">
             {MESSAGE_TYPES.map((tt) => (

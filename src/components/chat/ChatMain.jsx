@@ -6,7 +6,6 @@ import Message from './Message';
 import Composer from './Composer';
 import TagBar from './TagBar';
 import TasksTab from '../tasks/TasksTab';
-import { serverTimestamp } from 'firebase/firestore';
 
 function nowHM() {
   const d = new Date();
@@ -15,15 +14,13 @@ function nowHM() {
 
 export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { activeProject, chatTab, setChatTab, activeTag, user } = useAppStore();
-  const { messages, loading, sendMessage, addReply, updateMessageField } = useMessages(activeProject);
+  const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage } = useMessages(activeProject);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
 
-  // Local state for thread interaction (UI only)
   const [openThreads, setOpenThreads] = useState(new Set());
   const [replyValues, setReplyValues] = useState({});
-
-  const project = activeProject;
+  const [collapsedAnnouncements, setCollapsedAnnouncements] = useState(new Set());
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -35,9 +32,14 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     const now = Date.now();
     const live = messages.filter((m) => !m.expiresAt || m.expiresAt > now);
     if (activeTag === 'all') return live;
-    const tagName = { print: '#인쇄', design: '#디자인', logi: '#물류', money: '#발주', meet: '#회의' }[activeTag];
-    return tagName ? live.filter((m) => (m.tags || []).includes(tagName)) : live;
+    return live.filter((m) => (m.tags || []).includes(activeTag));
   }, [messages, activeTag]);
+
+  // Pinned announcements — shown at top until collapsed
+  const pinnedAnnouncements = useMemo(
+    () => messages.filter((m) => m.type === 'announce' && !collapsedAnnouncements.has(m.id)),
+    [messages, collapsedAnnouncements]
+  );
 
   const toggleThread = (mid) => {
     setOpenThreads((prev) => {
@@ -64,10 +66,12 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     const m = messages.find((msg) => msg.id === mid);
     if (!m) return;
     const options = (m.options || []).map((o) => {
-      const wasVoted = o.id === oid && o.voted;
-      const filtered = (o.votes || []).filter((v) => v.name !== user?.name);
-      if (o.id === oid && !wasVoted) return { ...o, voted: true, votes: [...filtered, { name: user?.name, color: 'oklch(0.45 0.20 270)' }] };
-      return { ...o, voted: o.id === oid ? false : o.voted, votes: filtered };
+      const alreadyVoted = (o.votes || []).some((v) => v.uid === user?.uid || v.name === user?.name);
+      const filtered = (o.votes || []).filter((v) => v.uid !== user?.uid && v.name !== user?.name);
+      if (o.id === oid && !alreadyVoted) {
+        return { ...o, votes: [...filtered, { name: user?.name, uid: user?.uid, color: 'oklch(0.45 0.20 270)' }] };
+      }
+      return { ...o, votes: filtered };
     });
     await updateMessageField(activeProject, mid, { options });
   };
@@ -86,11 +90,29 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     }
   };
 
+  const confirmMsg = async (mid) => {
+    if (!user?.uid) return;
+    await confirmMessage(activeProject, mid, user.uid);
+  };
+
+  const nudgeMsg = async (mid) => {
+    await nudgeMessage(activeProject, mid);
+  };
+
+  const saveMeetingSummary = async (mid, summary) => {
+    await updateMessageField(activeProject, mid, { summary });
+  };
+
+  const collapseAnnounce = (mid) => {
+    setCollapsedAnnouncements((prev) => new Set([...prev, mid]));
+  };
+
   const handleSend = async (msgData) => {
     if (!activeProject) return;
     await sendMessage(activeProject, {
       ...msgData,
       senderName: user?.name || '나',
+      senderUid: user?.uid,
       senderRole: user?.role === 'lead' ? '팀장' : '팀원',
       ts: nowHM(),
     });
@@ -99,7 +121,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const handlers = {
     openThreads, replyValues,
     toggleThread, setReplyValue, sendReply,
-    choose, vote, actApproval,
+    choose, vote, actApproval, confirmMsg, nudgeMsg,
+    saveMeetingSummary, collapseAnnounce,
   };
 
   if (!activeProject) {
@@ -116,7 +139,6 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
   return (
     <main className="col-mid">
-      {/* Chat head */}
       <div className="chat-head">
         <div className="chat-title">
           <div style={{ fontWeight: 800, fontSize: 15 }}>{activeProject}</div>
@@ -138,6 +160,15 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         <TasksTab projectId={activeProject} />
       ) : (
         <>
+          {/* Pinned announcements */}
+          {pinnedAnnouncements.map((m) => (
+            <div key={m.id} className="pinned-announce">
+              <span className="pinned-icon">📢</span>
+              <div className="pinned-body md-content"><span>{m.text}</span></div>
+              <button className="pinned-collapse" onClick={() => collapseAnnounce(m.id)}>접기</button>
+            </div>
+          ))}
+
           <TagBar messages={messages} />
           <div className="chat-scroll" ref={scrollRef}>
             {loading ? (
