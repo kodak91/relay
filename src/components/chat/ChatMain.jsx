@@ -72,14 +72,17 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     await updateMessageField(activeProject, mid, { options });
   };
 
-  const actApproval = async (mid, action) => {
-    const status = action === 'approve' ? 'approved' : 'rejected';
-    await updateMessageField(activeProject, mid, { status });
+  const actApproval = async (mid, action, heldUntil) => {
     if (action === 'approve') {
+      await updateMessageField(activeProject, mid, { status: 'approved' });
       const m = messages.find((msg) => msg.id === mid);
-      if (m?.title) {
-        await addTask(activeProject, { title: m.title + ' — 후속 처리', fromLead: true, from: 'approval:' + mid });
+      if (m) {
+        await addTask(activeProject, { title: (m.text?.slice(0, 40) || '승인 건') + ' — 후속 처리', fromLead: true, from: 'approval:' + mid });
       }
+    } else if (action === 'reject') {
+      await updateMessageField(activeProject, mid, { status: 'rejected' });
+    } else if (action === 'hold') {
+      await updateMessageField(activeProject, mid, { status: 'held', heldUntil: heldUntil || null });
     }
   };
 

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import useAppStore from '../../store/appStore';
 
 const AVATAR_COLORS = [
@@ -82,13 +83,6 @@ function Thread({ items, replyValue, onReplyChange, onSend, senderName }) {
 // ─── Message type renderers ──────────────────────────────────────────────
 
 function TextMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, senderName }) {
-  const parseText = (text = '') => {
-    const parts = text.split(/(<inline-tag>.*?<\/inline-tag>)/g);
-    return parts.map((p, i) => {
-      const match = p.match(/<inline-tag>(.*?)<\/inline-tag>/);
-      return match ? <span key={i} className="inline-tag">{match[1]}</span> : <span key={i}>{p}</span>;
-    });
-  };
   return (
     <div className="msg">
       <div className="msg-actions">
@@ -103,11 +97,9 @@ function TextMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onS
           <span className="role">{m.senderRole}</span>
           <span className="ts">{m.ts}</span>
         </div>
-        <div className="msg-body">
-          <p>
-            {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
-            {parseText(m.text)}
-          </p>
+        <div className="msg-body md-content">
+          {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
+          <ReactMarkdown>{m.text || ''}</ReactMarkdown>
         </div>
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
@@ -155,7 +147,22 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
 }
 
 function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onAct, senderName }) {
-  const statusClass = m.status === 'approved' ? 'approved' : m.status === 'rejected' ? 'rejected' : '';
+  const { user } = useAppStore();
+  const isLead = user?.role === 'lead';
+  const [holdDate, setHoldDate] = useState('');
+  const [showHoldPicker, setShowHoldPicker] = useState(false);
+
+  const statusClass = m.status === 'approved' ? 'approved' : m.status === 'rejected' ? 'rejected' : m.status === 'held' ? 'held' : '';
+
+  const handleHold = () => {
+    if (showHoldPicker) {
+      onAct(m.id, 'hold', holdDate || null);
+      setShowHoldPicker(false);
+    } else {
+      setShowHoldPicker(true);
+    }
+  };
+
   return (
     <div className="msg">
       <Avatar name={m.senderName} />
@@ -167,22 +174,33 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
         </div>
         <div className={'approval-card ' + statusClass}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <span style={{ fontSize: 11, color: 'oklch(0.42 0.13 70)', fontWeight: 700 }}>✅ 승인 요청</span>
+            <span style={{ fontSize: 11, color: 'oklch(0.42 0.13 70)', fontWeight: 700 }}>✓ 승인 요청</span>
             {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
             {m.due && <span className="due urgent">📅 {m.due}</span>}
           </div>
-          <div className="ac-header">{m.title}</div>
-          <div className="ac-desc">{m.desc}</div>
-          {m.amount && <div className="ac-amount">{m.amount}</div>}
+          <div className="ac-desc md-content">
+            <ReactMarkdown>{m.text || ''}</ReactMarkdown>
+          </div>
           <div className="ac-actions">
-            {m.status === 'pending' ? (
+            {m.status === 'pending' && isLead ? (
               <>
                 <button className="btn accent sm" onClick={() => onAct(m.id, 'approve')}>승인</button>
                 <button className="btn danger sm" onClick={() => onAct(m.id, 'reject')}>반려</button>
+                <button className="btn minor sm" onClick={handleHold}>보류</button>
+                {showHoldPicker && (
+                  <div className="hold-picker">
+                    <input type="date" value={holdDate} onChange={(e) => setHoldDate(e.target.value)} />
+                    <button className="btn accent sm" onClick={handleHold}>확인</button>
+                  </div>
+                )}
               </>
+            ) : m.status === 'pending' ? (
+              <span className="ac-status pending">⏳ 검토 대기 중</span>
+            ) : m.status === 'held' ? (
+              <span className="ac-status held">⏸ 보류{m.heldUntil ? ` (${m.heldUntil}까지)` : ''}</span>
             ) : (
               <span className={'ac-status ' + m.status}>
-                {m.status === 'approved' ? '✓ 승인됨' : '✗ 반려됨'}
+                {m.status === 'approved' ? '✓ 승인 완료' : '✗ 반려됨'}
               </span>
             )}
           </div>

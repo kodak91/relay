@@ -4,12 +4,12 @@ import { useMessages } from '../../hooks/useMessages';
 import { useState } from 'react';
 
 export default function RightSidebar({ onJumpToMessage }) {
-  const { role, setRole, activeProject } = useAppStore();
+  const { role, setRole, activeProject, user } = useAppStore();
   const { tasks } = useTasks(activeProject);
   const { messages } = useMessages(activeProject);
 
-  // Pending decisions/approvals from messages
   const pendingApprovals = messages.filter((m) => m.type === 'approval' && m.status === 'pending');
+  const heldApprovals = messages.filter((m) => m.type === 'approval' && m.status === 'held');
   const pendingDecisions = messages.filter((m) => m.type === 'decision' && !m.chosen);
   const pendingAll = [
     ...pendingApprovals.map((m) => ({ ...m, tag: '승인', kind: 'approval' })),
@@ -17,72 +17,91 @@ export default function RightSidebar({ onJumpToMessage }) {
   ];
 
   const myTasks = tasks.filter((t) => !t.done);
-  const doneTasks = tasks.filter((t) => t.done);
+
+  const isLead = user?.role === 'lead';
 
   return (
     <aside className="col-right">
       <div className="right-tabs">
         <button className={'right-tab' + (role === 'lead' ? ' on' : '')} onClick={() => setRole('lead')}>
-          팀장 시점
-          <span className="cnt">{pendingAll.length}</span>
+          컨펌 대기
+          <span className="cnt">{pendingAll.length + heldApprovals.length}</span>
         </button>
         <button className={'right-tab' + (role === 'member' ? ' on' : '')} onClick={() => setRole('member')}>
-          팀원 시점
+          태스크 관리
           <span className="cnt">{myTasks.length}</span>
         </button>
       </div>
 
       {role === 'lead'
-        ? <LeadSidebar pending={pendingAll} onJump={onJumpToMessage} />
-        : <MemberSidebar tasks={tasks} projectId={activeProject} />
+        ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} onJump={onJumpToMessage} isLead={isLead} />
+        : <TaskSidebar tasks={tasks} projectId={activeProject} />
       }
     </aside>
   );
 }
 
-function LeadSidebar({ pending, onJump }) {
+function ConfirmSidebar({ pending, held, onJump, isLead }) {
   return (
     <div className="right-body">
       <div className="r-section">
         <div className="r-hd">
-          <h4>⚡ 오늘 결정/승인 대기</h4>
+          <h4>⚡ 결정·승인 대기</h4>
           <span className="cnt">{pending.length}건</span>
         </div>
-        {pending.length === 0 && (
+        {pending.length === 0 && held.length === 0 ? (
           <p style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center', padding: '16px 0' }}>
             대기 중인 항목이 없습니다 ✓
           </p>
-        )}
+        ) : null}
         {pending.map((item) => (
           <div key={item.id} className={'r-card ' + item.kind} onClick={() => onJump && onJump(item.id)}>
             <div className="r-tag">{item.tag}</div>
-            <div className="r-ttl">{item.title || item.text?.slice(0, 40)}</div>
+            <div className="r-ttl">{item.title || item.text?.slice(0, 50)}</div>
             <div className="r-foot">
-              <span>{item.due ? `📅 ${item.due}` : ''}</span>
+              <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{item.ts}</span>
               <div className="actions">
-                {item.kind === 'approval' && <button>결정하기 →</button>}
-                {item.kind === 'decision' && <button>선택하기 →</button>}
+                {isLead ? (
+                  item.kind === 'approval' ? <button>결정하기 →</button> : <button>선택하기 →</button>
+                ) : (
+                  <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>검토 대기 중</span>
+                )}
               </div>
             </div>
           </div>
         ))}
       </div>
 
+      {held.length > 0 && (
+        <div className="r-section">
+          <div className="r-hd">
+            <h4>⏸ 보류 중</h4>
+            <span className="cnt">{held.length}건</span>
+          </div>
+          {held.map((item) => (
+            <div key={item.id} className="r-card held" onClick={() => onJump && onJump(item.id)}>
+              <div className="r-tag" style={{ background: 'var(--amber-bg)', color: 'oklch(0.42 0.13 70)', borderColor: 'var(--amber-line)' }}>보류</div>
+              <div className="r-ttl">{item.text?.slice(0, 50)}</div>
+              {item.heldUntil && (
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>📅 {item.heldUntil}까지</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="r-ai-card">
         <div className="r-ai-hd">
           <span className="ai-dot" />
           <span>AI 현황 요약</span>
         </div>
-        <p>이 프로젝트의 AI 요약을 보려면 AI 채널에서 <b>/오늘요약</b>을 입력하세요.</p>
-        <div className="r-ai-actions">
-          <button onClick={() => {}}>AI 채널 열기</button>
-        </div>
+        <p>AI 채널에서 <b>/오늘요약</b>을 입력하면 하루를 한 번에 파악할 수 있습니다.</p>
       </div>
     </div>
   );
 }
 
-function MemberSidebar({ tasks, projectId }) {
+function TaskSidebar({ tasks, projectId }) {
   const { addTask, toggleTask } = useTasks(projectId);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const myTasks = tasks.filter((t) => !t.done);

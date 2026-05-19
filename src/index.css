@@ -482,13 +482,35 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 }
 .approval-card.approved { border-color: var(--emerald-line); background: var(--emerald-bg); }
 .approval-card.rejected { border-color: var(--rose-line); background: var(--rose-bg); }
+.approval-card.held { border-color: var(--amber-line); background: var(--amber-bg); opacity: 0.8; }
 .approval-card .ac-header { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
 .approval-card .ac-desc { font-size: 12px; color: var(--ink-2); margin-bottom: 10px; }
 .ac-amount { font-size: 16px; font-weight: 800; font-family: var(--font-mono); color: var(--ink); margin-bottom: 10px; }
-.ac-actions { display: flex; gap: 8px; }
+.ac-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ac-status { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: var(--r-2); }
 .ac-status.approved { background: var(--emerald); color: #fff; }
 .ac-status.rejected { background: var(--rose); color: #fff; }
+.ac-status.held { background: var(--amber-line); color: oklch(0.42 0.13 70); }
+.ac-status.pending { color: var(--ink-3); font-weight: 500; font-size: 12px; }
+.hold-picker { display: flex; align-items: center; gap: 6px; }
+.hold-picker input[type="date"] { border: 1px solid var(--border); border-radius: var(--r-2); padding: 4px 8px; font-size: 12px; background: var(--surface-2); outline: none; color: var(--ink); }
+.r-card.held { border-color: var(--amber-line); background: var(--amber-bg); }
+
+/* Markdown rendered content */
+.md-content p { margin: 0 0 6px; }
+.md-content p:last-child { margin-bottom: 0; }
+.md-content strong { font-weight: 700; }
+.md-content em { font-style: italic; }
+.md-content code { font-family: var(--font-mono); font-size: 0.88em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); }
+.md-content pre { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-2); padding: 10px 12px; overflow-x: auto; margin: 6px 0; }
+.md-content pre code { background: none; border: none; padding: 0; font-size: 12px; }
+.md-content ul, .md-content ol { padding-left: 18px; margin: 4px 0; }
+.md-content li { font-size: 13px; margin-bottom: 2px; }
+.md-content h1, .md-content h2, .md-content h3 { font-weight: 700; margin: 8px 0 4px; }
+.md-content h1 { font-size: 16px; }
+.md-content h2 { font-size: 14px; }
+.md-content h3 { font-size: 13px; }
+.md-content blockquote { border-left: 3px solid var(--accent); margin: 6px 0; padding: 4px 10px; color: var(--ink-2); background: var(--accent-soft); border-radius: 0 var(--r-2) var(--r-2) 0; }
 
 /* Vote card */
 .vote-card {
