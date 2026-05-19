@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
 import { claudeComplete, AI_ACTIONS } from '../../lib/claude';
 
 const SLASH_MAP = {
@@ -280,11 +279,6 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
               onKeyDown={handleKey}
               disabled={polishing}
             />
-            {text && !isCasual && (
-              <div className="md-live-preview md-content">
-                <ReactMarkdown>{text}</ReactMarkdown>
-              </div>
-            )}
             <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
             {showAI && (
               <div className="ai-fab-pop">
