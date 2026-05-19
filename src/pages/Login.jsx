@@ -9,7 +9,7 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState('member');
+  const [position, setPosition] = useState('사원');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const { loginWithEmail, loginWithGoogle, register } = useAuth();
@@ -29,7 +29,7 @@ export default function Login() {
         await loginWithEmail(email, password);
       } else {
         if (!name.trim()) { setError('이름을 입력해주세요.'); setSubmitting(false); return; }
-        await register(email, password, name, role);
+        await register(email, password, name, position);
       }
       navigate('/app', { replace: true });
     } catch (err) {
@@ -102,10 +102,16 @@ export default function Login() {
           </div>
           {tab === 'register' && (
             <div className="form-group">
-              <label className="form-label">역할</label>
-              <div className="role-switch" style={{ width: 'fit-content' }}>
-                <button type="button" className={role === 'lead' ? 'on' : ''} onClick={() => setRole('lead')}>팀장</button>
-                <button type="button" className={role === 'member' ? 'on' : ''} onClick={() => setRole('member')}>팀원</button>
+              <label className="form-label">직급</label>
+              <div className="position-grid">
+                {['대표', '부장', '팀장', '대리', '사원'].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={'position-chip' + (position === p ? ' on' : '')}
+                    onClick={() => setPosition(p)}
+                  >{p}</button>
+                ))}
               </div>
             </div>
           )}

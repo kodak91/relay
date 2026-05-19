@@ -11,6 +11,9 @@ import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../lib/firebase';
 import useAppStore from '../store/appStore';
 
+const LEAD_POSITIONS = ['대표', '부장', '팀장'];
+const positionToRole = (pos) => LEAD_POSITIONS.includes(pos) ? 'lead' : 'member';
+
 export function useAuth() {
   const setUser = useAppStore((s) => s.setUser);
   const setAuthLoading = useAppStore((s) => s.setAuthLoading);
@@ -21,11 +24,13 @@ export function useAuth() {
         try {
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           const profile = userDoc.exists() ? userDoc.data() : {};
+          const pos = profile.position || null;
           setUser({
             uid: firebaseUser.uid,
             email: firebaseUser.email,
             name: profile.name || firebaseUser.displayName || firebaseUser.email,
-            role: profile.role || 'member',
+            role: pos ? positionToRole(pos) : (profile.role || 'member'),
+            position: pos || profile.role || '팀원',
             initial: (profile.name || firebaseUser.displayName || firebaseUser.email || '?')[0],
           });
         } catch {
@@ -55,12 +60,14 @@ export function useAuth() {
     return cred.user;
   };
 
-  const register = async (email, password, name, role) => {
+  const register = async (email, password, name, position) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName: name });
     try {
       await setDoc(doc(db, 'users', cred.user.uid), {
-        name, email, role: role || 'member',
+        name, email,
+        position: position || '사원',
+        role: positionToRole(position || '사원'),
         createdAt: serverTimestamp(),
       });
     } catch { /* Firestore 실패해도 계속 진행 */ }

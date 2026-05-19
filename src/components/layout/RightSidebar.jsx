@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useAppStore from '../../store/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import { useGlobalTasks } from '../../hooks/useGlobalTasks';
@@ -12,14 +12,21 @@ const TYPE_LABELS = {
 };
 
 export default function RightSidebar({ onJumpToMessage }) {
-  const { role, setRole, activeProject, user } = useAppStore();
+  const { activeProject, user } = useAppStore();
   const { projects } = useProjects();
+  const [tab, setTab] = useState('confirm');
+
+  // Auto-set tab based on role
+  useEffect(() => {
+    if (user?.role === 'member') setTab('tasks');
+    else setTab('confirm');
+  }, [user?.role]);
 
   // Global — across ALL workspaces
   const { tasks, addTask, toggleTask } = useGlobalTasks(projects);
   const { messages } = useGlobalMessages(projects);
 
-  const pendingApprovals = messages.filter((m) => m.type === 'approval' && m.status === 'pending');
+  const pendingApprovals = messages.filter((m) => m.type === 'approval' && (!m.status || m.status === 'pending'));
   const heldApprovals = messages.filter((m) => m.type === 'approval' && m.status === 'held');
   const pendingDecisions = messages.filter((m) => m.type === 'decision' && !m.chosen);
   const pendingAll = [
@@ -30,20 +37,37 @@ export default function RightSidebar({ onJumpToMessage }) {
   const myTasks = tasks.filter((t) => !t.done);
   const isLead = user?.role === 'lead';
 
+  const POSITION_COLORS = {
+    '대표': 'oklch(0.38 0.18 270)',
+    '부장': 'oklch(0.45 0.16 270)',
+    '팀장': 'oklch(0.48 0.21 270)',
+    '대리': 'oklch(0.52 0.12 160)',
+    '사원': 'oklch(0.55 0.10 80)',
+  };
+  const posColor = POSITION_COLORS[user?.position] || 'var(--ink-3)';
+
   return (
     <aside className="col-right">
+      {/* Position badge — replaces toggle */}
+      <div className="position-bar">
+        <span className="position-badge" style={{ background: posColor }}>
+          {user?.position || '—'}
+        </span>
+        <span className="position-name">{user?.name}</span>
+      </div>
+
       <div className="right-tabs">
-        <button className={'right-tab' + (role === 'lead' ? ' on' : '')} onClick={() => setRole('lead')}>
+        <button className={'right-tab' + (tab === 'confirm' ? ' on' : '')} onClick={() => setTab('confirm')}>
           컨펌 대기
           <span className="cnt">{pendingAll.length + heldApprovals.length}</span>
         </button>
-        <button className={'right-tab' + (role === 'member' ? ' on' : '')} onClick={() => setRole('member')}>
+        <button className={'right-tab' + (tab === 'tasks' ? ' on' : '')} onClick={() => setTab('tasks')}>
           태스크 관리
           <span className="cnt">{myTasks.length}</span>
         </button>
       </div>
 
-      {role === 'lead'
+      {tab === 'confirm'
         ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} catchup={messages} onJump={onJumpToMessage} isLead={isLead} />
         : <TaskSidebar tasks={tasks} addTask={addTask} toggleTask={toggleTask} activeProject={activeProject} />
       }

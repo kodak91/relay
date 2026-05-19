@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
 import useAppStore from '../../store/appStore';
 import { useMessages } from '../../hooks/useMessages';
 import { useTasks } from '../../hooks/useTasks';
@@ -6,6 +7,7 @@ import Message from './Message';
 import Composer from './Composer';
 import TagBar from './TagBar';
 import TasksTab from '../tasks/TasksTab';
+import { uploadFile, IMAGE_TYPES, formatFileSize } from '../../lib/uploadFile';
 
 function nowHM() {
   const d = new Date();
@@ -17,10 +19,14 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage } = useMessages(activeProject);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const [openThreads, setOpenThreads] = useState(new Set());
   const [replyValues, setReplyValues] = useState({});
-  const [collapsedAnnouncements, setCollapsedAnnouncements] = useState(new Set());
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [showAnnouncements, setShowAnnouncements] = useState(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -35,7 +41,6 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     return live.filter((m) => (m.tags || []).includes(activeTag));
   }, [messages, activeTag]);
 
-  // Compute which messages are "grouped" (same sender, text type, consecutive)
   const groupedSet = useMemo(() => {
     const result = new Set();
     let prev = null;
@@ -53,11 +58,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     return result;
   }, [filteredMessages]);
 
-  // Pinned announcements — shown at top until collapsed
-  const pinnedAnnouncements = useMemo(
-    () => messages.filter((m) => m.type === 'announce' && !collapsedAnnouncements.has(m.id)),
-    [messages, collapsedAnnouncements]
-  );
+  const announcements = useMemo(() => messages.filter((m) => m.type === 'announce'), [messages]);
 
   const toggleThread = (mid) => {
     setOpenThreads((prev) => {
@@ -99,7 +100,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       await updateMessageField(activeProject, mid, { status: 'approved' });
       const m = messages.find((msg) => msg.id === mid);
       if (m) {
-        await addTask(activeProject, { title: (m.text?.slice(0, 40) || '승인 건') + ' — 후속 처리', fromLead: true, from: 'approval:' + mid });
+        await addTask(activeProject, { title: (m.text?.slice(0, 40) || '승인 건') + ' — 후속 처리', fromLead: true, done: true, from: 'approval:' + mid });
       }
     } else if (action === 'reject') {
       await updateMessageField(activeProject, mid, { status: 'rejected' });
@@ -121,26 +122,53 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     await updateMessageField(activeProject, mid, { summary });
   };
 
-  const collapseAnnounce = (mid) => {
-    setCollapsedAnnouncements((prev) => new Set([...prev, mid]));
-  };
-
   const handleSend = async (msgData) => {
     if (!activeProject) return;
     await sendMessage(activeProject, {
       ...msgData,
       senderName: user?.name || '나',
       senderUid: user?.uid,
-      senderRole: user?.role === 'lead' ? '팀장' : '팀원',
+      senderRole: user?.position || (user?.role === 'lead' ? '팀장' : '팀원'),
       ts: nowHM(),
     });
   };
+
+  // File upload handler
+  const handleFiles = async (files) => {
+    if (!activeProject || !files?.length) return;
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      for (const file of Array.from(files)) {
+        const isImage = IMAGE_TYPES.includes(file.type);
+        const url = await uploadFile(file, setUploadProgress);
+        await handleSend({
+          type: isImage ? 'image' : 'file',
+          fileUrl: url,
+          fileName: file.name,
+          fileSize: formatFileSize(file.size),
+          fileType: file.type,
+          text: '',
+          tags: [],
+        });
+      }
+    } catch (e) {
+      console.error('Upload failed:', e);
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const onDragOver = (e) => { e.preventDefault(); setDragging(true); };
+  const onDragLeave = (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); };
+  const onDrop = (e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); };
 
   const handlers = {
     openThreads, replyValues,
     toggleThread, setReplyValue, sendReply,
     choose, vote, actApproval, confirmMsg, nudgeMsg,
-    saveMeetingSummary, collapseAnnounce,
+    saveMeetingSummary,
   };
 
   if (!activeProject) {
@@ -156,7 +184,16 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   }
 
   return (
-    <main className="col-mid">
+    <main className="col-mid" onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+      {dragging && (
+        <div className="drop-overlay">
+          <div className="drop-inner">
+            <div style={{ fontSize: 40 }}>📎</div>
+            <div>여기에 파일을 놓으세요</div>
+          </div>
+        </div>
+      )}
+
       <div className="chat-head">
         <div className="chat-title">
           <div style={{ fontWeight: 800, fontSize: 15 }}>{activeProject}</div>
@@ -172,23 +209,45 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
             </button>
           ))}
         </div>
+        {/* Announcements button */}
+        {announcements.length > 0 && (
+          <div style={{ position: 'relative', marginLeft: 'auto', flexShrink: 0 }}>
+            <button
+              className={'announce-toggle' + (showAnnouncements ? ' on' : '')}
+              onClick={() => setShowAnnouncements((v) => !v)}
+            >
+              📢 공지 <span className="cnt">{announcements.length}</span>
+            </button>
+            {showAnnouncements && (
+              <div className="announce-panel">
+                <div className="announce-panel-hd">
+                  <span>📢 공지사항</span>
+                  <button onClick={() => setShowAnnouncements(false)}>✕</button>
+                </div>
+                {announcements.map((m) => (
+                  <div key={m.id} className="announce-panel-item">
+                    <div className="announce-panel-sender">{m.senderName} · {m.ts}</div>
+                    <div className="announce-panel-text md-content"><ReactMarkdown>{m.text || ''}</ReactMarkdown></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {chatTab === 'tasks' ? (
         <TasksTab projectId={activeProject} />
       ) : (
         <>
-          {/* Pinned announcements */}
-          {pinnedAnnouncements.map((m) => (
-            <div key={m.id} className="pinned-announce">
-              <span className="pinned-icon">📢</span>
-              <div className="pinned-body md-content"><span>{m.text}</span></div>
-              <button className="pinned-collapse" onClick={() => collapseAnnounce(m.id)}>접기</button>
-            </div>
-          ))}
-
           <TagBar messages={messages} />
           <div className="chat-scroll" ref={scrollRef}>
+            {uploading && (
+              <div className="upload-progress">
+                <div className="upload-bar" style={{ width: uploadProgress + '%' }} />
+                <span>업로드 중… {uploadProgress}%</span>
+              </div>
+            )}
             {loading ? (
               <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
                 <span className="ai-typing"><span /><span /><span /></span>
@@ -210,7 +269,14 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
               </>
             )}
           </div>
-          <Composer onSend={handleSend} />
+          <Composer onSend={handleSend} onFileSelect={handleFiles} fileInputRef={fileInputRef} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            onChange={(e) => handleFiles(e.target.files)}
+          />
         </>
       )}
     </main>

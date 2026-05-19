@@ -950,4 +950,95 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
 
 @keyframes fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* ── Drag-drop overlay ────────────────────────────────────────────────── */
+.drop-overlay {
+  position: absolute; inset: 0; z-index: 100;
+  background: oklch(0.48 0.21 270 / 0.12);
+  border: 3px dashed var(--accent); border-radius: var(--r-3);
+  display: grid; place-items: center; pointer-events: none;
+}
+.drop-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  font-size: 15px; font-weight: 700; color: var(--accent);
+}
+
+/* ── Upload progress ──────────────────────────────────────────────────── */
+.upload-progress {
+  position: relative; height: 28px; margin: 6px 20px;
+  background: var(--surface-2); border-radius: var(--r-2);
+  overflow: hidden; display: flex; align-items: center; padding: 0 10px;
+  font-size: 12px; color: var(--ink-3);
+}
+.upload-bar {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--accent-soft); transition: width 0.2s;
+}
+.upload-progress span { position: relative; z-index: 1; }
+
+/* ── Image message ────────────────────────────────────────────────────── */
+.image-preview {
+  display: inline-block; cursor: zoom-in; border-radius: var(--r-2);
+  overflow: hidden; border: 1px solid var(--border); max-width: 320px;
+}
+.image-preview img { display: block; max-width: 100%; max-height: 240px; object-fit: cover; }
+.image-name { font-size: 11px; color: var(--ink-3); padding: 4px 8px; background: var(--surface-2); }
+.image-lightbox {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.8); display: grid; place-items: center; cursor: zoom-out;
+}
+.image-lightbox img { max-width: 90vw; max-height: 90vh; border-radius: var(--r-2); object-fit: contain; }
+
+/* ── 공지 toggle & panel ──────────────────────────────────────────────── */
+.announce-toggle {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: var(--r-2);
+  border: 1px solid var(--border); background: var(--surface);
+  font-size: 13px; font-weight: 600; color: var(--ink-2); white-space: nowrap;
+}
+.announce-toggle:hover { background: var(--hover); }
+.announce-toggle .cnt {
+  font-family: var(--font-mono); font-size: 11px;
+  background: var(--accent); color: var(--accent-ink);
+  padding: 1px 6px; border-radius: 999px;
+}
+.announce-toggle.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+.announce-panel {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 50;
+  width: 320px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-3); box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  overflow: hidden;
+}
+.announce-panel-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  font-size: 13px; font-weight: 700;
+}
+.announce-panel-hd button { font-size: 13px; color: var(--ink-mute); background: none; border: none; cursor: pointer; }
+.announce-panel-item { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.announce-panel-item:last-child { border-bottom: none; }
+.announce-panel-sender { font-size: 11px; color: var(--ink-mute); margin-bottom: 4px; }
+.announce-panel-text { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+
+/* ── Position bar (right sidebar) ────────────────────────────────────── */
+.position-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.position-badge {
+  padding: 2px 8px; border-radius: var(--r-2);
+  font-size: 11px; font-weight: 700; color: #fff; letter-spacing: 0.02em;
+}
+.position-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+
+/* ── Position grid (login registration) ──────────────────────────────── */
+.position-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 4px; }
+.position-chip {
+  padding: 7px 0; border-radius: var(--r-2);
+  border: 1.5px solid var(--border); background: var(--surface-2);
+  font-size: 13px; font-weight: 600; color: var(--ink-2);
+  text-align: center; cursor: pointer; transition: all 0.12s;
+}
+.position-chip:hover { border-color: var(--accent-line); color: var(--accent); }
+.position-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .fadein { animation: fadein 0.25s ease; }

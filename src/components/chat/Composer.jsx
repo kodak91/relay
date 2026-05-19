@@ -107,7 +107,7 @@ function VoteBuilder({ title, setTitle, options, setOptions }) {
   );
 }
 
-export default function Composer({ onSend }) {
+export default function Composer({ onSend, onFileSelect, fileInputRef }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
   const [importance, setImportance] = useState(0);
@@ -179,6 +179,7 @@ export default function Composer({ onSend }) {
     const tags = text.match(/#\S+/g) || [];
     const msg = { type, text: text.trim(), tags, importance };
     if (type === 'casual') msg.expiresAt = Date.now() + 60 * 60 * 1000;
+    if (type === 'approval') msg.status = 'pending';
     onSend(msg);
     setText('');
     setType('text');
@@ -304,6 +305,15 @@ export default function Composer({ onSend }) {
         )}
 
         <div className="actions">
+          <button
+              className="chip"
+              style={{ borderStyle: 'dashed' }}
+              onClick={() => fileInputRef?.current?.click()}
+              title="파일 첨부"
+            >
+              <span>📎</span>
+              <span>파일</span>
+            </button>
           <div className="type-chips">
             {MESSAGE_TYPES.map((tt) => (
               <button

@@ -237,7 +237,10 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
   const [holdDate, setHoldDate] = useState('');
   const [showHoldPicker, setShowHoldPicker] = useState(false);
 
-  const statusClass = m.status === 'approved' ? 'approved' : m.status === 'rejected' ? 'rejected' : m.status === 'held' ? 'held' : '';
+  // Treat missing/undefined status as 'pending'
+  const status = m.status || 'pending';
+  const isPending = status === 'pending';
+  const statusClass = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : status === 'held' ? 'held' : '';
 
   const handleHold = () => {
     if (showHoldPicker) {
@@ -261,13 +264,12 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <span style={{ fontSize: 11, color: 'oklch(0.42 0.13 70)', fontWeight: 700 }}>✓ 승인 요청</span>
             {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
-            {m.due && <span className="due urgent">📅 {m.due}</span>}
           </div>
           <div className="ac-desc md-content">
             <ReactMarkdown>{m.text || ''}</ReactMarkdown>
           </div>
           <div className="ac-actions">
-            {m.status === 'pending' && isLead ? (
+            {isPending && isLead ? (
               <>
                 <button className="btn accent sm" onClick={() => onAct(m.id, 'approve')}>승인</button>
                 <button className="btn danger sm" onClick={() => onAct(m.id, 'reject')}>반려</button>
@@ -279,13 +281,13 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
                   </div>
                 )}
               </>
-            ) : m.status === 'pending' ? (
+            ) : isPending ? (
               <span className="ac-status pending">⏳ 검토 대기 중</span>
-            ) : m.status === 'held' ? (
+            ) : status === 'held' ? (
               <span className="ac-status held">⏸ 보류{m.heldUntil ? ` (${m.heldUntil}까지)` : ''}</span>
             ) : (
-              <span className={'ac-status ' + m.status}>
-                {m.status === 'approved' ? '✓ 승인 완료' : '✗ 반려됨'}
+              <span className={'ac-status ' + status}>
+                {status === 'approved' ? '✓ 승인 완료' : '✗ 반려됨'}
               </span>
             )}
           </div>
@@ -293,6 +295,32 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
         {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} />}
+      </div>
+    </div>
+  );
+}
+
+function ImageMsg({ m }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="msg">
+      <Avatar name={m.senderName} />
+      <div style={{ flex: 1 }}>
+        <div className="msg-head">
+          <span className="name">{m.senderName}</span>
+          <span className="role">{m.senderRole}</span>
+          <span className="ts">{m.ts}</span>
+        </div>
+        <div className="image-preview" onClick={() => setExpanded(true)}>
+          <img src={m.fileUrl} alt={m.fileName} loading="lazy" />
+          <div className="image-name">{m.fileName}</div>
+        </div>
+        {expanded && (
+          <div className="image-lightbox" onClick={() => setExpanded(false)}>
+            <img src={m.fileUrl} alt={m.fileName} />
+          </div>
+        )}
+        <Reactions list={m.reactions} />
       </div>
     </div>
   );
@@ -450,7 +478,9 @@ function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, 
 
 function FileMsg({ m }) {
   const extMap = { pdf: '📄', ai: '🎨', png: '🖼️', jpg: '🖼️', docx: '📝', xlsx: '📊', txt: '📄', md: '📄' };
-  const ext = m.file?.name?.split('.').pop() || 'file';
+  const name = m.fileName || m.file?.name || '파일';
+  const size = m.fileSize || m.file?.size || '';
+  const ext = name.split('.').pop().toLowerCase();
   return (
     <div className="msg">
       <Avatar name={m.senderName} />
@@ -464,10 +494,13 @@ function FileMsg({ m }) {
         <div className="file-card">
           <div className="file-icon">{extMap[ext] || '📎'}<br /><span style={{ fontSize: 9 }}>{ext.toUpperCase()}</span></div>
           <div>
-            <div className="file-name">{m.file?.name}</div>
-            <div className="file-meta">{m.file?.size}</div>
+            <div className="file-name">{name}</div>
+            <div className="file-meta">{size}</div>
           </div>
-          <button className="btn minor sm file-dl">↓</button>
+          {m.fileUrl
+            ? <a href={m.fileUrl} target="_blank" rel="noreferrer" className="btn minor sm file-dl">↓</a>
+            : <button className="btn minor sm file-dl">↓</button>
+          }
         </div>
         <Reactions list={m.reactions} />
       </div>
@@ -559,6 +592,7 @@ export default function Message({ m, isGrouped, handlers }) {
     case 'update':    return <UpdateMsg m={m} />;
     case 'announce':  return <AnnounceMsg {...props} />;
     case 'meeting':   return <MeetingMsg {...props} />;
+    case 'image':     return <ImageMsg m={m} />;
     case 'file':      return <FileMsg m={m} />;
     case 'casual':    return <CasualMsg {...props} />;
     case 'ai':        return <AIMsg m={m} />;
