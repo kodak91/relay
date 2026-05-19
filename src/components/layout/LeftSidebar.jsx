@@ -1,5 +1,5 @@
+import { useState, useRef, useEffect } from 'react';
 import useAppStore from '../../store/appStore';
-import { useState } from 'react';
 import { useProjects } from '../../hooks/useProjects';
 import NewProjectModal from '../chat/NewProjectModal';
 
@@ -14,11 +14,52 @@ const PROJECT_COLORS = [
 
 export default function LeftSidebar() {
   const { activeProject, setActiveProject, activeChannel, setActiveChannel } = useAppStore();
-  const { projects } = useProjects();
+  const { projects, updateProject, deleteProject } = useProjects();
   const [showNewProject, setShowNewProject] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const [menuId, setMenuId] = useState(null);
+  const menuRef = useRef(null);
 
-  const inProgress = projects.filter((p) => p.status === '진행중');
-  const other = projects.filter((p) => p.status !== '진행중');
+  const active = projects.filter((p) => p.status !== '보관' && p.status !== '삭제됨');
+  const archived = projects.filter((p) => p.status === '보관');
+
+  useEffect(() => {
+    const close = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuId(null); };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  const startEdit = (p, e) => {
+    e.stopPropagation();
+    setMenuId(null);
+    setEditingId(p.id);
+    setEditingName(p.name);
+  };
+
+  const confirmEdit = async (id) => {
+    if (editingName.trim() && editingName.trim() !== projects.find((p) => p.id === id)?.name) {
+      await updateProject(id, { name: editingName.trim(), pf: editingName.trim()[0].toUpperCase() });
+    }
+    setEditingId(null);
+  };
+
+  const archive = async (id) => {
+    setMenuId(null);
+    await updateProject(id, { status: '보관' });
+    if (activeProject === id) setActiveProject(null);
+  };
+
+  const unarchive = async (id) => {
+    setMenuId(null);
+    await updateProject(id, { status: '진행중' });
+  };
+
+  const remove = async (id) => {
+    setMenuId(null);
+    await deleteProject(id);
+    if (activeProject === id) setActiveProject(null);
+  };
 
   return (
     <aside className="col-left">
@@ -28,17 +69,50 @@ export default function LeftSidebar() {
       </div>
 
       <div className="proj-list">
-        {inProgress.length > 0 && <div className="proj-section">진행중</div>}
-        {inProgress.map((p) => (
-          <ProjectItem key={p.id} p={p} active={activeProject === p.id && activeChannel === 'chat'}
-            onClick={() => { setActiveProject(p.id); setActiveChannel('chat'); }} />
-        ))}
-        {other.length > 0 && <div className="proj-section">대기 · 완료</div>}
-        {other.map((p) => (
-          <ProjectItem key={p.id} p={p} active={activeProject === p.id && activeChannel === 'chat'}
+        {active.map((p) => (
+          <ProjectItem
+            key={p.id}
+            p={p}
+            active={activeProject === p.id && activeChannel === 'chat'}
+            editing={editingId === p.id}
+            editingName={editingName}
+            menuOpen={menuId === p.id}
+            onEditNameChange={setEditingName}
+            onEditConfirm={() => confirmEdit(p.id)}
+            onMenuOpen={(e) => { e.stopPropagation(); setMenuId(menuId === p.id ? null : p.id); }}
+            onStartEdit={(e) => startEdit(p, e)}
+            onArchive={() => archive(p.id)}
+            onDelete={() => remove(p.id)}
             onClick={() => { setActiveProject(p.id); setActiveChannel('chat'); }}
-            muted={p.status === '완료'} />
+            menuRef={menuId === p.id ? menuRef : null}
+          />
         ))}
+
+        {archived.length > 0 && (
+          <>
+            <div className="proj-section" style={{ marginTop: 8 }}>보관됨</div>
+            {archived.map((p) => (
+              <ProjectItem
+                key={p.id}
+                p={p}
+                active={false}
+                muted
+                editing={editingId === p.id}
+                editingName={editingName}
+                menuOpen={menuId === p.id}
+                onEditNameChange={setEditingName}
+                onEditConfirm={() => confirmEdit(p.id)}
+                onMenuOpen={(e) => { e.stopPropagation(); setMenuId(menuId === p.id ? null : p.id); }}
+                onStartEdit={(e) => startEdit(p, e)}
+                onArchive={() => unarchive(p.id)}
+                archiveLabel="복원"
+                onDelete={() => remove(p.id)}
+                onClick={() => { setActiveProject(p.id); setActiveChannel('chat'); }}
+                menuRef={menuId === p.id ? menuRef : null}
+              />
+            ))}
+          </>
+        )}
       </div>
 
       <div
@@ -63,18 +137,42 @@ export default function LeftSidebar() {
   );
 }
 
-function ProjectItem({ p, active, onClick, muted }) {
+function ProjectItem({ p, active, onClick, muted, editing, editingName, menuOpen, onEditNameChange, onEditConfirm, onMenuOpen, onStartEdit, onArchive, archiveLabel = '보관', onDelete, menuRef }) {
+  const inputRef = useRef(null);
+  useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
+
   return (
     <div
       className={'proj' + (active ? ' on' : '')}
-      style={{ opacity: muted ? 0.55 : 1 }}
+      style={{ opacity: muted ? 0.6 : 1, position: 'relative' }}
       onClick={onClick}
     >
       <div className="pf" style={{ background: p.color }}>{p.pf}</div>
-      <div className="nm">{p.name}</div>
-      <div className="meta">
+      <div className="nm" style={{ flex: 1, minWidth: 0 }}>
+        {editing ? (
+          <input
+            ref={inputRef}
+            className="proj-rename-input"
+            value={editingName}
+            onChange={(e) => onEditNameChange(e.target.value)}
+            onBlur={onEditConfirm}
+            onKeyDown={(e) => { if (e.key === 'Enter') onEditConfirm(); if (e.key === 'Escape') { onEditNameChange(p.name); onEditConfirm(); } }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          p.name
+        )}
+      </div>
+      <div className="meta" style={{ position: 'relative' }}>
         {p.unreadCount > 0 && <span className="badge">{p.unreadCount}</span>}
-        {p.status !== '진행중' && <span className="badge muted">{p.status}</span>}
+        <button className="proj-menu-btn" onClick={onMenuOpen} title="편집">⋯</button>
+        {menuOpen && (
+          <div className="proj-menu" ref={menuRef}>
+            <button onClick={onStartEdit}>이름 변경</button>
+            <button onClick={onArchive}>{archiveLabel}</button>
+            <button className="danger" onClick={onDelete}>삭제</button>
+          </div>
+        )}
       </div>
     </div>
   );

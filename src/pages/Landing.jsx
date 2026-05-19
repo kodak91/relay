@@ -6,11 +6,10 @@ export default function Landing() {
   return (
     <div className="landing">
       <div className="landing-title">
-        팀장의 인지 부하를<br />줄이는 업무 OS
+        채팅만으로 프로젝트와<br />태스크를 관리하세요
       </div>
       <p className="landing-sub">
-        카카오톡의 편의성 + 노션의 구조화.<br />
-        채팅으로 시작해 결정으로 끝내세요.
+        AI가 정리를 도와줍니다.
       </p>
       <div className="landing-actions">
         <button

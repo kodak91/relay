@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { claudeComplete, AI_ACTIONS } from '../../lib/claude';
 
 const SLASH_MAP = {
@@ -270,7 +271,6 @@ export default function Composer({ onSend }) {
               className="ta"
               placeholder={
                 isCasual ? '팀에게 가볍게 한마디… (1시간 뒤 사라짐)'
-                : isApproval ? '승인 요청 내용을 입력하세요… (마크다운 지원)'
                 : '메시지 입력…  // : 매너모드   \\버튼명: 버튼 호출   #태그명 : 태그 달기'
               }
               rows={Math.min(6, Math.max(1, text.split('\n').length))}
@@ -279,6 +279,11 @@ export default function Composer({ onSend }) {
               onKeyDown={handleKey}
               disabled={polishing}
             />
+            {text && !isCasual && (
+              <div className="md-live-preview md-content">
+                <ReactMarkdown>{text}</ReactMarkdown>
+              </div>
+            )}
             <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
             {showAI && (
               <div className="ai-fab-pop">
@@ -306,11 +311,9 @@ export default function Composer({ onSend }) {
                 className="chip"
                 style={tt.id === type ? { background: 'var(--ink)', color: 'var(--bg)', borderColor: 'var(--ink)' } : {}}
                 onClick={() => setTypeAndReset(tt.id)}
-                title={tt.slash ? tt.slash : undefined}
               >
                 <span className="glyph">{tt.icon}</span>
                 <span>{tt.label}</span>
-                {tt.slash && <span style={{ fontSize: 9, opacity: 0.5, fontFamily: 'var(--font-mono)', marginLeft: 2 }}>{tt.slash}</span>}
               </button>
             ))}
             <span className="chip" style={{ borderStyle: 'dashed', color: importance ? 'var(--rose)' : 'var(--ink-3)' }} onClick={() => setImportance((importance + 1) % 3)}>

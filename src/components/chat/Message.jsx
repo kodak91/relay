@@ -105,7 +105,7 @@ function DonutTimer({ expiresAt }) {
 
 // ─── Message type renderers ──────────────────────────────────────────────
 
-function TextMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onConfirm, onNudge, senderName }) {
+function TextMsg({ m, isGrouped, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onConfirm, onNudge, senderName }) {
   const { user } = useAppStore();
   const isSender = user?.uid && m.senderUid === user.uid;
   const confirmed = m.confirmedBy?.includes(user?.uid);
@@ -117,13 +117,8 @@ function TextMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onS
     setTimeout(() => setNudgeSent(false), 3000);
   };
 
-  const content = (
-    <div style={{ flex: 1 }}>
-      <div className="msg-head">
-        <span className="name">{m.senderName}</span>
-        <span className="role">{m.senderRole}</span>
-        <span className="ts">{m.ts}</span>
-      </div>
+  const body = (
+    <>
       <div className="msg-body md-content">
         {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
         <ReactMarkdown>{m.text || ''}</ReactMarkdown>
@@ -147,8 +142,18 @@ function TextMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onS
       <Reactions list={m.reactions} />
       <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
       {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} />}
-    </div>
+    </>
   );
+
+  // Grouped: same sender, no avatar/header repeated
+  if (isGrouped) {
+    return (
+      <div className={'msg grouped' + (m.importance > 0 ? ' importance-msg imp-' + m.importance : '')}>
+        <div className="msg-grouped-spacer" />
+        <div style={{ flex: 1 }}>{body}</div>
+      </div>
+    );
+  }
 
   if (m.importance > 0) {
     return (
@@ -159,7 +164,14 @@ function TextMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onS
           <button title="더보기">⋯</button>
         </div>
         <Avatar name={m.senderName} />
-        {content}
+        <div style={{ flex: 1 }}>
+          <div className="msg-head">
+            <span className="name">{m.senderName}</span>
+            <span className="role">{m.senderRole}</span>
+            <span className="ts">{m.ts}</span>
+          </div>
+          {body}
+        </div>
       </div>
     );
   }
@@ -172,7 +184,14 @@ function TextMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onS
         <button title="더보기">⋯</button>
       </div>
       <Avatar name={m.senderName} />
-      {content}
+      <div style={{ flex: 1 }}>
+        <div className="msg-head">
+          <span className="name">{m.senderName}</span>
+          <span className="role">{m.senderRole}</span>
+          <span className="ts">{m.ts}</span>
+        </div>
+        {body}
+      </div>
     </div>
   );
 }
@@ -509,7 +528,7 @@ function AIMsg({ m }) {
 
 // ─── Main Message dispatcher ─────────────────────────────────────────────
 
-export default function Message({ m, handlers }) {
+export default function Message({ m, isGrouped, handlers }) {
   const { user } = useAppStore();
   const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce } = handlers;
   const threadOpen = openThreads.has(m.id);
@@ -517,6 +536,7 @@ export default function Message({ m, handlers }) {
 
   const props = {
     m,
+    isGrouped,
     threadOpen,
     replyValue,
     senderName: user?.name || '나',

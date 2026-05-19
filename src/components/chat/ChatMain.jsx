@@ -35,6 +35,24 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     return live.filter((m) => (m.tags || []).includes(activeTag));
   }, [messages, activeTag]);
 
+  // Compute which messages are "grouped" (same sender, text type, consecutive)
+  const groupedSet = useMemo(() => {
+    const result = new Set();
+    let prev = null;
+    filteredMessages.forEach((m) => {
+      if (
+        prev &&
+        m.type === 'text' &&
+        prev.type === 'text' &&
+        (m.senderUid ? m.senderUid === prev.senderUid : m.senderName === prev.senderName)
+      ) {
+        result.add(m.id);
+      }
+      prev = m;
+    });
+    return result;
+  }, [filteredMessages]);
+
   // Pinned announcements — shown at top until collapsed
   const pinnedAnnouncements = useMemo(
     () => messages.filter((m) => m.type === 'announce' && !collapsedAnnouncements.has(m.id)),
@@ -186,7 +204,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
                 <div className="day-divider">오늘</div>
                 {filteredMessages.map((m) => (
                   <div key={m.id} ref={(el) => { if (msgRefs?.current) msgRefs.current[m.id] = el; }}>
-                    <Message m={m} handlers={handlers} />
+                    <Message m={m} isGrouped={groupedSet.has(m.id)} handlers={handlers} />
                   </div>
                 ))}
               </>

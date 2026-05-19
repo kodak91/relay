@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   collection, query, orderBy, onSnapshot,
-  addDoc, updateDoc, doc, serverTimestamp,
+  addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
@@ -31,5 +31,9 @@ export function useProjects() {
     await updateDoc(doc(db, 'projects', id), fields);
   };
 
-  return { projects, loading, addProject, updateProject };
+  const deleteProject = async (id) => {
+    await deleteDoc(doc(db, 'projects', id));
+  };
+
+  return { projects, loading, addProject, updateProject, deleteProject };
 }
