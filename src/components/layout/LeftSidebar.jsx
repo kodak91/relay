@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import useAppStore from '../../store/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import NewProjectModal from '../chat/NewProjectModal';
+import JoinWorkspaceModal from '../chat/JoinWorkspaceModal';
 
 const PROJECT_COLORS = [
   'oklch(0.50 0.20 25)',
@@ -13,9 +14,10 @@ const PROJECT_COLORS = [
 ];
 
 export default function LeftSidebar() {
-  const { activeProject, setActiveProject, activeChannel, setActiveChannel } = useAppStore();
-  const { projects, updateProject, deleteProject } = useProjects();
+  const { activeProject, setActiveProject, activeChannel, setActiveChannel, user } = useAppStore();
+  const { projects, updateProject, deleteProject, joinByCode } = useProjects(user?.uid);
   const [showNewProject, setShowNewProject] = useState(false);
+  const [showJoin, setShowJoin] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [menuId, setMenuId] = useState(null);
@@ -65,7 +67,10 @@ export default function LeftSidebar() {
     <aside className="col-left">
       <div className="hd">
         <h3>워크스페이스</h3>
-        <button className="new-btn" onClick={() => setShowNewProject(true)}>+ 새 프로젝트</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="new-btn" onClick={() => setShowNewProject(true)}>+ 새 프로젝트</button>
+          <button className="new-btn" onClick={() => setShowJoin(true)}>+ 참가</button>
+        </div>
       </div>
 
       <div className="proj-list">
@@ -131,6 +136,13 @@ export default function LeftSidebar() {
         <NewProjectModal
           colors={PROJECT_COLORS}
           onClose={() => setShowNewProject(false)}
+        />
+      )}
+      {showJoin && (
+        <JoinWorkspaceModal
+          user={user}
+          joinByCode={joinByCode}
+          onClose={() => setShowJoin(false)}
         />
       )}
     </aside>

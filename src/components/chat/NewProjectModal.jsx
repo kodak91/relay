@@ -13,7 +13,7 @@ export default function NewProjectModal({ colors, onClose }) {
     if (!name.trim()) return;
     setLoading(true);
     try {
-      await addProject(name.trim(), color, user?.name || '');
+      await addProject(name.trim(), color, user?.name || '', user?.uid);
       onClose();
     } finally {
       setLoading(false);

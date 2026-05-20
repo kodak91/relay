@@ -8,6 +8,7 @@ import Message from './Message';
 import Composer from './Composer';
 import TagBar from './TagBar';
 import TasksTab from '../tasks/TasksTab';
+import MemberManagementModal from './MemberManagementModal';
 import { uploadFile, IMAGE_TYPES, formatFileSize } from '../../lib/uploadFile';
 
 function nowHM() {
@@ -18,7 +19,7 @@ function nowHM() {
 export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { activeProject, chatTab, setChatTab, activeTag, user } = useAppStore();
   const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
-  const { projects } = useProjects();
+  const { projects, approveMember, rejectMember, removeMember } = useProjects(user?.uid);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -30,12 +31,9 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
   const [showAnnouncements, setShowAnnouncements] = useState(false);
+  const [showMemberModal, setShowMemberModal] = useState(false);
 
   const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
-  const memberCount = useMemo(() => {
-    const uids = new Set(messages.filter((m) => m.senderUid).map((m) => m.senderUid));
-    return uids.size || 1;
-  }, [messages]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -219,9 +217,10 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         <div className="chat-title">
           <span style={{ fontWeight: 800, fontSize: 15 }}>{activeProjectData?.name || activeProject}</span>
           <span style={{ fontSize: 11, color: 'var(--ink-mute)', marginLeft: 10 }}>
-            {activeProjectData?.leadName && <span>팀장 {activeProjectData.leadName}</span>}
-            {activeProjectData?.leadName && <span style={{ margin: '0 5px' }}>·</span>}
-            <span>참여자 {memberCount}명</span>
+            {activeProjectData?.leadName && <span>팀장 {activeProjectData.leadName} · </span>}
+            <button className="member-mgmt-btn" onClick={() => setShowMemberModal(true)}>
+              멤버관리
+            </button>
           </span>
         </div>
         <div className="chat-tabs">
@@ -261,6 +260,17 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           </div>
         )}
       </div>
+
+      {showMemberModal && activeProjectData && (
+        <MemberManagementModal
+          project={activeProjectData}
+          user={user}
+          onClose={() => setShowMemberModal(false)}
+          onApprove={(uid) => approveMember(activeProject, uid)}
+          onReject={(uid) => rejectMember(activeProject, uid)}
+          onRemove={(uid) => removeMember(activeProject, uid)}
+        />
+      )}
 
       {chatTab === 'tasks' ? (
         <TasksTab projectId={activeProject} />
