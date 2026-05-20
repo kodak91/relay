@@ -9,6 +9,8 @@ import Composer from './Composer';
 import TagBar from './TagBar';
 import TasksTab from '../tasks/TasksTab';
 import MemberManagementModal from './MemberManagementModal';
+import KBTab from '../kb/KBTab';
+import KBSaveBanner from '../kb/KBSaveBanner';
 import { uploadFile, IMAGE_TYPES, formatFileSize } from '../../lib/uploadFile';
 
 function nowHM() {
@@ -32,6 +34,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const [uploadError, setUploadError] = useState('');
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [showMemberModal, setShowMemberModal] = useState(false);
+  const [pendingKBSave, setPendingKBSave] = useState(null);
 
   const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
 
@@ -146,6 +149,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     setUploading(true);
     setUploadProgress(0);
     setUploadError('');
+    const kbPending = [];
     try {
       for (const file of Array.from(files)) {
         const isImage = IMAGE_TYPES.includes(file.type);
@@ -159,7 +163,14 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           text: '',
           tags: [],
         });
+        kbPending.push({
+          name: file.name,
+          ext: file.name.split('.').pop().toLowerCase(),
+          fileUrl: url,
+          size: formatFileSize(file.size),
+        });
       }
+      if (kbPending.length > 0) setPendingKBSave(kbPending);
     } catch (e) {
       console.error('Upload failed:', e);
       setUploadError('업로드 실패: Firebase Storage가 설정되지 않았거나 권한이 없습니다.');
@@ -226,6 +237,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         <div className="chat-tabs">
           {[
             { id: 'chat', icon: '💬', label: '채팅', count: messages.length },
+            { id: 'kb', icon: '📚', label: 'KB', count: null },
             { id: 'tasks', icon: '📋', label: '태스크' },
           ].map((tab) => (
             <button key={tab.id} className={'chat-tab' + (chatTab === tab.id ? ' on' : '')} onClick={() => setChatTab(tab.id)}>
@@ -272,7 +284,9 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         />
       )}
 
-      {chatTab === 'tasks' ? (
+      {chatTab === 'kb' ? (
+        <KBTab projectId={activeProject} />
+      ) : chatTab === 'tasks' ? (
         <TasksTab projectId={activeProject} />
       ) : (
         <>
@@ -310,6 +324,15 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
               </>
             )}
           </div>
+          {pendingKBSave && (
+            <KBSaveBanner
+              projectId={activeProject}
+              files={pendingKBSave}
+              user={user}
+              onSave={() => setPendingKBSave(null)}
+              onDismiss={() => setPendingKBSave(null)}
+            />
+          )}
           <Composer onSend={handleSend} onFileSelect={handleFiles} fileInputRef={fileInputRef} />
           <input
             ref={fileInputRef}
