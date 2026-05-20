@@ -148,14 +148,14 @@ p { margin: 0; }
 }
 .body {
   display: grid;
-  grid-template-columns: 240px 1fr 340px;
+  grid-template-columns: 240px 1fr 442px;
   overflow: hidden;
 }
 
 /* ── Topbar ───────────────────────────────────────────────────────────── */
 .topbar {
   display: grid;
-  grid-template-columns: 240px 1fr 340px;
+  grid-template-columns: 240px 1fr 442px;
   align-items: center;
   border-bottom: 1px solid var(--border);
   background: var(--surface);
@@ -506,6 +506,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   padding: 14px 16px; background: var(--amber-bg); margin-top: 6px;
 }
 .approval-card.approved { border-color: var(--emerald-line); background: var(--emerald-bg); }
+.approval-card.done { border-color: var(--accent-line); background: var(--accent-soft); }
 .approval-card.rejected { border-color: var(--rose-line); background: var(--rose-bg); }
 .approval-card.held { border-color: var(--amber-line); background: var(--amber-bg); opacity: 0.8; }
 .approval-card .ac-header { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
@@ -514,6 +515,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 .ac-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ac-status { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: var(--r-2); }
 .ac-status.approved { background: var(--emerald); color: #fff; }
+.ac-status.done { background: var(--accent); color: var(--accent-ink); }
 .ac-status.rejected { background: var(--rose); color: #fff; }
 .ac-status.held { background: var(--amber-line); color: oklch(0.42 0.13 70); }
 .ac-status.pending { color: var(--ink-3); font-weight: 500; font-size: 12px; }
@@ -722,6 +724,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 
 /* ── Grouped messages ─────────────────────────────────────────────────── */
 .msg.grouped { padding-top: 1px; padding-bottom: 1px; }
+.msg.group-start { padding-bottom: 1px; }
 .msg-grouped-spacer { width: 36px; flex-shrink: 0; }
 
 /* ── Tiptap WYSIWYG editor ─────────────────────────────────────────────── */

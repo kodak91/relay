@@ -142,7 +142,7 @@ function DonutTimer({ expiresAt }) {
 
 // ─── Message type renderers ──────────────────────────────────────────────
 
-function TextMsg({ m, isGrouped, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onConfirm, onNudge, onEdit, onDelete, senderName }) {
+function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onConfirm, onNudge, onEdit, onDelete, senderName }) {
   const { user } = useAppStore();
   const isSender = user?.uid && m.senderUid === user.uid;
   const confirmed = m.confirmedBy?.includes(user?.uid);
@@ -208,7 +208,7 @@ function TextMsg({ m, isGrouped, threadOpen, replyValue, onToggleThread, onReply
   // Grouped: same sender, no avatar/header repeated
   if (isGrouped) {
     return (
-      <div className={'msg grouped' + (m.importance > 0 ? ' importance-msg imp-' + m.importance : '')}>
+      <div className={'msg grouped' + (m.importance > 0 ? ' importance-msg imp-' + m.importance : '') + (isGroupStart ? ' group-start' : '')}>
         <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={startEdit} onDelete={() => onDelete(m.id)} />
         <div className="msg-grouped-spacer" />
         <div style={{ flex: 1 }}>{body}</div>
@@ -216,7 +216,7 @@ function TextMsg({ m, isGrouped, threadOpen, replyValue, onToggleThread, onReply
     );
   }
 
-  const cls = m.importance > 0 ? 'msg importance-msg imp-' + m.importance : 'msg';
+  const cls = 'msg' + (m.importance > 0 ? ' importance-msg imp-' + m.importance : '') + (isGroupStart ? ' group-start' : '');
   return (
     <div className={cls}>
       <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={startEdit} onDelete={() => onDelete(m.id)} />
@@ -270,15 +270,12 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
 }
 
 function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onAct, onDelete, senderName }) {
-  const { user } = useAppStore();
-  const isLead = user?.role === 'lead';
   const [holdDate, setHoldDate] = useState('');
   const [showHoldPicker, setShowHoldPicker] = useState(false);
 
-  // Treat missing/undefined status as 'pending'
   const status = m.status || 'pending';
   const isPending = status === 'pending';
-  const statusClass = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : status === 'held' ? 'held' : '';
+  const statusClass = status === 'approved' ? 'approved' : status === 'done' ? 'done' : status === 'held' ? 'held' : '';
 
   const handleHold = () => {
     if (showHoldPicker) {
@@ -308,11 +305,11 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
             <ReactMarkdown>{m.text || ''}</ReactMarkdown>
           </div>
           <div className="ac-actions">
-            {isPending && isLead ? (
+            {isPending ? (
               <>
                 <button className="btn accent sm" onClick={() => onAct(m.id, 'approve')}>승인</button>
-                <button className="btn danger sm" onClick={() => onAct(m.id, 'reject')}>반려</button>
-                <button className="btn minor sm" onClick={handleHold}>보류</button>
+                <button className="btn minor sm" onClick={() => onAct(m.id, 'complete')}>완료</button>
+                <button className="btn ghost sm" onClick={handleHold}>보류</button>
                 {showHoldPicker && (
                   <div className="hold-picker">
                     <input type="date" value={holdDate} onChange={(e) => setHoldDate(e.target.value)} />
@@ -320,13 +317,11 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
                   </div>
                 )}
               </>
-            ) : isPending ? (
-              <span className="ac-status pending">⏳ 검토 대기 중</span>
             ) : status === 'held' ? (
               <span className="ac-status held">⏸ 보류{m.heldUntil ? ` (${m.heldUntil}까지)` : ''}</span>
             ) : (
               <span className={'ac-status ' + status}>
-                {status === 'approved' ? '✓ 승인 완료' : '✗ 반려됨'}
+                {status === 'approved' ? '✓ 승인 완료' : status === 'done' ? '✓ 완료됨' : ''}
               </span>
             )}
           </div>

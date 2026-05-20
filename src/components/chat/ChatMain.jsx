@@ -51,8 +51,9 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     return live.filter((m) => (m.tags || []).includes(activeTag));
   }, [messages, activeTag]);
 
-  const groupedSet = useMemo(() => {
-    const result = new Set();
+  const { groupedSet, groupStartSet } = useMemo(() => {
+    const grouped = new Set();
+    const groupStart = new Set();
     let prev = null;
     filteredMessages.forEach((m) => {
       if (
@@ -61,11 +62,12 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         prev.type === 'text' &&
         (m.senderUid ? m.senderUid === prev.senderUid : m.senderName === prev.senderName)
       ) {
-        result.add(m.id);
+        grouped.add(m.id);
+        groupStart.add(prev.id);
       }
       prev = m;
     });
-    return result;
+    return { groupedSet: grouped, groupStartSet: groupStart };
   }, [filteredMessages]);
 
   const announcements = useMemo(() => messages.filter((m) => m.type === 'announce'), [messages]);
@@ -112,8 +114,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       if (m) {
         await addTask(activeProject, { title: (m.text?.slice(0, 40) || '승인 건') + ' — 후속 처리', fromLead: true, done: true, from: 'approval:' + mid });
       }
-    } else if (action === 'reject') {
-      await updateMessageField(activeProject, mid, { status: 'rejected' });
+    } else if (action === 'complete') {
+      await updateMessageField(activeProject, mid, { status: 'done' });
     } else if (action === 'hold') {
       await updateMessageField(activeProject, mid, { status: 'held', heldUntil: heldUntil || null });
     }
@@ -319,7 +321,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
                 <div className="day-divider">오늘</div>
                 {filteredMessages.map((m) => (
                   <div key={m.id} ref={(el) => { if (msgRefs?.current) msgRefs.current[m.id] = el; }}>
-                    <Message m={m} isGrouped={groupedSet.has(m.id)} handlers={handlers} />
+                    <Message m={m} isGrouped={groupedSet.has(m.id)} isGroupStart={groupStartSet.has(m.id)} handlers={handlers} />
                   </div>
                 ))}
               </>
