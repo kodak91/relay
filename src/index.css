@@ -1338,3 +1338,144 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 .kb-folder-chip:hover { border-color: var(--accent-line); color: var(--accent); }
 .kb-folder-chip.on { font-weight: 600; }
 .fadein { animation: fadein 0.25s ease; }
+
+/* ── KB Drive integration ──────────────────────────────────────────────── */
+/* Google G icon badge */
+.drive-g-ico {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  background: #4285F4; color: #fff;
+  font-size: 14px; font-weight: 900; font-family: var(--font-mono);
+  flex-shrink: 0; line-height: 1; letter-spacing: -0.02em;
+}
+.drive-g-ico.sm { width: 18px; height: 18px; font-size: 11px; }
+.drive-g-ico.xs { width: 14px; height: 14px; font-size: 9px; }
+
+/* Drive sync button (toolbar) */
+.btn-drive-sync {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: var(--r-2);
+  background: #e8f0fe; border: 1px solid #c5d5f5; color: #1a73e8;
+  font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.btn-drive-sync:hover:not(:disabled) { background: #d2e3fc; }
+.btn-drive-sync:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Drive connect button (content header) */
+.btn-drive-connect {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: var(--r-2);
+  background: var(--surface); border: 1px solid var(--border-2); color: var(--ink-2);
+  font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+}
+.btn-drive-connect:hover { border-color: #c5d5f5; color: #1a73e8; background: #e8f0fe; }
+
+/* Drive connected dot in folder tree */
+.kb-drive-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #4285F4; color: #fff; font-size: 9px; font-weight: 900;
+  font-family: var(--font-mono); flex-shrink: 0;
+}
+
+/* "Drive 폴더 연동" add card in grid (empty state) */
+.kb-add-drive {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 24px 16px;
+  border: 2px dashed #c5d5f5; border-radius: var(--r-3);
+  background: #f8faff; color: #1a73e8;
+  cursor: pointer; transition: all 0.15s; min-height: 160px;
+  font-size: 12px; font-weight: 600; text-align: center;
+}
+.kb-add-drive:hover { background: #e8f0fe; border-color: #4285F4; }
+.kb-add-drive .mono { color: #5f6368; font-weight: 400; font-size: 11px; }
+
+/* Section label above Drive files */
+.kb-section-label {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 20px 4px;
+  font-size: 11px; font-weight: 700; color: #1a73e8; font-family: var(--font-mono);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+
+/* Source badge on file cards */
+.kb-src-badge {
+  font-size: 9px; font-weight: 700; padding: 2px 5px; border-radius: 3px;
+  font-family: var(--font-mono); letter-spacing: 0.02em;
+  background: var(--surface-3); color: var(--ink-mute);
+}
+.kb-src-badge.drive {
+  background: #e8f0fe; color: #1a73e8;
+}
+
+/* Drive folder name inline label in content header */
+.kb-drive-label {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: #1a73e8; font-weight: 600;
+}
+
+/* Drive source badge in KBFileDetail thumb */
+.kb-detail-src-badge {
+  position: absolute; top: 10px; right: 10px;
+  background: #4285F4; color: #fff; font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: 4px; font-family: var(--font-mono);
+}
+
+/* ── Drive Connect Modal ────────────────────────────────────────────────── */
+.drive-modal {
+  background: var(--surface); border-radius: var(--r-3);
+  border: 1px solid var(--border-2); width: 440px; max-width: 96vw;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.16); overflow: hidden;
+  animation: modal-pop 0.18s ease-out;
+}
+.drive-modal-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+  font-size: 15px; font-weight: 700; color: var(--ink);
+}
+.drive-modal-target {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  padding: 10px 20px; background: var(--surface-2); border-bottom: 1px solid var(--border);
+}
+.drive-folder-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 12px; border-radius: 999px; color: #fff;
+  font-size: 12px; font-weight: 700;
+}
+.drive-modal-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 4px; }
+.drive-step {
+  display: flex; gap: 12px; padding: 12px 0;
+  border-bottom: 1px solid var(--border); opacity: 0.4; pointer-events: none;
+}
+.drive-step.active { opacity: 1; pointer-events: auto; }
+.drive-step.muted { opacity: 0.4; }
+.drive-step:last-child { border-bottom: none; }
+.drive-step-num {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--ink);
+  color: var(--bg); font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;
+}
+.drive-step.active .drive-step-num { background: #4285F4; }
+.drive-step-content { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.drive-step-title { font-size: 13px; font-weight: 700; color: var(--ink); }
+.drive-step-desc { font-size: 12px; color: var(--ink-3); line-height: 1.5; }
+.drive-folder-confirmed {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; margin-top: 8px;
+  background: var(--emerald-bg); border: 1px solid var(--emerald-line); border-radius: var(--r-2);
+  font-size: 12px; color: var(--ink);
+}
+.drive-modal-foot {
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+  padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface-2);
+}
+/* Google auth button */
+.btn-google {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: var(--r-2);
+  background: #fff; border: 1px solid var(--border-2); color: var(--ink);
+  font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.btn-google:hover:not(:disabled) { background: #f8f9fa; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+.btn-google:disabled { opacity: 0.55; cursor: not-allowed; }

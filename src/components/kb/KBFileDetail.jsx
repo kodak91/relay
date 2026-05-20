@@ -15,10 +15,12 @@ export default function KBFileDetail({ file, onClose, onDelete }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const c = EXT_COLORS[file.ext] || 'oklch(0.50 0.05 80)';
   const isImage = IMAGE_EXTS.includes(file.ext);
+  const isDrive = file.source === 'drive';
+  const openLink = isDrive ? file.webViewLink : file.fileUrl;
   const versions = file.versions || [{ v: 1, date: file.date, by: file.uploader, note: '최초 등록' }];
 
   const copyLink = async () => {
-    try { await navigator.clipboard.writeText(file.fileUrl || ''); } catch { /* ignore */ }
+    try { await navigator.clipboard.writeText(openLink || ''); } catch { /* ignore */ }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -32,10 +34,10 @@ export default function KBFileDetail({ file, onClose, onDelete }) {
             <button className="btn minor sm" onClick={copyLink}>
               {copied ? '복사됨 ✓' : '📋 링크 복사'}
             </button>
-            {file.fileUrl && (
-              <a className="btn minor sm" href={file.fileUrl} target="_blank" rel="noreferrer"
-                style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-                ↗ 열기
+            {openLink && (
+              <a className="btn minor sm" href={openLink} target="_blank" rel="noreferrer"
+                style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                {isDrive ? <><span className="drive-g-ico xs">G</span>Drive에서 열기</> : '↗ 열기'}
               </a>
             )}
           </div>
@@ -44,14 +46,18 @@ export default function KBFileDetail({ file, onClose, onDelete }) {
         <div className="kb-detail-body">
           {/* Thumb */}
           <div className="kb-detail-thumb">
-            {isImage ? (
+            {isImage && file.fileUrl ? (
               <img src={file.fileUrl} alt={file.name}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : file.thumbnailLink ? (
+              <img src={file.thumbnailLink} alt={file.name}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <div className="kb-thumb-bg" style={{ background: c, opacity: 0.25, position: 'absolute', inset: 0 }} />
             )}
             <div className="kb-detail-ext mono">{(file.ext || '?').toUpperCase()}</div>
             {(file.v || 1) > 1 && <div className="kb-detail-ver mono">v{file.v}</div>}
+            {isDrive && <div className="kb-detail-src-badge">G Drive</div>}
           </div>
 
           <h2 className="kb-detail-title">{file.name}</h2>
