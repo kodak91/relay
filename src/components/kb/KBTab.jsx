@@ -1,10 +1,9 @@
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import useAppStore from '../../store/appStore';
 import { useKB } from '../../hooks/useKB';
 import KBFileDetail from './KBFileDetail';
 import DriveConnectModal from './DriveConnectModal';
 import { getStoredToken, requestDriveAccess } from '../../lib/driveApi';
-import { uploadFile, formatFileSize } from '../../lib/uploadFile';
 
 export const EXT_COLORS = {
   pdf: 'oklch(0.55 0.18 25)',  ai: 'oklch(0.55 0.16 50)',
@@ -19,7 +18,12 @@ const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 
 export default function KBTab({ projectId }) {
   const { user } = useAppStore();
-  const { folders, files, loading, syncing, initFolders, connectDrive, disconnectDrive, syncFromDrive, addFileDirectly, deleteFile } = useKB(projectId);
+  const {
+    folders, files, loading, syncing,
+    connectDriveRoot, disconnectDrive, syncFromDrive,
+    uploadToDrive, deleteFile,
+  } = useKB(projectId);
+
   const [activeFolderId, setActiveFolderId] = useState(null);
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState('grid');
@@ -29,15 +33,8 @@ export default function KBTab({ projectId }) {
   const [syncError, setSyncError] = useState('');
   const fileInputRef = useRef(null);
 
-  useEffect(() => {
-    if (!loading && folders.length === 0) initFolders();
-  }, [loading, folders.length]);
-
-  useEffect(() => {
-    if (folders.length > 0 && !activeFolderId) setActiveFolderId(folders[0].id);
-  }, [folders]);
-
-  const activeFolder = folders.find((f) => f.id === activeFolderId);
+  const activeFolder = folders.find((f) => f.id === activeFolderId) || folders[0] || null;
+  const effectiveFolderId = activeFolderId || folders[0]?.id || null;
 
   const searchResults = useMemo(() => {
     if (!search.trim()) return null;
@@ -49,48 +46,46 @@ export default function KBTab({ projectId }) {
     );
   }, [search, files]);
 
-  const displayed = searchResults || files.filter((f) => f.folderId === activeFolderId);
-  const driveFiles = displayed.filter((f) => f.source === 'drive');
-  const localFiles = displayed.filter((f) => f.source !== 'drive');
+  const displayed = searchResults || files.filter((f) => f.folderId === effectiveFolderId);
+
+  const getToken = async () => {
+    let token = getStoredToken();
+    if (!token) token = await requestDriveAccess();
+    return token;
+  };
 
   const handleSync = async () => {
-    if (!activeFolderId) return;
     setSyncError('');
-    let token = getStoredToken();
-    if (!token) {
-      try { token = await requestDriveAccess(); } catch { setSyncError('Drive 인증이 필요합니다. Drive 연동 버튼을 클릭해주세요.'); return; }
-    }
     try {
-      await syncFromDrive(activeFolderId, token);
+      const token = await getToken();
+      await syncFromDrive(token);
     } catch (e) {
-      setSyncError(e.message || '동기화 실패. Drive 연동을 다시 확인해주세요.');
+      setSyncError(e.message || '동기화 실패');
     }
   };
 
-  const handleConnectDrive = async ({ driveFolderId, driveFolderName }) => {
-    await connectDrive(activeFolderId, { driveFolderId, driveFolderName });
-    setShowDriveModal(false);
-    // Auto-sync after connecting
-    const token = getStoredToken();
-    if (token) {
-      try { await syncFromDrive(activeFolderId, token); } catch { /* will show error on next sync */ }
+  const handleConnectDrive = async (token, { driveFolderId, driveFolderName }) => {
+    try {
+      await connectDriveRoot(token, { driveFolderId, driveFolderName });
+      setShowDriveModal(false);
+      setActiveFolderId(null);
+      // Auto-sync after connecting
+      try { await syncFromDrive(token); } catch { /* will show error on next sync */ }
+    } catch (e) {
+      setSyncError(e.message || 'Drive 연동 실패');
+      setShowDriveModal(false);
     }
   };
 
   const handleUpload = async (selectedFiles) => {
-    if (!selectedFiles?.length || !activeFolderId) return;
+    if (!selectedFiles?.length || !effectiveFolderId) return;
+    setSyncError('');
     setUploading(true);
     try {
-      for (const file of Array.from(selectedFiles)) {
-        const ext = file.name.split('.').pop().toLowerCase();
-        const url = await uploadFile(file, () => {});
-        await addFileDirectly({
-          name: file.name, ext, fileUrl: url,
-          size: formatFileSize(file.size),
-          uploader: user?.name || '', uploaderUid: user?.uid || '',
-          folderId: activeFolderId,
-        });
-      }
+      const token = await getToken();
+      await uploadToDrive(effectiveFolderId, Array.from(selectedFiles), token);
+    } catch (e) {
+      setSyncError(e.message || '업로드 실패');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -110,18 +105,44 @@ export default function KBTab({ projectId }) {
   const formatLastSync = (iso) => {
     if (!iso) return null;
     const d = new Date(iso);
-    const now = new Date();
-    const diff = Math.floor((now - d) / 60000);
+    const diff = Math.floor((new Date() - d) / 60000);
     if (diff < 1) return '방금';
     if (diff < 60) return `${diff}분 전`;
     if (diff < 1440) return `${Math.floor(diff / 60)}시간 전`;
     return d.toLocaleDateString('ko');
   };
 
+  const isConnected = folders.length > 0;
+
   if (loading) {
     return (
       <div className="kb-main" style={{ display: 'grid', placeItems: 'center' }}>
         <span className="ai-typing"><span /><span /><span /></span>
+      </div>
+    );
+  }
+
+  // No Drive connected yet — show big connect CTA
+  if (!isConnected) {
+    return (
+      <div className="kb-main" style={{ display: 'grid', placeItems: 'center' }}>
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <span className="drive-g-ico" style={{ width: 56, height: 56, fontSize: 32 }}>G</span>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Drive 폴더 연동</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 300 }}>
+              Google Drive 폴더를 연결하면 하위 폴더 구조가 그대로 KB 트리로 표시됩니다.
+            </div>
+          </div>
+          <button className="btn-drive-connect" style={{ padding: '10px 20px', fontSize: 13 }}
+            onClick={() => setShowDriveModal(true)}>
+            <span className="drive-g-ico sm">G</span>
+            Drive 폴더 연동하기
+          </button>
+        </div>
+        {showDriveModal && (
+          <DriveConnectModal onConnect={handleConnectDrive} onClose={() => setShowDriveModal(false)} />
+        )}
       </div>
     );
   }
@@ -140,17 +161,14 @@ export default function KBTab({ projectId }) {
           <button className={viewMode === 'grid' ? 'on' : ''} onClick={() => setViewMode('grid')} title="카드">▦</button>
           <button className={viewMode === 'list' ? 'on' : ''} onClick={() => setViewMode('list')} title="목록">≡</button>
         </div>
-        {/* Drive sync or local upload depending on folder type */}
-        {activeFolder?.driveFolderId ? (
-          <button className="btn-drive-sync" onClick={handleSync} disabled={syncing}>
-            <span className="drive-g-ico sm">G</span>
-            {syncing ? '동기화 중…' : '동기화'}
-          </button>
-        ) : (
-          <button className="btn minor sm" onClick={() => fileInputRef.current?.click()} disabled={!activeFolderId || uploading}>
-            {uploading ? '업로드 중…' : '+ 파일 색인'}
-          </button>
-        )}
+        <button className="btn-drive-sync" onClick={handleSync} disabled={syncing}>
+          <span className="drive-g-ico sm">G</span>
+          {syncing ? '동기화 중…' : '동기화'}
+        </button>
+        <button className="btn minor sm" onClick={() => fileInputRef.current?.click()}
+          disabled={!effectiveFolderId || uploading}>
+          {uploading ? '업로드 중…' : '↑ 업로드'}
+        </button>
         <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }}
           onChange={(e) => handleUpload(e.target.files)} />
       </div>
@@ -164,33 +182,36 @@ export default function KBTab({ projectId }) {
 
       {/* Body */}
       <div className="kb-body">
-        {/* Left tree */}
+        {/* Left tree — shows Drive folder hierarchy */}
         <aside className="kb-tree">
-          <div className="kb-tree-hd">폴더</div>
+          <div className="kb-tree-hd">
+            <span>Drive 폴더</span>
+            <button className="kb-tree-disc" onClick={disconnectDrive} title="연동 해제">✕</button>
+          </div>
           {folders.map((f) => (
             <button
               key={f.id}
-              className={'kb-tree-row' + (activeFolderId === f.id && !search ? ' on' : '')}
+              className={'kb-tree-row' + ((effectiveFolderId === f.id && !search) ? ' on' : '')}
+              style={{ paddingLeft: 12 + (f.depth || 0) * 14 }}
               onClick={() => { setActiveFolderId(f.id); setSearch(''); }}
             >
-              <span className="kb-tree-ico" style={{ background: f.color, color: '#fff' }}>{f.icon}</span>
-              <span className="nm">{f.name}</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                {f.driveFolderId && <span className="kb-drive-dot" title="Drive 연동됨">G</span>}
-                <span className="mono cnt">{files.filter((x) => x.folderId === f.id).length}</span>
+              <span className="kb-tree-ico drive">
+                {f.isRoot ? '🗂' : '📁'}
               </span>
+              <span className="nm">{f.name}</span>
+              <span className="mono cnt">{files.filter((x) => x.folderId === f.id).length}</span>
             </button>
           ))}
 
-          {/* Source section */}
+          {/* Sync info */}
           <div className="kb-tree-hd" style={{ marginTop: 18 }}>저장소</div>
           <div className="kb-source">
-            {folders.filter((f) => f.driveFolderId).map((f) => (
+            {folders.filter((f) => f.isRoot).map((f) => (
               <div key={f.id} className="src-row">
                 <div className="src-l">
                   <div className="src-ico g">G</div>
                   <div>
-                    <div className="src-n">{f.driveFolderName}</div>
+                    <div className="src-n">{f.name}</div>
                     <div className="src-d mono">
                       {f.driveLastSync ? '동기화 ' + formatLastSync(f.driveLastSync) : '미동기화'}
                     </div>
@@ -199,16 +220,6 @@ export default function KBTab({ projectId }) {
                 <span className="src-on">● 연결됨</span>
               </div>
             ))}
-            <div className="src-row">
-              <div className="src-l">
-                <div className="src-ico f">🔥</div>
-                <div>
-                  <div className="src-n">Firebase Storage</div>
-                  <div className="src-d mono">직접 업로드 파일</div>
-                </div>
-              </div>
-              <span className="src-on">● 연결됨</span>
-            </div>
           </div>
         </aside>
 
@@ -224,67 +235,29 @@ export default function KBTab({ projectId }) {
               ) : activeFolder ? (
                 <>
                   <h3>
-                    <span className="kb-content-ico" style={{ background: activeFolder.color, color: '#fff' }}>
-                      {activeFolder.icon}
-                    </span>
-                    {activeFolder.name}
+                    {activeFolder.isRoot ? '🗂' : '📁'} {activeFolder.name}
                   </h3>
-                  <p className="mono">
+                  <p className="mono" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     {displayed.length}개 파일
-                    {activeFolder.driveFolderId && (
-                      <span style={{ marginLeft: 8 }}>
-                        · <span className="kb-drive-label">
-                          <span className="drive-g-ico xs">G</span>
-                          {activeFolder.driveFolderName}
-                        </span>
-                      </span>
-                    )}
+                    <span style={{ color: 'var(--ink-mute)' }}>·</span>
+                    <span className="kb-drive-label">
+                      <span className="drive-g-ico xs">G</span>
+                      {activeFolder.drivePath}
+                    </span>
                   </p>
                 </>
               ) : null}
             </div>
-            {/* Drive connect / disconnect */}
-            {!search && activeFolder && (
-              <div style={{ display: 'flex', gap: 6 }}>
-                {activeFolder.driveFolderId ? (
-                  <button className="btn minor sm" style={{ fontSize: 11 }}
-                    onClick={() => disconnectDrive(activeFolderId)}>
-                    Drive 연동 해제
-                  </button>
-                ) : (
-                  <button className="btn-drive-connect" onClick={() => setShowDriveModal(true)}>
-                    <span className="drive-g-ico sm">G</span>
-                    Drive 연동
-                  </button>
-                )}
-              </div>
-            )}
           </header>
-
-          {/* Drive files section */}
-          {!search && activeFolder?.driveFolderId && driveFiles.length > 0 && (
-            <div className="kb-section-label">
-              <span className="drive-g-ico xs">G</span> Drive 파일 ({driveFiles.length})
-            </div>
-          )}
 
           {viewMode === 'grid' ? (
             <div className="kb-grid">
               {displayed.map((f) => <KBFileCard key={f.id} file={f} onClick={() => setOpenFile(f)} />)}
-              {!search && !activeFolder?.driveFolderId && (
-                <button className="kb-add-card" onClick={() => fileInputRef.current?.click()}>
-                  <span className="plus">＋</span>
-                  <span>파일 추가</span>
-                  <span className="mono">클릭 또는 드래그</span>
-                </button>
-              )}
-              {!search && !activeFolder?.driveFolderId && displayed.length === 0 && (
-                <button className="kb-add-drive" onClick={() => setShowDriveModal(true)}>
-                  <span className="drive-g-ico">G</span>
-                  <span>Drive 폴더 연동</span>
-                  <span className="mono">파일은 Drive에, 색인만 여기에</span>
-                </button>
-              )}
+              <button className="kb-add-card" onClick={() => fileInputRef.current?.click()}>
+                <span className="plus">＋</span>
+                <span>파일 업로드</span>
+                <span className="mono">클릭 또는 드래그</span>
+              </button>
             </div>
           ) : (
             <div className="kb-list">
@@ -298,16 +271,16 @@ export default function KBTab({ projectId }) {
 
           {displayed.length === 0 && !uploading && !syncing && (
             <div className="kb-empty">
-              <div style={{ fontSize: 36 }}>{activeFolder?.driveFolderId ? '🔄' : '📭'}</div>
+              <div style={{ fontSize: 36 }}>📭</div>
               <div className="kb-empty-t">
-                {search ? '검색 결과 없음' : activeFolder?.driveFolderId ? 'Drive 폴더가 비어있거나 동기화가 필요합니다' : '아직 파일이 없어요'}
+                {search ? '검색 결과 없음' : '이 폴더에 파일이 없어요'}
               </div>
               <div className="kb-empty-s">
-                {search ? '파일명·업로더·태그로 다시 시도해보세요.' :
-                  activeFolder?.driveFolderId ? '동기화 버튼을 눌러 Drive 파일을 불러오세요.' :
-                    'Drive 폴더를 연동하거나 파일을 직접 업로드하세요.'}
+                {search
+                  ? '파일명·업로더·태그로 다시 시도해보세요.'
+                  : '동기화 버튼으로 Drive 파일을 가져오거나 직접 업로드하세요.'}
               </div>
-              {!search && activeFolder?.driveFolderId && (
+              {!search && (
                 <button className="btn accent sm" style={{ marginTop: 12 }} onClick={handleSync} disabled={syncing}>
                   동기화 시작
                 </button>
@@ -322,12 +295,8 @@ export default function KBTab({ projectId }) {
         )}
       </div>
 
-      {showDriveModal && activeFolder && (
-        <DriveConnectModal
-          kbFolder={activeFolder}
-          onConnect={handleConnectDrive}
-          onClose={() => setShowDriveModal(false)}
-        />
+      {showDriveModal && (
+        <DriveConnectModal onConnect={handleConnectDrive} onClose={() => setShowDriveModal(false)} />
       )}
     </div>
   );

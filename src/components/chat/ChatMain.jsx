@@ -168,6 +168,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           ext: file.name.split('.').pop().toLowerCase(),
           fileUrl: url,
           size: formatFileSize(file.size),
+          blob: file,
         });
       }
       if (kbPending.length > 0) setPendingKBSave(kbPending);

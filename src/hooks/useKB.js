@@ -4,14 +4,9 @@ import {
   addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { listFolderFiles, getMimeExt, formatDriveSize } from '../lib/driveApi';
-
-const DEFAULT_FOLDERS = [
-  { name: '디자인 에셋', icon: '🎨', color: 'oklch(0.55 0.18 50)', order: 0 },
-  { name: '카피·문구',   icon: '✏️', color: 'oklch(0.50 0.15 240)', order: 1 },
-  { name: '계약·발주',   icon: '📋', color: 'oklch(0.50 0.15 150)', order: 2 },
-  { name: '레퍼런스',    icon: '🔖', color: 'oklch(0.50 0.18 280)', order: 3 },
-];
+import {
+  buildFolderTree, listFolderFiles, getMimeExt, formatDriveSize, uploadFileToDrive,
+} from '../lib/driveApi';
 
 export function useKB(projectId) {
   const [folders, setFolders] = useState([]);
@@ -36,103 +31,176 @@ export function useKB(projectId) {
     return () => { unsubF(); unsubI(); };
   }, [projectId]);
 
-  const initFolders = async () => {
-    if (folders.length > 0) return;
-    for (const f of DEFAULT_FOLDERS) {
-      await addDoc(collection(db, 'projects', projectId, 'kbFolders'), f);
-    }
-  };
-
-  // ── Drive 연동 ───────────────────────────────────────────────────────────
-  const connectDrive = async (kbFolderId, { driveFolderId, driveFolderName }) => {
-    await updateDoc(doc(db, 'projects', projectId, 'kbFolders', kbFolderId), {
-      driveFolderId,
-      driveFolderName,
-      driveLastSync: null,
-    });
-  };
-
-  const disconnectDrive = async (kbFolderId) => {
-    await updateDoc(doc(db, 'projects', projectId, 'kbFolders', kbFolderId), {
-      driveFolderId: null,
-      driveFolderName: null,
-      driveLastSync: null,
-    });
-    // Remove all Drive-sourced files for this folder
-    const driveFiles = files.filter((f) => f.folderId === kbFolderId && f.source === 'drive');
-    const batch = writeBatch(db);
-    driveFiles.forEach((f) => batch.delete(doc(db, 'projects', projectId, 'kbFiles', f.id)));
-    await batch.commit();
-  };
-
-  const syncFromDrive = async (kbFolderId, token) => {
-    const folder = folders.find((f) => f.id === kbFolderId);
-    if (!folder?.driveFolderId) throw new Error('연동된 Drive 폴더가 없습니다.');
-
+  // ── Drive root connection ─────────────────────────────────────────────────
+  // Reads the full Drive folder tree and creates kbFolder entries for each node.
+  const connectDriveRoot = async (token, { driveFolderId, driveFolderName }) => {
     setSyncing(true);
     try {
-      const driveItems = await listFolderFiles(token, folder.driveFolderId);
-      const existingDriveFiles = files.filter((f) => f.folderId === kbFolderId && f.source === 'drive');
-      const existingById = Object.fromEntries(existingDriveFiles.map((f) => [f.driveFileId, f]));
-      const seenIds = new Set();
-
-      for (const di of driveItems) {
-        seenIds.add(di.id);
-        const ext = getMimeExt(di.mimeType, di.name);
-        const date = new Date(di.modifiedTime).toLocaleDateString('ko');
-        const uploaderName = di.owners?.[0]?.displayName || '—';
-
-        const existing = existingById[di.id];
-        if (existing) {
-          // Update only if modified
-          if (existing.driveModifiedTime !== di.modifiedTime) {
-            await updateDoc(doc(db, 'projects', projectId, 'kbFiles', existing.id), {
-              name: di.name, size: formatDriveSize(di.size),
-              date, driveModifiedTime: di.modifiedTime,
-              webViewLink: di.webViewLink, thumbnailLink: di.thumbnailLink || null,
-              versions: [...(existing.versions || []), {
-                v: (existing.v || 1) + 1, date, by: uploaderName, note: 'Drive 업데이트',
-              }],
-              v: (existing.v || 1) + 1,
-            });
-          }
-        } else {
-          // New file
-          await addDoc(collection(db, 'projects', projectId, 'kbFiles'), {
-            name: di.name, ext, folderId: kbFolderId,
-            source: 'drive',
-            driveFileId: di.id,
-            driveModifiedTime: di.modifiedTime,
-            webViewLink: di.webViewLink,
-            thumbnailLink: di.thumbnailLink || null,
-            uploader: uploaderName, uploaderUid: null,
-            size: formatDriveSize(di.size), date,
-            tags: [], v: 1,
-            versions: [{ v: 1, date, by: uploaderName, note: 'Drive에서 색인됨' }],
-            createdAt: serverTimestamp(),
-          });
-        }
+      // Clear existing kbFolders and drive-sourced files first
+      if (folders.length > 0) {
+        const batch = writeBatch(db);
+        folders.forEach((f) => batch.delete(doc(db, 'projects', projectId, 'kbFolders', f.id)));
+        files.filter((f) => f.source === 'drive').forEach((f) =>
+          batch.delete(doc(db, 'projects', projectId, 'kbFiles', f.id))
+        );
+        await batch.commit();
       }
 
-      // Remove files that were deleted from Drive
-      const toRemove = existingDriveFiles.filter((f) => !seenIds.has(f.driveFileId));
+      const tree = await buildFolderTree(token, driveFolderId);
       const batch = writeBatch(db);
-      toRemove.forEach((f) => batch.delete(doc(db, 'projects', projectId, 'kbFiles', f.id)));
-      await batch.commit();
-
-      // Update last sync time
-      await updateDoc(doc(db, 'projects', projectId, 'kbFolders', kbFolderId), {
-        driveLastSync: new Date().toISOString(),
+      const col = collection(db, 'projects', projectId, 'kbFolders');
+      tree.forEach((node, i) => {
+        batch.set(doc(col), {
+          name: node.name,
+          driveFolderId: node.id,
+          parentDriveFolderId: node.parentId,
+          drivePath: node.path,
+          depth: node.depth,
+          isRoot: node.depth === 0,
+          order: i,
+          driveLastSync: null,
+        });
       });
+      await batch.commit();
     } finally {
       setSyncing(false);
     }
   };
 
-  // ── Firebase 파일 업로드 ──────────────────────────────────────────────────
-  const saveFromChat = async ({ name, ext, fileUrl, size, uploader, uploaderUid, folderId }) => {
-    const existing = files.find((f) => f.folderId === folderId && f.name === name && f.source === 'firebase');
+  const disconnectDrive = async () => {
+    const batch = writeBatch(db);
+    folders.forEach((f) => batch.delete(doc(db, 'projects', projectId, 'kbFolders', f.id)));
+    files.filter((f) => f.source === 'drive').forEach((f) =>
+      batch.delete(doc(db, 'projects', projectId, 'kbFiles', f.id))
+    );
+    await batch.commit();
+  };
+
+  // Syncs files for every Drive-connected kbFolder
+  const syncFromDrive = async (token) => {
+    const driveFolders = folders.filter((f) => f.driveFolderId);
+    if (driveFolders.length === 0) throw new Error('연동된 Drive 폴더가 없습니다.');
+
+    setSyncing(true);
+    try {
+      for (const folder of driveFolders) {
+        const driveItems = await listFolderFiles(token, folder.driveFolderId);
+        const existingDriveFiles = files.filter((f) => f.folderId === folder.id && f.source === 'drive');
+        const existingById = Object.fromEntries(existingDriveFiles.map((f) => [f.driveFileId, f]));
+        const seenIds = new Set();
+
+        for (const di of driveItems) {
+          seenIds.add(di.id);
+          const ext = getMimeExt(di.mimeType, di.name);
+          const date = new Date(di.modifiedTime).toLocaleDateString('ko');
+          const uploaderName = di.owners?.[0]?.displayName || '—';
+
+          const existing = existingById[di.id];
+          if (existing) {
+            if (existing.driveModifiedTime !== di.modifiedTime) {
+              await updateDoc(doc(db, 'projects', projectId, 'kbFiles', existing.id), {
+                name: di.name, size: formatDriveSize(di.size),
+                date, driveModifiedTime: di.modifiedTime,
+                webViewLink: di.webViewLink, thumbnailLink: di.thumbnailLink || null,
+                versions: [...(existing.versions || []), {
+                  v: (existing.v || 1) + 1, date, by: uploaderName, note: 'Drive 업데이트',
+                }],
+                v: (existing.v || 1) + 1,
+              });
+            }
+          } else {
+            await addDoc(collection(db, 'projects', projectId, 'kbFiles'), {
+              name: di.name, ext, folderId: folder.id,
+              source: 'drive', driveFileId: di.id,
+              driveModifiedTime: di.modifiedTime,
+              webViewLink: di.webViewLink, thumbnailLink: di.thumbnailLink || null,
+              uploader: uploaderName, uploaderUid: null,
+              size: formatDriveSize(di.size), date,
+              tags: [], v: 1,
+              versions: [{ v: 1, date, by: uploaderName, note: 'Drive에서 색인됨' }],
+              createdAt: serverTimestamp(),
+            });
+          }
+        }
+
+        const toRemove = existingDriveFiles.filter((f) => !seenIds.has(f.driveFileId));
+        if (toRemove.length > 0) {
+          const batch = writeBatch(db);
+          toRemove.forEach((f) => batch.delete(doc(db, 'projects', projectId, 'kbFiles', f.id)));
+          await batch.commit();
+        }
+
+        await updateDoc(doc(db, 'projects', projectId, 'kbFolders', folder.id), {
+          driveLastSync: new Date().toISOString(),
+        });
+      }
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // ── Drive upload ───────────────────────────────────────────────────────────
+  const uploadToDrive = async (kbFolderId, selectedFiles, token) => {
+    const folder = folders.find((f) => f.id === kbFolderId);
+    if (!folder?.driveFolderId) throw new Error('Drive 폴더가 연동되지 않았습니다.');
     const today = new Date().toLocaleDateString('ko');
+
+    for (const file of selectedFiles) {
+      const driveFile = await uploadFileToDrive(token, folder.driveFolderId, file);
+      const ext = getMimeExt(driveFile.mimeType, driveFile.name);
+      const uploaderName = driveFile.owners?.[0]?.displayName || '—';
+      await addDoc(collection(db, 'projects', projectId, 'kbFiles'), {
+        name: driveFile.name, ext, folderId: kbFolderId,
+        source: 'drive', driveFileId: driveFile.id,
+        driveModifiedTime: driveFile.modifiedTime,
+        webViewLink: driveFile.webViewLink, thumbnailLink: driveFile.thumbnailLink || null,
+        uploader: uploaderName, uploaderUid: null,
+        size: formatDriveSize(driveFile.size), date: today,
+        tags: [], v: 1,
+        versions: [{ v: 1, date: today, by: uploaderName, note: 'Relay에서 업로드' }],
+        createdAt: serverTimestamp(),
+      });
+    }
+  };
+
+  // ── Chat save ─────────────────────────────────────────────────────────────
+  // If the target folder is Drive-connected and a blob + token are provided,
+  // uploads to Drive. Otherwise falls back to indexing the Firebase Storage URL.
+  const saveFromChat = async ({ name, ext, fileUrl, size, blob, token, uploader, uploaderUid, folderId }) => {
+    const folder = folders.find((f) => f.id === folderId);
+    const today = new Date().toLocaleDateString('ko');
+
+    if (folder?.driveFolderId && blob && token) {
+      const driveFile = await uploadFileToDrive(token, folder.driveFolderId, blob);
+      const driveExt = getMimeExt(driveFile.mimeType, driveFile.name);
+      const existing = files.find(
+        (f) => f.folderId === folderId && f.driveFileId === driveFile.id && f.source === 'drive'
+      );
+      if (existing) {
+        const newV = (existing.v || 1) + 1;
+        await updateDoc(doc(db, 'projects', projectId, 'kbFiles', existing.id), {
+          v: newV, size: formatDriveSize(driveFile.size), date: today,
+          webViewLink: driveFile.webViewLink,
+          versions: [...(existing.versions || []), { v: newV, date: today, by: uploader, note: '채팅에서 재업로드' }],
+        });
+        return;
+      }
+      await addDoc(collection(db, 'projects', projectId, 'kbFiles'), {
+        name: driveFile.name, ext: driveExt, folderId,
+        source: 'drive', driveFileId: driveFile.id,
+        driveModifiedTime: driveFile.modifiedTime,
+        webViewLink: driveFile.webViewLink, thumbnailLink: driveFile.thumbnailLink || null,
+        uploader, uploaderUid,
+        size: formatDriveSize(driveFile.size), date: today,
+        tags: [], v: 1,
+        versions: [{ v: 1, date: today, by: uploader, note: '채팅에서 Drive로 업로드' }],
+        createdAt: serverTimestamp(),
+      });
+      return;
+    }
+
+    // Fallback: index Firebase Storage URL
+    const existing = files.find((f) => f.folderId === folderId && f.name === name && f.source === 'firebase');
     if (existing) {
       const newV = (existing.v || 1) + 1;
       await updateDoc(doc(db, 'projects', projectId, 'kbFiles', existing.id), {
@@ -149,44 +217,13 @@ export function useKB(projectId) {
     });
   };
 
-  const addFileDirectly = async ({ name, ext, fileUrl, size, uploader, uploaderUid, folderId }) => {
-    const today = new Date().toLocaleDateString('ko');
-    const existing = files.find((f) => f.folderId === folderId && f.name === name && f.source === 'firebase');
-    if (existing) {
-      const newV = (existing.v || 1) + 1;
-      await updateDoc(doc(db, 'projects', projectId, 'kbFiles', existing.id), {
-        v: newV, fileUrl, size, date: today,
-        versions: [...(existing.versions || []), { v: newV, date: today, by: uploader, note: '업데이트' }],
-      });
-      return;
-    }
-    await addDoc(collection(db, 'projects', projectId, 'kbFiles'), {
-      name, ext, fileUrl, size, folderId,
-      uploader, uploaderUid, tags: [], source: 'firebase', date: today, v: 1,
-      versions: [{ v: 1, date: today, by: uploader, note: '직접 업로드' }],
-      createdAt: serverTimestamp(),
-    });
-  };
-
   const deleteFile = async (fileId) => {
     await deleteDoc(doc(db, 'projects', projectId, 'kbFiles', fileId));
   };
 
-  const updateFolder = async (id, fields) => {
-    await updateDoc(doc(db, 'projects', projectId, 'kbFolders', id), fields);
-  };
-
-  const addFolder = async (name, icon, color) => {
-    await addDoc(collection(db, 'projects', projectId, 'kbFolders'), {
-      name, icon: icon || '📁', color: color || 'oklch(0.50 0.05 80)',
-      order: folders.length,
-    });
-  };
-
   return {
     folders, files, loading, syncing,
-    initFolders, updateFolder, addFolder,
-    connectDrive, disconnectDrive, syncFromDrive,
-    saveFromChat, addFileDirectly, deleteFile,
+    connectDriveRoot, disconnectDrive, syncFromDrive,
+    uploadToDrive, saveFromChat, deleteFile,
   };
 }

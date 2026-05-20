@@ -1,7 +1,7 @@
 import { GoogleAuthProvider, reauthenticateWithPopup, signInWithPopup } from 'firebase/auth';
 import { auth } from './firebase';
 
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const API = 'https://www.googleapis.com/drive/v3';
 const TOKEN_KEY = 'relay_drive_token';
 const TOKEN_EXP_KEY = 'relay_drive_token_exp';
@@ -62,11 +62,40 @@ export async function getFolderInfo(token, folderId) {
   return driveGet(token, `/files/${folderId}?fields=id,name,webViewLink`);
 }
 
+export async function listSubfolders(token, folderId) {
+  const q = encodeURIComponent(
+    `'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`
+  );
+  const data = await driveGet(token, `/files?q=${q}&fields=files(id,name)&pageSize=100`);
+  return data.files || [];
+}
+
+// BFS traversal — returns flat array ordered for tree display (parent before children)
+export async function buildFolderTree(token, rootFolderId, maxDepth = 4) {
+  const root = await getFolderInfo(token, rootFolderId);
+  const result = [{ id: root.id, name: root.name, parentId: null, depth: 0, path: root.name }];
+  const queue = [{ id: root.id, path: root.name, depth: 0 }];
+
+  while (queue.length > 0) {
+    const { id, path, depth } = queue.shift();
+    if (depth >= maxDepth) continue;
+    const subs = await listSubfolders(token, id);
+    for (const sub of subs) {
+      const subPath = `${path}/${sub.name}`;
+      result.push({ id: sub.id, name: sub.name, parentId: id, depth: depth + 1, path: subPath });
+      queue.push({ id: sub.id, path: subPath, depth: depth + 1 });
+    }
+  }
+  return result;
+}
+
 export async function listFolderFiles(token, folderId) {
   const fields = encodeURIComponent(
     'nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink,thumbnailLink,iconLink,owners)'
   );
-  const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+  const q = encodeURIComponent(
+    `'${folderId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false`
+  );
   const all = [];
   let pageToken = '';
   do {
@@ -76,6 +105,25 @@ export async function listFolderFiles(token, folderId) {
     pageToken = data.nextPageToken || '';
   } while (pageToken);
   return all;
+}
+
+export async function uploadFileToDrive(token, folderId, file) {
+  const metadata = { name: file.name, parents: [folderId] };
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', file);
+
+  const fields = encodeURIComponent('id,name,mimeType,size,modifiedTime,webViewLink,thumbnailLink,owners');
+  const res = await fetch(
+    `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=${fields}`,
+    { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (res.status === 401) clearToken();
+    throw new Error(err.error?.message || `Drive 업로드 오류 (${res.status})`);
+  }
+  return res.json();
 }
 
 // ── Utils ──────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { requestDriveAccess, getStoredToken, getFolderInfo, parseFolderIdFromUrl } from '../../lib/driveApi';
 
-export default function DriveConnectModal({ kbFolder, onConnect, onClose }) {
+export default function DriveConnectModal({ onConnect, onClose }) {
   const [step, setStep] = useState(getStoredToken() ? 2 : 1);
   const [authLoading, setAuthLoading] = useState(false);
   const [folderUrl, setFolderUrl] = useState('');
@@ -9,12 +9,14 @@ export default function DriveConnectModal({ kbFolder, onConnect, onClose }) {
   const [checkLoading, setCheckLoading] = useState(false);
   const [connectLoading, setConnectLoading] = useState(false);
   const [error, setError] = useState('');
+  const [token, setToken] = useState(getStoredToken());
 
   const handleAuth = async () => {
     setAuthLoading(true);
     setError('');
     try {
-      await requestDriveAccess();
+      const t = await requestDriveAccess();
+      setToken(t);
       setStep(2);
     } catch (e) {
       setError(e.message || 'Google 인증에 실패했습니다. 팝업이 차단됐는지 확인해주세요.');
@@ -30,9 +32,9 @@ export default function DriveConnectModal({ kbFolder, onConnect, onClose }) {
     try {
       const folderId = parseFolderIdFromUrl(folderUrl);
       if (!folderId) { setError('유효한 Drive 폴더 URL이나 ID가 아닙니다.'); return; }
-      const token = getStoredToken();
-      if (!token) { setStep(1); setError('인증이 만료됐습니다. 다시 연결해주세요.'); return; }
-      const info = await getFolderInfo(token, folderId);
+      const t = token || getStoredToken();
+      if (!t) { setStep(1); setError('인증이 만료됐습니다. 다시 연결해주세요.'); return; }
+      const info = await getFolderInfo(t, folderId);
       setFolderInfo(info);
     } catch (e) {
       if (e.message.includes('401') || e.message.includes('만료')) {
@@ -50,7 +52,8 @@ export default function DriveConnectModal({ kbFolder, onConnect, onClose }) {
     if (!folderInfo) return;
     setConnectLoading(true);
     try {
-      await onConnect({ driveFolderId: folderInfo.id, driveFolderName: folderInfo.name });
+      const t = token || getStoredToken();
+      await onConnect(t, { driveFolderId: folderInfo.id, driveFolderName: folderInfo.name });
     } finally {
       setConnectLoading(false);
     }
@@ -67,12 +70,8 @@ export default function DriveConnectModal({ kbFolder, onConnect, onClose }) {
           <button className="member-modal-close" onClick={onClose}>✕</button>
         </div>
 
-        {/* KB folder badge */}
-        <div className="drive-modal-target">
-          <span className="mono" style={{ fontSize: 11, color: 'var(--ink-mute)' }}>연결 대상 KB 폴더</span>
-          <span className="drive-folder-badge" style={{ background: kbFolder.color }}>
-            {kbFolder.icon} {kbFolder.name}
-          </span>
+        <div style={{ padding: '8px 20px 4px', fontSize: 12, color: 'var(--ink-3)' }}>
+          연결할 Drive 루트 폴더를 지정하면 하위 폴더 구조가 KB에 자동으로 반영됩니다.
         </div>
 
         <div className="drive-modal-body">
@@ -82,7 +81,7 @@ export default function DriveConnectModal({ kbFolder, onConnect, onClose }) {
             <div className="drive-step-content">
               <div className="drive-step-title">Google 계정으로 Drive 연결</div>
               <div className="drive-step-desc">
-                Drive 폴더를 읽기 전용으로 접근합니다. 파일은 Drive에 그대로 있고 Relay는 목록만 읽어옵니다.
+                읽기 및 업로드 권한으로 연결합니다. 파일은 Drive에 직접 저장되며 Relay는 색인만 관리합니다.
               </div>
               {step === 1 && (
                 <button className="btn-google" onClick={handleAuth} disabled={authLoading}>
@@ -102,11 +101,11 @@ export default function DriveConnectModal({ kbFolder, onConnect, onClose }) {
           <div className={'drive-step' + (step >= 2 ? ' active' : ' muted')}>
             <div className="drive-step-num">2</div>
             <div className="drive-step-content">
-              <div className="drive-step-title">연결할 Drive 폴더 URL 입력</div>
+              <div className="drive-step-title">루트 Drive 폴더 URL 입력</div>
               {step >= 2 && (
                 <>
                   <div className="drive-step-desc">
-                    Google Drive에서 연결할 폴더를 열고 주소창 URL을 붙여넣으세요.
+                    KB의 최상위 Drive 폴더를 지정하세요. 하위 폴더 전체가 KB 트리로 가져와집니다.
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     <input
@@ -123,7 +122,7 @@ export default function DriveConnectModal({ kbFolder, onConnect, onClose }) {
                   </div>
                   {folderInfo && (
                     <div className="drive-folder-confirmed">
-                      <span>📂</span>
+                      <span>🗂</span>
                       <span style={{ fontWeight: 600 }}>{folderInfo.name}</span>
                       <a href={folderInfo.webViewLink} target="_blank" rel="noreferrer"
                         style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 'auto' }}>↗ Drive에서 보기</a>
@@ -148,7 +147,7 @@ export default function DriveConnectModal({ kbFolder, onConnect, onClose }) {
             onClick={handleConnect}
             disabled={!folderInfo || connectLoading}
           >
-            {connectLoading ? '연결 중…' : '연결 & 동기화 시작'}
+            {connectLoading ? '폴더 트리 가져오는 중…' : '연동 & 폴더 트리 가져오기'}
           </button>
         </div>
       </div>
