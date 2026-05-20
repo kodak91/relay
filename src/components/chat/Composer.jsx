@@ -16,14 +16,14 @@ const SLASH_MAP = {
 };
 
 const MESSAGE_TYPES = [
-  { id: 'text',     label: '일반',      icon: '💬', slash: '' },
-  { id: 'approval', label: '승인 요청', icon: '✓',  slash: '/승인' },
-  { id: 'decision', label: '결정 요청', icon: '◇',  slash: '/결정' },
-  { id: 'vote',     label: '투표',      icon: '◉',  slash: '/투표' },
-  { id: 'update',   label: '중간 보고', icon: '◆',  slash: '/보고' },
-  { id: 'announce', label: '공지',      icon: '📢', slash: '/공지' },
-  { id: 'casual',   label: '잡담',      icon: '☕', slash: '/잡담' },
-  { id: 'meeting',  label: '회의',      icon: '📋', slash: '/회의' },
+  { id: 'text',     label: '일반',   icon: '💬', slash: '' },
+  { id: 'approval', label: '/승인',  icon: '✓',  slash: '/승인' },
+  { id: 'decision', label: '/결정',  icon: '◇',  slash: '/결정' },
+  { id: 'vote',     label: '/투표',  icon: '◉',  slash: '/투표' },
+  { id: 'update',   label: '/보고',  icon: '◆',  slash: '/보고' },
+  { id: 'announce', label: '/공지',  icon: '📢', slash: '/공지' },
+  { id: 'casual',   label: '/잡담',  icon: '☕', slash: '/잡담' },
+  { id: 'meeting',  label: '/회의',  icon: '📋', slash: '/회의' },
 ];
 
 function DecisionBuilder({ title, setTitle, options, setOptions }) {
@@ -137,7 +137,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
 
   placeholderRef.current = isCasual
     ? '팀에게 가볍게 한마디… (1시간 뒤 사라짐)'
-    : '메시지 입력…  // : 매너모드   /버튼명: 버튼 호출   #태그명 : 태그 달기';
+    : '메시지 입력…  // : 매너모드   /버튼명 : 버튼 호출   /* /** : 중요도   #태그';
 
   const editor = useEditor({
     extensions: [
@@ -176,7 +176,24 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
   }, [editor, polishing]);
 
   const checkSlashCommand = (md) => {
-    const matched = SLASH_MAP[md.trim()];
+    const trimmed = md.trim();
+
+    // Importance shortcuts: /* = 중요, /** = 매우 중요
+    if (trimmed === '/**') {
+      setImportance(2);
+      editor?.commands.clearContent();
+      setText('');
+      return true;
+    }
+    if (trimmed === '/*') {
+      setImportance(1);
+      editor?.commands.clearContent();
+      setText('');
+      return true;
+    }
+
+    // Message type shortcuts
+    const matched = SLASH_MAP[trimmed];
     if (matched) {
       setType(matched);
       editor?.commands.clearContent();
