@@ -5,6 +5,7 @@ const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const API = 'https://www.googleapis.com/drive/v3';
 const TOKEN_KEY = 'relay_drive_token';
 const TOKEN_EXP_KEY = 'relay_drive_token_exp';
+const TOKEN_SCOPE_KEY = 'relay_drive_token_scope';
 
 // ── OAuth ──────────────────────────────────────────────────────────────────
 export async function requestDriveAccess() {
@@ -25,15 +26,17 @@ export async function requestDriveAccess() {
 
   sessionStorage.setItem(TOKEN_KEY, token);
   sessionStorage.setItem(TOKEN_EXP_KEY, (Date.now() + 55 * 60 * 1000).toString());
+  sessionStorage.setItem(TOKEN_SCOPE_KEY, DRIVE_SCOPE);
   return token;
 }
 
 export function getStoredToken() {
   const token = sessionStorage.getItem(TOKEN_KEY);
   const exp = parseInt(sessionStorage.getItem(TOKEN_EXP_KEY) || '0', 10);
-  if (!token || Date.now() > exp) {
-    sessionStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(TOKEN_EXP_KEY);
+  const scope = sessionStorage.getItem(TOKEN_SCOPE_KEY);
+  // Invalidate token if expired or obtained with a different (narrower) scope
+  if (!token || Date.now() > exp || scope !== DRIVE_SCOPE) {
+    clearToken();
     return null;
   }
   return token;
@@ -42,6 +45,7 @@ export function getStoredToken() {
 export function clearToken() {
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_EXP_KEY);
+  sessionStorage.removeItem(TOKEN_SCOPE_KEY);
 }
 
 // ── API helpers ────────────────────────────────────────────────────────────
