@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { claudeComplete } from '../../lib/claude';
 import { useMessages } from '../../hooks/useMessages';
 import { useTasks } from '../../hooks/useTasks';
@@ -40,8 +41,30 @@ export default function AIChannel() {
   }, [chatHistory]);
 
   const buildContext = () => {
-    const msgSummary = messages.slice(-20).map((m) => `[${m.ts}] ${m.senderName}: ${m.text || m.title || ''}`).join('\n');
-    const taskSummary = tasks.filter((t) => !t.done).map((t) => `- ${t.title}${t.due ? ' (' + t.due + ')' : ''}`).join('\n');
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - THIRTY_DAYS_MS;
+    const CONTEXT_CHAR_LIMIT = 6000;
+
+    const recentMsgs = messages
+      .filter((m) => {
+        const ts = m.createdAt?.toMillis?.() || m.createdAt?.seconds * 1000 || 0;
+        return ts === 0 || ts >= cutoff;
+      })
+      .slice(-30);
+
+    let msgSummary = recentMsgs
+      .map((m) => `[${m.ts}] ${m.senderName}: ${m.text || m.title || ''}`)
+      .join('\n');
+
+    if (msgSummary.length > CONTEXT_CHAR_LIMIT) {
+      msgSummary = msgSummary.slice(-CONTEXT_CHAR_LIMIT) + '\n(이전 내용 생략)';
+    }
+
+    const taskSummary = tasks
+      .filter((t) => !t.done)
+      .map((t) => `- ${t.title}${t.due ? ' (' + t.due + ')' : ''}`)
+      .join('\n');
+
     return { msgSummary, taskSummary };
   };
 
@@ -96,9 +119,10 @@ export default function AIChannel() {
               </div>
             )}
             <div className={'ai-msg-bubble' + (msg.error ? ' error' : '')} style={msg.error ? { background: 'var(--rose-bg)', color: 'var(--rose)', border: '1px solid var(--rose-line)' } : {}}>
-              <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                {msg.text}
-              </pre>
+              {msg.role === 'ai' && !msg.error
+                ? <div className="md-content ai-md">{<ReactMarkdown>{msg.text}</ReactMarkdown>}</div>
+                : <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{msg.text}</pre>
+              }
             </div>
             {msg.role === 'user' && <span className="ai-msg-ts" style={{ alignSelf: 'flex-end' }}>{msg.ts}</span>}
           </div>

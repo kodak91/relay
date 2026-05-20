@@ -598,6 +598,30 @@ function AIMsg({ m }) {
   );
 }
 
+function AssignMsg({ m, onDelete }) {
+  return (
+    <div className="msg">
+      <MsgActions m={m} onDelete={() => onDelete(m.id)} />
+      <Avatar name={m.senderName} />
+      <div style={{ flex: 1 }}>
+        <div className="msg-head">
+          <span className="name">{m.senderName}</span>
+          <span className="role">{m.senderRole}</span>
+          <span className="ts">{m.ts}</span>
+        </div>
+        <div className="assign-card">
+          <div className="assign-hd">
+            <span className="assign-ico">📌</span>
+            <span><b>@{m.assigneeName}</b>에게 업무 할당</span>
+          </div>
+          <div className="assign-task">{m.text}</div>
+          <div className="assign-foot">by {m.senderName}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Message dispatcher ─────────────────────────────────────────────
 
 export default function Message({ m, isGrouped, handlers }) {
@@ -633,6 +657,7 @@ export default function Message({ m, isGrouped, handlers }) {
     case 'update':    return <UpdateMsg {...props} />;
     case 'announce':  return <AnnounceMsg {...props} />;
     case 'meeting':   return <MeetingMsg {...props} />;
+    case 'assign':    return <AssignMsg m={m} onDelete={deleteMsg} />;
     case 'image':     return <ImageMsg m={m} />;
     case 'file':      return <FileMsg m={m} />;
     case 'casual':    return <CasualMsg {...props} />;

@@ -11,8 +11,8 @@ const SLASH_MAP = {
   '/투표': 'vote',
   '/보고': 'update',
   '/공지': 'announce',
-  '/잡담': 'casual',
   '/회의': 'meeting',
+  '/할당': 'assign',
 };
 
 const MESSAGE_TYPES = [
@@ -22,8 +22,9 @@ const MESSAGE_TYPES = [
   { id: 'vote',     label: '/투표',  icon: '◉',  slash: '/투표' },
   { id: 'update',   label: '/보고',  icon: '◆',  slash: '/보고' },
   { id: 'announce', label: '/공지',  icon: '📢', slash: '/공지' },
-  { id: 'casual',   label: '/잡담',  icon: '☕', slash: '/잡담' },
+  { id: 'casual',   label: '$잡담',  icon: '☕', slash: '' },
   { id: 'meeting',  label: '/회의',  icon: '📋', slash: '/회의' },
+  { id: 'assign',   label: '/할당',  icon: '📌', slash: '/할당' },
 ];
 
 function DecisionBuilder({ title, setTitle, options, setOptions }) {
@@ -64,6 +65,33 @@ function DecisionBuilder({ title, setTitle, options, setOptions }) {
         style={{ marginTop: 8, border: '1px dashed var(--border)', borderRadius: 'var(--r-2)', padding: '5px 12px', fontSize: 12, color: 'var(--ink-3)', background: 'transparent', cursor: 'pointer', width: '100%' }}
         onClick={addOption}
       >+ 항목 추가</button>
+    </div>
+  );
+}
+
+function AssignBuilder({ members, assignee, setAssignee, taskText, setTaskText }) {
+  const others = members.filter((m) => m.uid);
+  return (
+    <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span>📌</span> 태스크 할당
+      </div>
+      <select
+        value={assignee?.uid || ''}
+        onChange={(e) => setAssignee(others.find((m) => m.uid === e.target.value) || null)}
+        style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '6px 8px', fontSize: 13, background: 'var(--surface-2)', outline: 'none', marginBottom: 8, fontFamily: 'var(--font-sans)', color: 'var(--ink)' }}
+      >
+        <option value="">팀원 선택…</option>
+        {others.map((m) => (
+          <option key={m.uid} value={m.uid}>{m.name || m.uid}</option>
+        ))}
+      </select>
+      <input
+        style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '7px 10px', fontSize: 13, background: 'var(--surface-2)', outline: 'none', boxSizing: 'border-box', fontFamily: 'var(--font-sans)' }}
+        placeholder="할당할 업무 내용…"
+        value={taskText}
+        onChange={(e) => setTaskText(e.target.value)}
+      />
     </div>
   );
 }
@@ -110,17 +138,22 @@ function VoteBuilder({ title, setTitle, options, setOptions }) {
   );
 }
 
-export default function Composer({ onSend, onFileSelect, fileInputRef }) {
+export default function Composer({ onSend, onFileSelect, fileInputRef, members = [] }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
   const [importance, setImportance] = useState(0);
   const [polishing, setPolishing] = useState(false);
   const [showAI, setShowAI] = useState(false);
+  const [showFileMenu, setShowFileMenu] = useState(false);
+  const [showTypeMenu, setShowTypeMenu] = useState(false);
+  const actionsRef = useRef(null);
 
   const [decisionTitle, setDecisionTitle] = useState('');
   const [decisionOptions, setDecisionOptions] = useState(['', '']);
   const [voteTitle, setVoteTitle] = useState('');
   const [voteOptions, setVoteOptions] = useState(['', '']);
+  const [assignee, setAssignee] = useState(null);
+  const [assignTaskText, setAssignTaskText] = useState('');
 
   // Refs to avoid stale closures in editor callbacks
   const onEnterRef = useRef(null);
@@ -137,7 +170,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
 
   placeholderRef.current = isCasual
     ? '팀에게 가볍게 한마디… (1시간 뒤 사라짐)'
-    : '메시지 입력…  // : 매너모드   /버튼명 : 버튼 호출   /* /** : 중요도   #태그';
+    : '메시지 입력…  // : 매너모드   $ : 잡담   /! /!! : 중요도   #태그';
 
   const editor = useEditor({
     extensions: [
@@ -170,26 +203,44 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
     },
   });
 
-  // Keep editor editable state in sync with polishing
   useEffect(() => {
     if (editor) editor.setEditable(!polishing);
   }, [editor, polishing]);
 
+  // Close dropdowns on outside click
+  useEffect(() => {
+    if (!showFileMenu && !showTypeMenu) return;
+    const handler = (e) => {
+      if (actionsRef.current && !actionsRef.current.contains(e.target)) {
+        setShowFileMenu(false);
+        setShowTypeMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showFileMenu, showTypeMenu]);
+
   const checkSlashCommand = (md) => {
     const trimmed = md.trim();
 
-    // Importance shortcuts: /* = 중요, /** = 매우 중요
-    if (trimmed === '/**') {
+    // Importance shortcuts: /! = 중요(★), /!! = 매우 중요(★★)
+    if (trimmed === '/!!') {
       setImportance(2);
       editor?.commands.clearContent();
       setText('');
       return true;
     }
-    if (trimmed === '/*') {
+    if (trimmed === '/!') {
       setImportance(1);
       editor?.commands.clearContent();
       setText('');
       return true;
+    }
+
+    // $ prefix → casual (잡담) mode; keep content in editor
+    if (trimmed.startsWith('$') && type !== 'casual') {
+      setType('casual');
+      return false;
     }
 
     // Message type shortcuts
@@ -203,7 +254,24 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
     return false;
   };
 
+  const isAssign = type === 'assign';
+
   const handleSend = () => {
+    if (isAssign) {
+      if (!assignee || !assignTaskText.trim()) return;
+      onSend({
+        type: 'assign',
+        text: assignTaskText.trim(),
+        assigneeUid: assignee.uid,
+        assigneeName: assignee.name,
+        tags: [],
+      });
+      setAssignee(null);
+      setAssignTaskText('');
+      setType('text');
+      return;
+    }
+
     if (isDecision) {
       if (!decisionTitle.trim()) return;
       const validOpts = decisionOptions.filter((o) => o.trim());
@@ -239,7 +307,10 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
 
     if (!text.trim()) return;
     const tags = text.match(/#\S+/g) || [];
-    const msg = { type, text: text.trim(), tags, importance };
+    const cleanText = type === 'casual' && text.trimStart().startsWith('$')
+      ? text.trimStart().slice(1).trim()
+      : text.trim();
+    const msg = { type, text: cleanText, tags, importance };
     if (type === 'casual') msg.expiresAt = Date.now() + 60 * 60 * 1000;
     if (type === 'approval') msg.status = 'pending';
     onSend(msg);
@@ -286,6 +357,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
     setText('');
     if (t !== 'decision') { setDecisionTitle(''); setDecisionOptions(['', '']); }
     if (t !== 'vote') { setVoteTitle(''); setVoteOptions(['', '']); }
+    if (t !== 'assign') { setAssignee(null); setAssignTaskText(''); }
   };
 
   // Update refs every render so editor callbacks always see fresh state
@@ -301,7 +373,9 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
   };
 
   const tags = text.match(/#\S+/g) || [];
-  const canSend = isDecision
+  const canSend = isAssign
+    ? (assignee && assignTaskText.trim())
+    : isDecision
     ? (decisionTitle.trim() && decisionOptions.filter((o) => o.trim()).length >= 2)
     : isVote
     ? (voteTitle.trim() && voteOptions.filter((o) => o.trim()).length >= 2)
@@ -322,6 +396,16 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
           <VoteBuilder
             title={voteTitle} setTitle={setVoteTitle}
             options={voteOptions} setOptions={setVoteOptions}
+          />
+        )}
+
+        {isAssign && (
+          <AssignBuilder
+            members={members}
+            assignee={assignee}
+            setAssignee={setAssignee}
+            taskText={assignTaskText}
+            setTaskText={setAssignTaskText}
           />
         )}
 
@@ -349,7 +433,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
           <div className="tags-mini">{tags.map((t, i) => <span key={i} className="tag">{t}</span>)}</div>
         )}
 
-        {!isDecision && !isVote && (
+        {!isDecision && !isVote && !isAssign && (
           <div className="ta-wrap">
             <EditorContent editor={editor} />
             <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
@@ -371,33 +455,57 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
           </div>
         )}
 
-        <div className="actions">
-          <button
-              className="chip"
-              style={{ borderStyle: 'dashed' }}
-              onClick={() => fileInputRef?.current?.click()}
+        <div className="actions" ref={actionsRef}>
+          {/* + 파일 버튼 */}
+          <div className="composer-btn-wrap">
+            <button
+              className={'composer-act-btn' + (showFileMenu ? ' on' : '')}
+              onClick={() => { setShowFileMenu((v) => !v); setShowTypeMenu(false); }}
               title="파일 첨부"
-            >
-              <span>📎</span>
-              <span>파일</span>
-            </button>
-          <div className="type-chips">
-            {MESSAGE_TYPES.map((tt) => (
-              <button
-                key={tt.id}
-                className="chip"
-                style={tt.id === type ? { background: 'var(--ink)', color: 'var(--bg)', borderColor: 'var(--ink)' } : {}}
-                onClick={() => setTypeAndReset(tt.id)}
-              >
-                <span className="glyph">{tt.icon}</span>
-                <span>{tt.label}</span>
-              </button>
-            ))}
-            <span className="chip" style={{ borderStyle: 'dashed', color: importance ? 'var(--rose)' : 'var(--ink-3)' }} onClick={() => setImportance((importance + 1) % 3)}>
-              <span className="glyph">{importance === 0 ? '☆' : '⭐'.repeat(importance)}</span>
-              <span>중요도</span>
-            </span>
+            >+</button>
+            {showFileMenu && (
+              <div className="composer-dropdown">
+                <button onClick={() => { fileInputRef?.current?.click(); setShowFileMenu(false); }}>
+                  <span>📎</span> 이미지 / 파일 업로드
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* / 메시지 유형 버튼 */}
+          <div className="composer-btn-wrap">
+            <button
+              className={'composer-act-btn' + (showTypeMenu ? ' on' : '') + (type !== 'text' ? ' has-type' : '')}
+              onClick={() => { setShowTypeMenu((v) => !v); setShowFileMenu(false); }}
+              title="메시지 유형"
+            >
+              {type !== 'text'
+                ? <><span style={{ opacity: 0.5 }}>/</span>{MESSAGE_TYPES.find((t) => t.id === type)?.label}</>
+                : '/'}
+            </button>
+            {showTypeMenu && (
+              <div className="composer-dropdown type-drop">
+                {MESSAGE_TYPES.map((tt) => (
+                  <button
+                    key={tt.id}
+                    className={tt.id === type ? 'active' : ''}
+                    onClick={() => { setTypeAndReset(tt.id); setShowTypeMenu(false); }}
+                  >
+                    <span className="ico">{tt.icon}</span> {tt.label}
+                  </button>
+                ))}
+                <div className="composer-dropdown-sep" />
+                <button
+                  style={{ color: importance ? 'var(--rose)' : undefined }}
+                  onClick={() => { setImportance((importance + 1) % 3); setShowTypeMenu(false); }}
+                >
+                  <span className="ico">{importance === 0 ? '☆' : '⭐'.repeat(importance)}</span> 중요도
+                </button>
+              </div>
+            )}
+          </div>
+
+          <span style={{ flex: 1 }} />
           <span className="kbd-hint" style={{ marginRight: 6 }}><kbd>⇧</kbd><kbd>↵</kbd> 줄바꿈</span>
           <button
             className={'send' + (showAccentSend ? ' accent' : '') + (isCasual ? ' casual' : '')}

@@ -11,7 +11,11 @@ import TasksTab from '../tasks/TasksTab';
 import MemberManagementModal from './MemberManagementModal';
 import KBTab from '../kb/KBTab';
 import KBSaveBanner from '../kb/KBSaveBanner';
+import NotionTab from '../notion/NotionTab';
 import { uploadFile, IMAGE_TYPES, formatFileSize } from '../../lib/uploadFile';
+import { postToSlack } from '../../lib/slack';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 function nowHM() {
   const d = new Date();
@@ -143,6 +147,26 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       senderRole: user?.position || (user?.role === 'lead' ? '팀장' : '팀원'),
       ts: nowHM(),
     });
+
+    // Slack: /보고 messages
+    if (msgData.type === 'update' && activeProjectData?.slackWebhook) {
+      postToSlack(
+        activeProjectData.slackWebhook,
+        `📊 *[${activeProjectData.name}] 중간 보고* — ${user?.name || '팀원'}\n${msgData.text || ''}`
+      ).catch((e) => console.warn('Slack:', e.message));
+    }
+
+    // @assign: write task to assignee's personal task list
+    if (msgData.type === 'assign' && msgData.assigneeUid && msgData.text?.trim()) {
+      addDoc(collection(db, 'users', msgData.assigneeUid, 'tasks'), {
+        title: msgData.text.trim(),
+        done: false,
+        date: new Date().toISOString().slice(0, 10),
+        assignedBy: user?.name || '팀원',
+        assignedFrom: 'chat',
+        createdAt: serverTimestamp(),
+      }).catch((e) => console.warn('Assign task write:', e.message));
+    }
   };
 
   // File upload handler
@@ -241,6 +265,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           {[
             { id: 'chat', icon: '💬', label: '채팅', count: messages.length },
             { id: 'kb', icon: '📚', label: 'KB', count: null },
+            { id: 'notion', icon: '📄', label: 'Notion', count: null },
             { id: 'tasks', icon: '📋', label: '태스크' },
           ].map((tab) => (
             <button key={tab.id} className={'chat-tab' + (chatTab === tab.id ? ' on' : '')} onClick={() => setChatTab(tab.id)}>
@@ -289,6 +314,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
       {chatTab === 'kb' ? (
         <KBTab projectId={activeProject} />
+      ) : chatTab === 'notion' ? (
+        <NotionTab projectId={activeProject} />
       ) : chatTab === 'tasks' ? (
         <TasksTab projectId={activeProject} />
       ) : (
@@ -336,7 +363,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
               onDismiss={() => setPendingKBSave(null)}
             />
           )}
-          <Composer onSend={handleSend} onFileSelect={handleFiles} fileInputRef={fileInputRef} />
+          <Composer onSend={handleSend} onFileSelect={handleFiles} fileInputRef={fileInputRef} members={activeProjectData?.members || []} />
           <input
             ref={fileInputRef}
             type="file"

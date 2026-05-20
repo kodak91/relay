@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useAuth } from './hooks/useAuth';
 import useAppStore from './store/appStore';
 import Landing from './pages/Landing';
@@ -9,12 +9,14 @@ import LeftSidebar from './components/layout/LeftSidebar';
 import RightSidebar from './components/layout/RightSidebar';
 import ChatMain from './components/chat/ChatMain';
 import AIChannel from './components/ai/AIChannel';
+import GlobalSearch from './components/search/GlobalSearch';
 import { useProjects } from './hooks/useProjects';
 
 function ProtectedApp() {
-  const { activeChannel, activeProject, user, authLoading } = useAppStore();
+  const { activeChannel, activeProject, user, authLoading, setChatTab } = useAppStore();
   const { projects } = useProjects();
   const msgRefs = useRef({});
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const currentProject = projects.find((p) => p.id === activeProject);
 
@@ -29,6 +31,18 @@ function ProtectedApp() {
     }
   };
 
+  // ⌘K / Ctrl+K to open search
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
   // 인증 확인 중이면 로딩 표시 (리다이렉트 금지)
   if (authLoading) return <LoadingScreen />;
 
@@ -36,7 +50,7 @@ function ProtectedApp() {
 
   return (
     <div className="app">
-      <Topbar project={currentProject} onStartMeeting={() => {}} />
+      <Topbar project={currentProject} onStartMeeting={() => {}} onSearchOpen={() => setSearchOpen(true)} />
       <div className="body">
         <LeftSidebar />
         {activeChannel === 'ai' ? (
@@ -46,6 +60,12 @@ function ProtectedApp() {
         )}
         <RightSidebar onJumpToMessage={jumpToMessage} />
       </div>
+      <GlobalSearch
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        projects={projects}
+        onJumpToMessage={jumpToMessage}
+      />
     </div>
   );
 }

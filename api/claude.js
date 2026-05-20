@@ -1,6 +1,10 @@
 // Vercel serverless function — proxies Claude Haiku API
 // Keeps the Anthropic API key server-side only
 
+// Per-request limits
+const MAX_INPUT_CHARS = 24000;  // ~6 000 tokens — generous for reports
+const MAX_OUTPUT_TOKENS = 4096; // enough for multi-section reports
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -8,6 +12,12 @@ export default async function handler(req, res) {
 
   const { prompt, systemPrompt } = req.body;
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
+
+  if (prompt.length > MAX_INPUT_CHARS) {
+    return res.status(413).json({
+      error: `입력이 너무 깁니다. 최대 ${MAX_INPUT_CHARS.toLocaleString()}자까지 허용됩니다 (현재 ${prompt.length.toLocaleString()}자).`,
+    });
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'API key not configured' });
@@ -22,7 +32,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
+        max_tokens: MAX_OUTPUT_TOKENS,
         system: systemPrompt || '당신은 팀 협업 툴 Relay의 AI 어시스턴트입니다. 항상 한국어로 간결하게 답변하세요.',
         messages: [{ role: 'user', content: prompt }],
       }),

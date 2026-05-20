@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   collection, query, orderBy, onSnapshot,
-  addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
+  addDoc, updateDoc, doc, serverTimestamp,
   where, arrayUnion, getDoc, getDocs,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -60,7 +60,13 @@ export function useProjects(userId) {
   };
 
   const deleteProject = async (id) => {
-    await deleteDoc(doc(db, 'projects', id));
+    // Soft-delete: mark as deleted and disconnect integrations.
+    // Drive files/folders live in Google Drive and subcollections — they are not touched.
+    await updateDoc(doc(db, 'projects', id), {
+      status: '삭제됨',
+      deletedAt: serverTimestamp(),
+      slackWebhook: null,
+    });
   };
 
   const joinByCode = async (code, user) => {

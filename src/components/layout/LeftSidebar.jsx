@@ -3,6 +3,7 @@ import useAppStore from '../../store/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import NewProjectModal from '../chat/NewProjectModal';
 import JoinWorkspaceModal from '../chat/JoinWorkspaceModal';
+import SlackModal from '../integrations/SlackModal';
 
 const PROJECT_COLORS = [
   'oklch(0.50 0.20 25)',
@@ -22,6 +23,9 @@ export default function LeftSidebar() {
   const [editingName, setEditingName] = useState('');
   const [menuId, setMenuId] = useState(null);
   const menuRef = useRef(null);
+  const [showSlackModal, setShowSlackModal] = useState(false);
+
+  const activeProjectData = projects.find((p) => p.id === activeProject) || null;
 
   const active = projects.filter((p) => p.status !== '보관' && p.status !== '삭제됨');
   const archived = projects.filter((p) => p.status === '보관');
@@ -120,6 +124,23 @@ export default function LeftSidebar() {
         )}
       </div>
 
+      {/* External integrations */}
+      <div className="integ-section">
+        <div className="integ-hd">도구 · 외부 연동</div>
+        <button
+          className="integ-row"
+          onClick={() => setShowSlackModal(true)}
+          title={activeProjectData ? `${activeProjectData.name} Slack 설정` : '프로젝트를 먼저 선택하세요'}
+        >
+          <span className="slack-ico sm">S</span>
+          <span>Slack</span>
+          {activeProjectData?.slackWebhook
+            ? <span className="integ-status on">● 연결됨</span>
+            : <span className="integ-status">설정</span>
+          }
+        </button>
+      </div>
+
       <div
         className={'ai-channel' + (activeChannel === 'ai' ? ' on' : '')}
         onClick={() => setActiveChannel('ai')}
@@ -131,6 +152,13 @@ export default function LeftSidebar() {
         </div>
         <p>슬래시 명령어로 호출 ·<br />/오늘요약  /스케줄</p>
       </div>
+
+      {showSlackModal && (
+        <SlackModal
+          project={activeProjectData}
+          onClose={() => setShowSlackModal(false)}
+        />
+      )}
 
       {showNewProject && (
         <NewProjectModal

@@ -3,7 +3,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 import useAppStore from '../../store/appStore';
 
-export default function Topbar({ project, onStartMeeting, projects }) {
+export default function Topbar({ project, onStartMeeting, projects, onSearchOpen }) {
   const { role, setRole, user, activeChannel } = useAppStore();
   const setUser = useAppStore((s) => s.setUser);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -40,9 +40,14 @@ export default function Topbar({ project, onStartMeeting, projects }) {
         {aiActive && (
           <span className="status-pill" style={{ background: 'var(--accent-soft)', color: 'var(--accent)', borderColor: 'var(--accent-line)' }}>AI 채널</span>
         )}
-        <div className="search" style={{ marginLeft: 'auto' }}>
+        <div className="search" style={{ marginLeft: 'auto', cursor: 'pointer' }} onClick={onSearchOpen}>
           <span>⌕</span>
-          <input placeholder="메시지·태스크·파일 검색…" />
+          <input
+            placeholder="메시지·태스크 검색…"
+            readOnly
+            style={{ cursor: 'pointer' }}
+            onFocus={onSearchOpen}
+          />
           <kbd>⌘K</kbd>
         </div>
       </div>
