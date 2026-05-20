@@ -66,11 +66,10 @@ export default function KBTab({ projectId }) {
 
   const handleConnectDrive = async (token, { driveFolderId, driveFolderName }) => {
     try {
+      // connectDriveRoot builds the folder tree AND indexes files in one pass
       await connectDriveRoot(token, { driveFolderId, driveFolderName });
       setShowDriveModal(false);
       setActiveFolderId(null);
-      // Auto-sync after connecting
-      try { await syncFromDrive(token); } catch { /* will show error on next sync */ }
     } catch (e) {
       setSyncError(e.message || 'Drive 연동 실패');
       setShowDriveModal(false);

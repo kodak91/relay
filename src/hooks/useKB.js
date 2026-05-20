@@ -32,25 +32,29 @@ export function useKB(projectId) {
   }, [projectId]);
 
   // ── Drive root connection ─────────────────────────────────────────────────
-  // Reads the full Drive folder tree and creates kbFolder entries for each node.
-  const connectDriveRoot = async (token, { driveFolderId, driveFolderName }) => {
+  // Reads the full Drive folder tree, creates kbFolder entries, and immediately
+  // indexes files in each folder — all in one pass to avoid Firestore listener timing issues.
+  const connectDriveRoot = async (token, { driveFolderId }) => {
     setSyncing(true);
     try {
-      // Clear existing kbFolders and drive-sourced files first
+      // Clear existing kbFolders and drive-sourced files
       if (folders.length > 0) {
-        const batch = writeBatch(db);
-        folders.forEach((f) => batch.delete(doc(db, 'projects', projectId, 'kbFolders', f.id)));
+        const cleanBatch = writeBatch(db);
+        folders.forEach((f) => cleanBatch.delete(doc(db, 'projects', projectId, 'kbFolders', f.id)));
         files.filter((f) => f.source === 'drive').forEach((f) =>
-          batch.delete(doc(db, 'projects', projectId, 'kbFiles', f.id))
+          cleanBatch.delete(doc(db, 'projects', projectId, 'kbFiles', f.id))
         );
-        await batch.commit();
+        await cleanBatch.commit();
       }
 
       const tree = await buildFolderTree(token, driveFolderId);
-      const batch = writeBatch(db);
       const col = collection(db, 'projects', projectId, 'kbFolders');
-      tree.forEach((node, i) => {
-        batch.set(doc(col), {
+
+      // Create kbFolder entries and keep track of firestoreId per drive folder id
+      const folderIdMap = {}; // driveFolderId → firestore doc id
+      for (let i = 0; i < tree.length; i++) {
+        const node = tree[i];
+        const ref = await addDoc(col, {
           name: node.name,
           driveFolderId: node.id,
           parentDriveFolderId: node.parentId,
@@ -60,8 +64,37 @@ export function useKB(projectId) {
           order: i,
           driveLastSync: null,
         });
-      });
-      await batch.commit();
+        folderIdMap[node.id] = ref.id;
+      }
+
+      // Index files for each folder immediately (no need to wait for Firestore listener)
+      for (const node of tree) {
+        const kbFolderId = folderIdMap[node.id];
+        try {
+          const driveItems = await listFolderFiles(token, node.id);
+          for (const di of driveItems) {
+            const ext = getMimeExt(di.mimeType, di.name);
+            const date = new Date(di.modifiedTime).toLocaleDateString('ko');
+            const uploaderName = di.owners?.[0]?.displayName || '—';
+            await addDoc(collection(db, 'projects', projectId, 'kbFiles'), {
+              name: di.name, ext, folderId: kbFolderId,
+              source: 'drive', driveFileId: di.id,
+              driveModifiedTime: di.modifiedTime,
+              webViewLink: di.webViewLink, thumbnailLink: di.thumbnailLink || null,
+              uploader: uploaderName, uploaderUid: null,
+              size: formatDriveSize(di.size), date,
+              tags: [], v: 1,
+              versions: [{ v: 1, date, by: uploaderName, note: 'Drive에서 색인됨' }],
+              createdAt: serverTimestamp(),
+            });
+          }
+          await updateDoc(doc(db, 'projects', projectId, 'kbFolders', kbFolderId), {
+            driveLastSync: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn(`Folder ${node.name} file sync failed:`, e.message);
+        }
+      }
     } finally {
       setSyncing(false);
     }
