@@ -693,8 +693,35 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 .catchup-tag { font-size: 10px; font-family: var(--font-mono); font-weight: 700; background: var(--surface-3); color: var(--ink-3); border-radius: 4px; padding: 1px 6px; white-space: nowrap; flex-shrink: 0; }
 .catchup-text { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* ── Message action dropdown ──────────────────────────────────────────── */
+.msg-drop {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 50;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-2); box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  min-width: 120px; overflow: hidden;
+}
+.msg-drop button {
+  display: block; width: 100%; text-align: left;
+  padding: 8px 12px; font-size: 13px; border: 0; background: transparent;
+  cursor: pointer; color: var(--ink);
+}
+.msg-drop button:hover { background: var(--hover); }
+.msg-drop button.danger { color: var(--rose); }
+.msg-drop button.danger:hover { background: var(--rose-bg); }
+
+/* ── Inline edit mode ─────────────────────────────────────────────────── */
+.edit-mode { margin-top: 2px; }
+.edit-ta {
+  width: 100%; border: 1.5px solid var(--accent-line); border-radius: var(--r-2);
+  background: var(--surface-2); padding: 7px 10px; font-size: 14px;
+  color: var(--ink); line-height: 1.5; outline: none; resize: none;
+  font-family: var(--font-sans);
+}
+.edit-btns { display: flex; gap: 6px; margin-top: 6px; }
+.edited-badge { font-size: 10px; color: var(--ink-mute); margin-left: 6px; }
+
 /* ── Grouped messages ─────────────────────────────────────────────────── */
-.msg.grouped { padding-top: 2px; }
+.msg.grouped { padding-top: 1px; padding-bottom: 1px; }
 .msg-grouped-spacer { width: 36px; flex-shrink: 0; }
 
 /* ── Tiptap WYSIWYG editor ─────────────────────────────────────────────── */
@@ -1030,7 +1057,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 }
 .announce-toggle.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
 .announce-panel {
-  position: absolute; top: calc(100% + 6px); right: 0; z-index: 50;
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 300;
   width: 320px; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-3); box-shadow: 0 8px 32px rgba(0,0,0,0.12);
   overflow: hidden;

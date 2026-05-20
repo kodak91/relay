@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   collection, query, orderBy, onSnapshot,
-  addDoc, updateDoc, doc, arrayUnion, serverTimestamp,
+  addDoc, updateDoc, deleteDoc, doc, arrayUnion, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
@@ -54,5 +54,16 @@ export function useMessages(projectId) {
     });
   };
 
-  return { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage };
+  const deleteMessage = async (projectId, messageId) => {
+    await deleteDoc(doc(db, 'projects', projectId, 'messages', messageId));
+  };
+
+  const editMessage = async (projectId, messageId, newText) => {
+    await updateDoc(doc(db, 'projects', projectId, 'messages', messageId), {
+      text: newText,
+      editedAt: new Date().toISOString(),
+    });
+  };
+
+  return { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage };
 }

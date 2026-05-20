@@ -7,13 +7,13 @@ export default function NewProjectModal({ colors, onClose }) {
   const [color, setColor] = useState(colors[0]);
   const [loading, setLoading] = useState(false);
   const { addProject } = useProjects();
-  const { setActiveProject, setActiveChannel } = useAppStore();
+  const { setActiveProject, setActiveChannel, user } = useAppStore();
 
   const handleCreate = async () => {
     if (!name.trim()) return;
     setLoading(true);
     try {
-      await addProject(name.trim(), color);
+      await addProject(name.trim(), color, user?.name || '');
       onClose();
     } finally {
       setLoading(false);

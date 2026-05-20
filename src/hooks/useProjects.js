@@ -18,11 +18,12 @@ export function useProjects() {
     return unsub;
   }, []);
 
-  const addProject = async (name, color) => {
+  const addProject = async (name, color, leadName) => {
     const pf = name[0].toUpperCase();
     await addDoc(collection(db, 'projects'), {
       name, color: color || 'oklch(0.50 0.20 270)',
       pf, status: '진행중',
+      leadName: leadName || '',
       createdAt: serverTimestamp(),
     });
   };

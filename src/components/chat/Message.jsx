@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import useAppStore from '../../store/appStore';
 import { claudeComplete } from '../../lib/claude';
@@ -23,6 +23,43 @@ function Avatar({ name, size = 36 }) {
   return (
     <div className="av" style={{ width: size, height: size, background: color, fontSize: size <= 22 ? 9 : 12, flexShrink: 0 }}>
       {name === 'AI' ? '✦' : initial}
+    </div>
+  );
+}
+
+function MsgActions({ m, onReply, onEdit, onDelete }) {
+  const { user } = useAppStore();
+  const [dropOpen, setDropOpen] = useState(false);
+  const dropRef = useRef(null);
+  const isMine = user?.uid && m.senderUid === user.uid;
+
+  useEffect(() => {
+    if (!dropOpen) return;
+    const handler = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [dropOpen]);
+
+  return (
+    <div className="msg-actions">
+      <button title="리액션">😊</button>
+      {onReply && <button title="답글" onClick={onReply}>↩</button>}
+      <div style={{ position: 'relative' }} ref={dropRef}>
+        <button title="더보기" onClick={() => setDropOpen((v) => !v)}>⋯</button>
+        {dropOpen && (
+          <div className="msg-drop">
+            {isMine && onEdit && (
+              <button onClick={() => { onEdit(); setDropOpen(false); }}>✏️ 편집</button>
+            )}
+            {isMine && (
+              <button className="danger" onClick={() => { onDelete(); setDropOpen(false); }}>🗑️ 삭제</button>
+            )}
+            {!isMine && (
+              <div style={{ padding: '6px 12px', fontSize: 12, color: 'var(--ink-mute)' }}>내 메시지만 수정 가능</div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -105,11 +142,13 @@ function DonutTimer({ expiresAt }) {
 
 // ─── Message type renderers ──────────────────────────────────────────────
 
-function TextMsg({ m, isGrouped, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onConfirm, onNudge, senderName }) {
+function TextMsg({ m, isGrouped, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onConfirm, onNudge, onEdit, onDelete, senderName }) {
   const { user } = useAppStore();
   const isSender = user?.uid && m.senderUid === user.uid;
   const confirmed = m.confirmedBy?.includes(user?.uid);
   const [nudgeSent, setNudgeSent] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState('');
 
   const handleNudge = () => {
     onNudge(m.id);
@@ -117,13 +156,34 @@ function TextMsg({ m, isGrouped, threadOpen, replyValue, onToggleThread, onReply
     setTimeout(() => setNudgeSent(false), 3000);
   };
 
+  const startEdit = () => { setEditText(m.text || ''); setEditMode(true); };
+  const saveEdit = () => { if (editText.trim()) onEdit(m.id, editText.trim()); setEditMode(false); };
+
   const body = (
     <>
-      <div className="msg-body md-content">
-        {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
-        <ReactMarkdown>{m.text || ''}</ReactMarkdown>
-      </div>
-      {m.importance > 0 && (
+      {editMode ? (
+        <div className="edit-mode">
+          <textarea
+            className="edit-ta"
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') setEditMode(false); }}
+            rows={Math.max(2, editText.split('\n').length)}
+            autoFocus
+          />
+          <div className="edit-btns">
+            <button className="btn sm ghost" onClick={() => setEditMode(false)}>취소</button>
+            <button className="btn sm accent" onClick={saveEdit}>저장</button>
+          </div>
+        </div>
+      ) : (
+        <div className="msg-body md-content">
+          {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
+          <ReactMarkdown>{m.text || ''}</ReactMarkdown>
+          {m.editedAt && <span className="edited-badge">(편집됨)</span>}
+        </div>
+      )}
+      {m.importance > 0 && !editMode && (
         <div className="importance-actions">
           <label className="importance-check">
             <input type="checkbox" checked={!!confirmed} onChange={() => !confirmed && onConfirm(m.id)} />
@@ -149,40 +209,17 @@ function TextMsg({ m, isGrouped, threadOpen, replyValue, onToggleThread, onReply
   if (isGrouped) {
     return (
       <div className={'msg grouped' + (m.importance > 0 ? ' importance-msg imp-' + m.importance : '')}>
+        <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={startEdit} onDelete={() => onDelete(m.id)} />
         <div className="msg-grouped-spacer" />
         <div style={{ flex: 1 }}>{body}</div>
       </div>
     );
   }
 
-  if (m.importance > 0) {
-    return (
-      <div className={'msg importance-msg imp-' + m.importance}>
-        <div className="msg-actions">
-          <button title="리액션">😊</button>
-          <button title="답글" onClick={() => onToggleThread(m.id)}>↩</button>
-          <button title="더보기">⋯</button>
-        </div>
-        <Avatar name={m.senderName} />
-        <div style={{ flex: 1 }}>
-          <div className="msg-head">
-            <span className="name">{m.senderName}</span>
-            <span className="role">{m.senderRole}</span>
-            <span className="ts">{m.ts}</span>
-          </div>
-          {body}
-        </div>
-      </div>
-    );
-  }
-
+  const cls = m.importance > 0 ? 'msg importance-msg imp-' + m.importance : 'msg';
   return (
-    <div className="msg">
-      <div className="msg-actions">
-        <button title="리액션">😊</button>
-        <button title="답글" onClick={() => onToggleThread(m.id)}>↩</button>
-        <button title="더보기">⋯</button>
-      </div>
+    <div className={cls}>
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={startEdit} onDelete={() => onDelete(m.id)} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -196,9 +233,10 @@ function TextMsg({ m, isGrouped, threadOpen, replyValue, onToggleThread, onReply
   );
 }
 
-function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onChoose, senderName }) {
+function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onChoose, onDelete, senderName }) {
   return (
     <div className="msg">
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -231,7 +269,7 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
   );
 }
 
-function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onAct, senderName }) {
+function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onAct, onDelete, senderName }) {
   const { user } = useAppStore();
   const isLead = user?.role === 'lead';
   const [holdDate, setHoldDate] = useState('');
@@ -253,6 +291,7 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
 
   return (
     <div className="msg">
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -326,13 +365,14 @@ function ImageMsg({ m }) {
   );
 }
 
-function VoteMsg({ m, onVote }) {
+function VoteMsg({ m, onVote, onDelete }) {
   const { user } = useAppStore();
   const totalVotes = (m.options || []).reduce((sum, o) => sum + (o.votes?.length || 0), 0);
   const myVote = (m.options || []).find((o) => (o.votes || []).some((v) => v.uid === user?.uid || v.name === user?.name));
 
   return (
     <div className="msg">
+      <MsgActions m={m} onDelete={() => onDelete(m.id)} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -371,9 +411,10 @@ function VoteMsg({ m, onVote }) {
   );
 }
 
-function UpdateMsg({ m }) {
+function UpdateMsg({ m, onDelete }) {
   return (
     <div className="msg">
+      <MsgActions m={m} onDelete={() => onDelete(m.id)} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -401,9 +442,10 @@ function UpdateMsg({ m }) {
   );
 }
 
-function AnnounceMsg({ m, onCollapse }) {
+function AnnounceMsg({ m, onCollapse, onDelete }) {
   return (
     <div className="msg">
+      <MsgActions m={m} onDelete={() => onDelete(m.id)} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -426,7 +468,7 @@ function AnnounceMsg({ m, onCollapse }) {
   );
 }
 
-function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onSaveSummary, senderName }) {
+function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onSaveSummary, onDelete, senderName }) {
   const [summarizing, setSummarizing] = useState(false);
 
   const handleSummarize = async () => {
@@ -445,6 +487,7 @@ function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, 
 
   return (
     <div className="msg">
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -508,9 +551,10 @@ function FileMsg({ m }) {
   );
 }
 
-function CasualMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, senderName }) {
+function CasualMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onDelete, senderName }) {
   return (
     <div className="msg casual-msg" style={{ opacity: 0.9 }}>
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -563,7 +607,7 @@ function AIMsg({ m }) {
 
 export default function Message({ m, isGrouped, handlers }) {
   const { user } = useAppStore();
-  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce } = handlers;
+  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, deleteMsg } = handlers;
   const threadOpen = openThreads.has(m.id);
   const replyValue = replyValues[m.id] || '';
 
@@ -583,13 +627,15 @@ export default function Message({ m, isGrouped, handlers }) {
     onNudge: nudgeMsg,
     onSaveSummary: saveMeetingSummary,
     onCollapse: collapseAnnounce,
+    onEdit: editMsg,
+    onDelete: deleteMsg,
   };
 
   switch (m.type) {
     case 'decision':  return <DecisionMsg {...props} />;
     case 'approval':  return <ApprovalMsg {...props} />;
     case 'vote':      return <VoteMsg {...props} />;
-    case 'update':    return <UpdateMsg m={m} />;
+    case 'update':    return <UpdateMsg {...props} />;
     case 'announce':  return <AnnounceMsg {...props} />;
     case 'meeting':   return <MeetingMsg {...props} />;
     case 'image':     return <ImageMsg m={m} />;

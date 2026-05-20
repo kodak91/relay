@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import useAppStore from '../../store/appStore';
 import { useMessages } from '../../hooks/useMessages';
+import { useProjects } from '../../hooks/useProjects';
 import { useTasks } from '../../hooks/useTasks';
 import Message from './Message';
 import Composer from './Composer';
@@ -16,7 +17,8 @@ function nowHM() {
 
 export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { activeProject, chatTab, setChatTab, activeTag, user } = useAppStore();
-  const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage } = useMessages(activeProject);
+  const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
+  const { projects } = useProjects();
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -26,7 +28,14 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState('');
   const [showAnnouncements, setShowAnnouncements] = useState(false);
+
+  const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
+  const memberCount = useMemo(() => {
+    const uids = new Set(messages.filter((m) => m.senderUid).map((m) => m.senderUid));
+    return uids.size || 1;
+  }, [messages]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -138,6 +147,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     if (!activeProject || !files?.length) return;
     setUploading(true);
     setUploadProgress(0);
+    setUploadError('');
     try {
       for (const file of Array.from(files)) {
         const isImage = IMAGE_TYPES.includes(file.type);
@@ -154,6 +164,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       }
     } catch (e) {
       console.error('Upload failed:', e);
+      setUploadError('업로드 실패: Firebase Storage가 설정되지 않았거나 권한이 없습니다.');
+      setTimeout(() => setUploadError(''), 5000);
     } finally {
       setUploading(false);
       setUploadProgress(0);
@@ -164,11 +176,20 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const onDragLeave = (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); };
   const onDrop = (e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); };
 
+  const editMsg = async (mid, newText) => {
+    await editMessage(activeProject, mid, newText);
+  };
+
+  const deleteMsg = async (mid) => {
+    await deleteMessage(activeProject, mid);
+  };
+
   const handlers = {
     openThreads, replyValues,
     toggleThread, setReplyValue, sendReply,
     choose, vote, actApproval, confirmMsg, nudgeMsg,
     saveMeetingSummary,
+    editMsg, deleteMsg,
   };
 
   if (!activeProject) {
@@ -196,7 +217,12 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
       <div className="chat-head">
         <div className="chat-title">
-          <div style={{ fontWeight: 800, fontSize: 15 }}>{activeProject}</div>
+          <span style={{ fontWeight: 800, fontSize: 15 }}>{activeProjectData?.name || activeProject}</span>
+          <span style={{ fontSize: 11, color: 'var(--ink-mute)', marginLeft: 10 }}>
+            {activeProjectData?.leadName && <span>팀장 {activeProjectData.leadName}</span>}
+            {activeProjectData?.leadName && <span style={{ margin: '0 5px' }}>·</span>}
+            <span>참여자 {memberCount}명</span>
+          </span>
         </div>
         <div className="chat-tabs">
           {[
@@ -211,7 +237,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         </div>
         {/* Announcements button */}
         {announcements.length > 0 && (
-          <div style={{ position: 'relative', marginLeft: 'auto', flexShrink: 0 }}>
+          <div style={{ position: 'relative', marginLeft: 'auto', flexShrink: 0, zIndex: 200 }}>
             <button
               className={'announce-toggle' + (showAnnouncements ? ' on' : '')}
               onClick={() => setShowAnnouncements((v) => !v)}
@@ -246,6 +272,11 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
               <div className="upload-progress">
                 <div className="upload-bar" style={{ width: uploadProgress + '%' }} />
                 <span>업로드 중… {uploadProgress}%</span>
+              </div>
+            )}
+            {uploadError && (
+              <div style={{ margin: '6px 20px', padding: '8px 12px', background: 'var(--rose-bg)', border: '1px solid var(--rose-line)', borderRadius: 'var(--r-2)', fontSize: 12, color: 'var(--rose)' }}>
+                ⚠️ {uploadError}
               </div>
             )}
             {loading ? (

@@ -125,6 +125,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
   // Refs to avoid stale closures in editor callbacks
   const onEnterRef = useRef(null);
   const onUpdateRef = useRef(null);
+  const onFileSelectRef = useRef(null);
   const placeholderRef = useRef('');
 
   const isCasual = type === 'casual';
@@ -151,6 +152,14 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
         if (event.key === 'Enter' && !event.shiftKey) {
           event.preventDefault();
           onEnterRef.current?.();
+          return true;
+        }
+        return false;
+      },
+      handleDrop: (_view, event) => {
+        if (event.dataTransfer?.files?.length) {
+          event.preventDefault();
+          onFileSelectRef.current?.(event.dataTransfer.files);
           return true;
         }
         return false;
@@ -267,6 +276,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
     if (startsDoubleSlash) runPolish();
     else handleSend();
   };
+  onFileSelectRef.current = onFileSelect;
   onUpdateRef.current = (ed) => {
     const md = ed.storage.markdown.getMarkdown();
     setText(md);
