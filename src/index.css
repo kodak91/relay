@@ -699,13 +699,16 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 
 /* ── Live markdown preview ────────────────────────────────────────────── */
 .md-live-preview {
-  padding: 6px 12px 4px;
+  padding: 4px 12px 6px;
   border-top: 1px dashed var(--border);
-  font-size: 14px; color: var(--ink); line-height: 1.55;
-  pointer-events: none;
+  font-size: 14px; color: var(--ink-2); line-height: 1.55;
 }
 .md-live-preview p { margin: 0 0 4px; }
 .md-live-preview p:last-child { margin-bottom: 0; }
+.md-live-preview strong { color: var(--ink); }
+.md-live-preview code { font-family: var(--font-mono); font-size: 12px; background: var(--surface-3); padding: 1px 4px; border-radius: 4px; }
+.md-live-preview ul, .md-live-preview ol { margin: 0 0 4px 18px; padding: 0; }
+.md-live-preview li { margin-bottom: 2px; }
 
 /* ── Composer ─────────────────────────────────────────────────────────── */
 .composer { padding: 12px 20px 16px; flex-shrink: 0; }

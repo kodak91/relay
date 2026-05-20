@@ -1,25 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { claudeComplete, AI_ACTIONS } from '../../lib/claude';
 
 const SLASH_MAP = {
-  '\\승인': 'approval',
-  '\\결정': 'decision',
-  '\\투표': 'vote',
-  '\\보고': 'update',
-  '\\공지': 'announce',
-  '\\잡담': 'casual',
-  '\\회의': 'meeting',
+  '/승인': 'approval',
+  '/결정': 'decision',
+  '/투표': 'vote',
+  '/보고': 'update',
+  '/공지': 'announce',
+  '/잡담': 'casual',
+  '/회의': 'meeting',
 };
 
 const MESSAGE_TYPES = [
   { id: 'text',     label: '일반',      icon: '💬', slash: '' },
-  { id: 'approval', label: '승인 요청', icon: '✓',  slash: '\\승인' },
-  { id: 'decision', label: '결정 요청', icon: '◇',  slash: '\\결정' },
-  { id: 'vote',     label: '투표',      icon: '◉',  slash: '\\투표' },
-  { id: 'update',   label: '중간 보고', icon: '◆',  slash: '\\보고' },
-  { id: 'announce', label: '공지',      icon: '📢', slash: '\\공지' },
-  { id: 'casual',   label: '잡담',      icon: '☕', slash: '\\잡담' },
-  { id: 'meeting',  label: '회의',      icon: '📋', slash: '\\회의' },
+  { id: 'approval', label: '승인 요청', icon: '✓',  slash: '/승인' },
+  { id: 'decision', label: '결정 요청', icon: '◇',  slash: '/결정' },
+  { id: 'vote',     label: '투표',      icon: '◉',  slash: '/투표' },
+  { id: 'update',   label: '중간 보고', icon: '◆',  slash: '/보고' },
+  { id: 'announce', label: '공지',      icon: '📢', slash: '/공지' },
+  { id: 'casual',   label: '잡담',      icon: '☕', slash: '/잡담' },
+  { id: 'meeting',  label: '회의',      icon: '📋', slash: '/회의' },
 ];
 
 function DecisionBuilder({ title, setTitle, options, setOptions }) {
@@ -118,6 +119,8 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
   const [voteTitle, setVoteTitle] = useState('');
   const [voteOptions, setVoteOptions] = useState(['', '']);
 
+  const isComposingRef = useRef(false);
+
   const isCasual = type === 'casual';
   const isDecision = type === 'decision';
   const isVote = type === 'vote';
@@ -125,13 +128,15 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
   const startsDoubleSlash = text.startsWith('//');
   const showAccentSend = type !== 'text' && type !== 'casual';
 
-  useEffect(() => {
-    const matched = SLASH_MAP[text.trim()];
+  const checkSlashCommand = (val) => {
+    const matched = SLASH_MAP[val.trim()];
     if (matched) {
       setType(matched);
       setText('');
+      return true;
     }
-  }, [text]);
+    return false;
+  };
 
   const handleKey = (e) => {
     if (e.key !== 'Enter' || e.shiftKey) return;
@@ -271,11 +276,20 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
               className="ta"
               placeholder={
                 isCasual ? '팀에게 가볍게 한마디… (1시간 뒤 사라짐)'
-                : '메시지 입력…  // : 매너모드   \\버튼명: 버튼 호출   #태그명 : 태그 달기'
+                : '메시지 입력…  // : 매너모드   /버튼명: 버튼 호출   #태그명 : 태그 달기'
               }
               rows={Math.min(6, Math.max(1, text.split('\n').length))}
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setText(val);
+                if (!isComposingRef.current) checkSlashCommand(val);
+              }}
+              onCompositionStart={() => { isComposingRef.current = true; }}
+              onCompositionEnd={(e) => {
+                isComposingRef.current = false;
+                checkSlashCommand(e.target.value);
+              }}
               onKeyDown={handleKey}
               disabled={polishing}
             />
@@ -295,6 +309,11 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
                 ))}
               </div>
             )}
+          </div>
+        )}
+        {!isDecision && !isVote && text.trim() && !startsDoubleSlash && (
+          <div className="md-live-preview">
+            <ReactMarkdown>{text}</ReactMarkdown>
           </div>
         )}
 
