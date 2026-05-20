@@ -1,5 +1,8 @@
-import { useState, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { useState, useRef, useEffect } from 'react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
+import { Markdown as MarkdownExtension } from 'tiptap-markdown';
 import { claudeComplete, AI_ACTIONS } from '../../lib/claude';
 
 const SLASH_MAP = {
@@ -119,7 +122,10 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
   const [voteTitle, setVoteTitle] = useState('');
   const [voteOptions, setVoteOptions] = useState(['', '']);
 
-  const isComposingRef = useRef(false);
+  // Refs to avoid stale closures in editor callbacks
+  const onEnterRef = useRef(null);
+  const onUpdateRef = useRef(null);
+  const placeholderRef = useRef('');
 
   const isCasual = type === 'casual';
   const isDecision = type === 'decision';
@@ -128,21 +134,47 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
   const startsDoubleSlash = text.startsWith('//');
   const showAccentSend = type !== 'text' && type !== 'casual';
 
-  const checkSlashCommand = (val) => {
-    const matched = SLASH_MAP[val.trim()];
+  placeholderRef.current = isCasual
+    ? '팀에게 가볍게 한마디… (1시간 뒤 사라짐)'
+    : '메시지 입력…  // : 매너모드   /버튼명: 버튼 호출   #태그명 : 태그 달기';
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      MarkdownExtension.configure({ html: false }),
+      Placeholder.configure({ placeholder: () => placeholderRef.current }),
+    ],
+    content: '',
+    editorProps: {
+      attributes: { class: 'tiptap-ta' },
+      handleKeyDown: (_view, event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault();
+          onEnterRef.current?.();
+          return true;
+        }
+        return false;
+      },
+    },
+    onUpdate: ({ editor }) => {
+      onUpdateRef.current?.(editor);
+    },
+  });
+
+  // Keep editor editable state in sync with polishing
+  useEffect(() => {
+    if (editor) editor.setEditable(!polishing);
+  }, [editor, polishing]);
+
+  const checkSlashCommand = (md) => {
+    const matched = SLASH_MAP[md.trim()];
     if (matched) {
       setType(matched);
+      editor?.commands.clearContent();
       setText('');
       return true;
     }
     return false;
-  };
-
-  const handleKey = (e) => {
-    if (e.key !== 'Enter' || e.shiftKey) return;
-    e.preventDefault();
-    if (startsDoubleSlash) runPolish();
-    else handleSend();
   };
 
   const handleSend = () => {
@@ -185,6 +217,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
     if (type === 'casual') msg.expiresAt = Date.now() + 60 * 60 * 1000;
     if (type === 'approval') msg.status = 'pending';
     onSend(msg);
+    editor?.commands.clearContent();
     setText('');
     setType('text');
     setImportance(0);
@@ -197,8 +230,13 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
     try {
       const action = AI_ACTIONS.find((a) => a.id === 'polish');
       const result = await claudeComplete(action.getPrompt(raw));
-      setText(result.replace(/^["「『]|["」』]$/g, '').trim());
-    } catch { setText(raw); }
+      const cleaned = result.replace(/^["「『]|["」』]$/g, '').trim();
+      editor?.commands.setContent(cleaned);
+      setText(cleaned);
+    } catch {
+      editor?.commands.setContent(raw);
+      setText(raw);
+    }
     finally { setPolishing(false); }
   };
 
@@ -209,16 +247,30 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
     setPolishing(true);
     try {
       const result = await claudeComplete(action.getPrompt(text));
-      setText(result.replace(/^["「『]|["」』]$/g, '').trim());
+      const cleaned = result.replace(/^["「『]|["」』]$/g, '').trim();
+      editor?.commands.setContent(cleaned);
+      setText(cleaned);
     } catch { }
     finally { setPolishing(false); }
   };
 
   const setTypeAndReset = (t) => {
     setType(t);
+    editor?.commands.clearContent();
     setText('');
     if (t !== 'decision') { setDecisionTitle(''); setDecisionOptions(['', '']); }
     if (t !== 'vote') { setVoteTitle(''); setVoteOptions(['', '']); }
+  };
+
+  // Update refs every render so editor callbacks always see fresh state
+  onEnterRef.current = () => {
+    if (startsDoubleSlash) runPolish();
+    else handleSend();
+  };
+  onUpdateRef.current = (ed) => {
+    const md = ed.storage.markdown.getMarkdown();
+    setText(md);
+    checkSlashCommand(md);
   };
 
   const tags = text.match(/#\S+/g) || [];
@@ -272,27 +324,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
 
         {!isDecision && !isVote && (
           <div className="ta-wrap">
-            <textarea
-              className="ta"
-              placeholder={
-                isCasual ? '팀에게 가볍게 한마디… (1시간 뒤 사라짐)'
-                : '메시지 입력…  // : 매너모드   /버튼명: 버튼 호출   #태그명 : 태그 달기'
-              }
-              rows={Math.min(6, Math.max(1, text.split('\n').length))}
-              value={text}
-              onChange={(e) => {
-                const val = e.target.value;
-                setText(val);
-                if (!isComposingRef.current) checkSlashCommand(val);
-              }}
-              onCompositionStart={() => { isComposingRef.current = true; }}
-              onCompositionEnd={(e) => {
-                isComposingRef.current = false;
-                checkSlashCommand(e.target.value);
-              }}
-              onKeyDown={handleKey}
-              disabled={polishing}
-            />
+            <EditorContent editor={editor} />
             <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
             {showAI && (
               <div className="ai-fab-pop">
@@ -309,11 +341,6 @@ export default function Composer({ onSend, onFileSelect, fileInputRef }) {
                 ))}
               </div>
             )}
-          </div>
-        )}
-        {!isDecision && !isVote && text.trim() && !startsDoubleSlash && (
-          <div className="md-live-preview">
-            <ReactMarkdown>{text}</ReactMarkdown>
           </div>
         )}
 
