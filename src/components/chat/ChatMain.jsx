@@ -25,7 +25,7 @@ function nowHM() {
 export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { activeProject, chatTab, setChatTab, activeTag, user } = useAppStore();
   const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
-  const { projects, approveMember, rejectMember, removeMember } = useProjects(user?.uid);
+  const { projects, updateProject, approveMember, rejectMember, removeMember } = useProjects(user?.uid);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -315,7 +315,11 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       {chatTab === 'kb' ? (
         <KBTab projectId={activeProject} />
       ) : chatTab === 'notion' ? (
-        <NotionTab projectId={activeProject} />
+        <NotionTab
+          projectId={activeProject}
+          project={activeProjectData}
+          updateProject={(fields) => updateProject(activeProject, fields)}
+        />
       ) : chatTab === 'tasks' ? (
         <TasksTab projectId={activeProject} />
       ) : (
