@@ -321,7 +321,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           updateProject={(fields) => updateProject(activeProject, fields)}
         />
       ) : chatTab === 'tasks' ? (
-        <TasksTab projectId={activeProject} />
+        <TasksTab projectId={activeProject} project={activeProjectData} />
       ) : (
         <>
           <TagBar messages={messages} />

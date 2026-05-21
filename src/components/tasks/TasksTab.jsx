@@ -1,78 +1,243 @@
-import { useState } from 'react';
-import { useTasks } from '../../hooks/useTasks';
+import { useState, useMemo } from 'react';
+import { useTeamTasks, taskDate } from '../../hooks/useTeamTasks';
 
-export default function TasksTab({ projectId }) {
-  const { tasks, addTask, toggleTask } = useTasks(projectId);
-  const [newTitle, setNewTitle] = useState('');
-  const [adding, setAdding] = useState(false);
+const today = new Date().toISOString().slice(0, 10);
 
-  const handleAdd = async () => {
-    if (!newTitle.trim()) return;
-    setAdding(true);
-    await addTask(projectId, { title: newTitle.trim(), fromLead: false });
-    setNewTitle('');
-    setAdding(false);
-  };
+function getWeekDates() {
+  const now = new Date();
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
+}
 
-  const urgent = tasks.filter((t) => !t.done && t.urgent);
-  const open = tasks.filter((t) => !t.done && !t.urgent);
-  const done = tasks.filter((t) => t.done);
+function RingChart({ pct, size = 76, stroke = 9, color }) {
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const dash = circ * Math.min(Math.max(pct, 0), 1);
+  return (
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', flexShrink: 0 }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color}
+        strokeWidth={stroke} strokeLinecap="round"
+        strokeDasharray={`${dash} ${circ}`} />
+    </svg>
+  );
+}
 
-  const groups = [
-    { id: 'urgent', label: '오늘 · 긴급', items: urgent },
-    { id: 'open',   label: '진행 중',     items: open },
-    { id: 'done',   label: '완료',        items: done },
-  ];
+function Dashboard({ memberTasks, members }) {
+  const weekDates = useMemo(() => getWeekDates(), []);
+
+  const allTasks = useMemo(() => Object.values(memberTasks).flat(), [memberTasks]);
+  const todayTasks = useMemo(() => allTasks.filter((t) => taskDate(t) === today), [allTasks]);
+  const todayDoneCount = todayTasks.filter((t) => t.done).length;
+  const todayRate = todayTasks.length > 0 ? todayDoneCount / todayTasks.length : 0;
+
+  const weekStats = useMemo(() => weekDates.map((date) => {
+    const dt = allTasks.filter((t) => taskDate(t) === date);
+    return { date, total: dt.length, done: dt.filter((t) => t.done).length };
+  }), [allTasks, weekDates]);
+
+  const weekDone = weekStats.reduce((s, d) => s + d.done, 0);
+  const weekTotal = weekStats.reduce((s, d) => s + d.total, 0);
+  const weekRate = weekTotal > 0 ? weekDone / weekTotal : 0;
+
+  const mvp = useMemo(() => {
+    let best = null, bestCount = 0;
+    members.forEach((m) => {
+      const cnt = (memberTasks[m.uid] || []).filter((t) => taskDate(t) === today && t.done).length;
+      if (cnt > bestCount) { bestCount = cnt; best = m; }
+    });
+    return { member: best, count: bestCount };
+  }, [memberTasks, members]);
+
+  const maxBar = Math.max(...weekStats.map((d) => d.total), 1);
+  const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
 
   return (
-    <div className="tasks-tab">
-      <div className="tasks-toolbar">
-        <div className="tasks-stats">
-          <div><b className="mono">{open.length + urgent.length}</b><span>진행 중</span></div>
-          <div><b className="mono">{urgent.length}</b><span>긴급</span></div>
-          <div><b className="mono">{done.length}</b><span>완료</span></div>
+    <div className="tt-dashboard">
+      <div className="tt-dash-card">
+        <div className="tt-ring-wrap">
+          <RingChart pct={todayRate} color="oklch(0.52 0.19 145)" />
+          <span className="tt-ring-pct">{Math.round(todayRate * 100)}%</span>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input
-            style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '6px 10px', fontSize: 13, background: 'var(--surface)', outline: 'none', width: 220 }}
-            placeholder="+ 태스크 직접 추가"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-          />
-          <button className="btn accent sm" onClick={handleAdd} disabled={!newTitle.trim() || adding}>추가</button>
+        <div className="tt-dash-info">
+          <div className="tt-dash-label">오늘 달성률</div>
+          <div className="tt-dash-val">{todayDoneCount} / {todayTasks.length} 완료</div>
         </div>
       </div>
 
-      <div className="tasks-body">
-        {groups.map((g) => {
-          if (g.items.length === 0) return null;
-          return (
-            <section key={g.id} className="tasks-group">
-              <h3>{g.label} <span className="mono">{g.items.length}</span></h3>
-              {g.items.map((t) => (
-                <div
-                  key={t.id}
-                  className={'task-card' + (t.done ? ' done' : '') + (t.urgent ? ' urgent' : '')}
-                  onClick={() => toggleTask(projectId, t.id, !t.done)}
-                >
-                  <div className="task-check" />
-                  <div className="task-info">
-                    <div className="task-title">{t.title}</div>
-                    {t.from && <div className="task-meta">{t.from}</div>}
-                  </div>
-                  {t.due && <span className={'task-due' + (t.urgent ? ' urgent' : '')}>📅 {t.due}</span>}
+      <div className="tt-dash-card">
+        <div className="tt-ring-wrap">
+          <RingChart pct={weekRate} color="oklch(0.52 0.19 260)" />
+          <span className="tt-ring-pct">{Math.round(weekRate * 100)}%</span>
+        </div>
+        <div className="tt-dash-info">
+          <div className="tt-dash-label">주간 달성률</div>
+          <div className="tt-dash-val">{weekDone} / {weekTotal} 완료</div>
+        </div>
+      </div>
+
+      <div className="tt-dash-card tt-bar-card">
+        <div className="tt-dash-label">이번 주 현황</div>
+        <div className="tt-bar-chart">
+          {weekStats.map((d, i) => (
+            <div key={d.date} className={'tt-bar-col' + (d.date === today ? ' today' : '')}>
+              <div className="tt-bar-slot">
+                <div className="tt-bar-total" style={{ height: d.total > 0 ? `${(d.total / maxBar) * 100}%` : '3px' }}>
+                  <div className="tt-bar-done-part" style={{ height: d.total > 0 ? `${(d.done / d.total) * 100}%` : '0%' }} />
                 </div>
-              ))}
-            </section>
-          );
-        })}
-        {tasks.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--ink-3)' }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
-            <div style={{ fontWeight: 600, color: 'var(--ink)', marginBottom: 6 }}>태스크가 없습니다</div>
-            <div style={{ fontSize: 13 }}>위 입력창에서 태스크를 추가하거나 채팅에서 생성하세요.</div>
+              </div>
+              <span className="tt-bar-day">{dayLabels[i]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="tt-dash-card tt-mvp-card">
+        <div className="tt-dash-label">오늘의 MVP</div>
+        {mvp.member && mvp.count > 0 ? (
+          <>
+            <div className="tt-mvp-avatar">{(mvp.member.name || '?')[0]}</div>
+            <div className="tt-mvp-name">{mvp.member.name}</div>
+            <div className="tt-dash-val">{mvp.count}개 완료</div>
+          </>
+        ) : (
+          <div className="tt-dash-empty">아직 없음</div>
+        )}
+      </div>
+
+      <div className="tt-dash-card">
+        <div className="tt-dash-label">전체 태스크</div>
+        <div className="tt-dash-bignum">{allTasks.length}</div>
+        <div className="tt-dash-sub">미완료 {allTasks.filter((t) => !t.done).length}</div>
+      </div>
+    </div>
+  );
+}
+
+function TaskRow({ task, onToggle }) {
+  const isOverdue = !task.done && taskDate(task) < today;
+  return (
+    <div
+      className={'tt-task-row' + (task.done ? ' done' : '') + (isOverdue ? ' overdue' : '')}
+      onClick={() => onToggle(task.id, !task.done)}
+    >
+      <span className="tt-check">{task.done ? '✓' : ''}</span>
+      <span className="tt-task-title">{task.title}</span>
+      {isOverdue && <span className="tt-overdue-tag">지연</span>}
+    </div>
+  );
+}
+
+function MemberColumn({ member, tasks, onToggle }) {
+  const [showHistory, setShowHistory] = useState(false);
+
+  const todayTasks = useMemo(() => tasks.filter((t) => taskDate(t) === today), [tasks]);
+  const overdueTasks = useMemo(() => tasks.filter((t) => !t.done && taskDate(t) < today), [tasks]);
+  const todayDone = todayTasks.filter((t) => t.done).length;
+  const todayTotal = todayTasks.length;
+  const pct = todayTotal > 0 ? todayDone / todayTotal : 0;
+
+  const historyByDate = useMemo(() => {
+    const past = tasks.filter((t) => taskDate(t) < today);
+    const groups = {};
+    past.forEach((t) => {
+      const d = taskDate(t);
+      if (!groups[d]) groups[d] = [];
+      groups[d].push(t);
+    });
+    return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a));
+  }, [tasks]);
+
+  return (
+    <div className="tt-member-col">
+      <div className="tt-member-hd">
+        <div className="tt-member-avatar">{(member.name || '?')[0].toUpperCase()}</div>
+        <div className="tt-member-meta">
+          <div className="tt-member-name">{member.name}</div>
+          <div className="tt-member-role">{member.role === 'lead' ? '팀장' : '팀원'}</div>
+        </div>
+        <div className="tt-member-pct">{Math.round(pct * 100)}%</div>
+      </div>
+
+      <div className="tt-progress-track">
+        <div className="tt-progress-fill" style={{ width: `${pct * 100}%` }} />
+      </div>
+
+      <div className="tt-sec-label">오늘 {todayDone}/{todayTotal}</div>
+      <div className="tt-task-list">
+        {todayTasks.length === 0
+          ? <div className="tt-empty">오늘 태스크 없음</div>
+          : todayTasks.map((t) => (
+            <TaskRow key={t.id} task={t} onToggle={(id, done) => onToggle(member.uid, id, done)} />
+          ))
+        }
+      </div>
+
+      {overdueTasks.length > 0 && (
+        <>
+          <div className="tt-sec-label overdue">지연 {overdueTasks.length}건</div>
+          <div className="tt-task-list">
+            {overdueTasks.map((t) => (
+              <TaskRow key={t.id} task={t} onToggle={(id, done) => onToggle(member.uid, id, done)} />
+            ))}
           </div>
+        </>
+      )}
+
+      <button className="tt-hist-toggle" onClick={() => setShowHistory((v) => !v)}>
+        {showHistory ? '▲' : '▼'} 히스토리{historyByDate.length > 0 ? ` (${historyByDate.length}일)` : ''}
+      </button>
+
+      {showHistory && (
+        <div className="tt-history">
+          {historyByDate.length === 0
+            ? <div className="tt-empty">기록 없음</div>
+            : historyByDate.map(([date, items]) => (
+              <div key={date} className="tt-hist-group">
+                <div className="tt-hist-date">{date}</div>
+                {items.map((t) => (
+                  <div key={t.id} className={'tt-hist-item' + (t.done ? ' done' : '')}>
+                    <span className="tt-check-sm">{t.done ? '✓' : '○'}</span>
+                    <span>{t.title}</span>
+                  </div>
+                ))}
+              </div>
+            ))
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function TasksTab({ projectId, project }) {
+  const members = useMemo(() => (project?.members || []).filter((m) => m.uid), [project]);
+  const { memberTasks, toggleTask } = useTeamTasks(members);
+
+  return (
+    <div className="tt-root">
+      <Dashboard memberTasks={memberTasks} members={members} />
+      <div className="tt-columns">
+        {members.length === 0 ? (
+          <div className="tt-no-members">
+            <div style={{ fontSize: 32, marginBottom: 12 }}>👥</div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>멤버가 없습니다</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>멤버관리에서 팀원을 추가하세요.</div>
+          </div>
+        ) : (
+          members.map((m) => (
+            <MemberColumn
+              key={m.uid}
+              member={m}
+              tasks={memberTasks[m.uid] || []}
+              onToggle={toggleTask}
+            />
+          ))
         )}
       </div>
     </div>
