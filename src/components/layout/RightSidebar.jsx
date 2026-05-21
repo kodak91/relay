@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import useAppStore from '../../store/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import { useGlobalMessages } from '../../hooks/useGlobalMessages';
@@ -156,6 +156,31 @@ function CatchupSection({ messages, onJump, uid }) {
 }
 
 function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid }) {
+  const storageKey = uid ? `confirm_dismissed_${uid}` : 'confirm_dismissed';
+  const [dismissed, setDismissed] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(storageKey) || '[]')); }
+    catch { return new Set(); }
+  });
+
+  const dismiss = useCallback((id) => {
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      localStorage.setItem(storageKey, JSON.stringify([...next]));
+      return next;
+    });
+  }, [storageKey]);
+
+  const visiblePending = pending.filter((item) => !dismissed.has(item.id));
+  const visibleHeld = held.filter((item) => !dismissed.has(item.id));
+
+  const resetAll = () => {
+    const allIds = [...pending.map((i) => i.id), ...held.map((i) => i.id)];
+    const next = new Set([...dismissed, ...allIds]);
+    setDismissed(next);
+    localStorage.setItem(storageKey, JSON.stringify([...next]));
+  };
+
   return (
     <div className="right-body">
       <CatchupSection messages={catchup} onJump={onJump} uid={uid} />
@@ -163,44 +188,67 @@ function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid }) {
       <div className="r-section">
         <div className="r-hd">
           <h4>결정·승인 대기</h4>
-          <span className="cnt">{pending.length}건</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="cnt">{visiblePending.length}건</span>
+            {(visiblePending.length > 0 || visibleHeld.length > 0) && (
+              <button
+                onClick={resetAll}
+                style={{ fontSize: 10, color: 'var(--ink-mute)', background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer' }}
+                title="모두 무시"
+              >초기화</button>
+            )}
+          </div>
         </div>
-        {pending.length === 0 && held.length === 0 && (
+        {visiblePending.length === 0 && visibleHeld.length === 0 && (
           <p style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center', padding: '16px 0' }}>
             대기 중인 항목이 없습니다 ✓
           </p>
         )}
-        {pending.map((item) => (
-          <div key={item.id} className={'r-card ' + item.kind} onClick={() => onJump && onJump(item.id)}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3 }}>
-              <div className="r-tag">{item.tag}</div>
-              {item.projectName && <span style={{ fontSize: 10, color: 'var(--ink-mute)' }}>{item.projectName}</span>}
-            </div>
-            <div className="r-ttl">{item.title || item.text?.slice(0, 50)}</div>
-            <div className="r-foot">
-              <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{item.ts}</span>
-              <div className="actions">
-                {isLead
-                  ? <button>{item.kind === 'approval' ? '결정하기 →' : '선택하기 →'}</button>
-                  : <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>검토 대기 중</span>
-                }
+        {visiblePending.map((item) => (
+          <div key={item.id} className={'r-card ' + item.kind} style={{ position: 'relative' }}>
+            <button
+              onClick={() => dismiss(item.id)}
+              style={{ position: 'absolute', top: 4, right: 4, border: 0, background: 'none', color: 'var(--ink-mute)', fontSize: 13, cursor: 'pointer', lineHeight: 1, padding: '2px 4px', opacity: 0.5 }}
+              title="무시"
+            >×</button>
+            <div onClick={() => onJump && onJump(item.id)} style={{ cursor: 'pointer' }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3 }}>
+                <div className="r-tag">{item.tag}</div>
+                {item.projectName && <span style={{ fontSize: 10, color: 'var(--ink-mute)' }}>{item.projectName}</span>}
+              </div>
+              <div className="r-ttl">{item.title || item.text?.slice(0, 50)}</div>
+              <div className="r-foot">
+                <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{item.ts}</span>
+                <div className="actions">
+                  {isLead
+                    ? <button>{item.kind === 'approval' ? '결정하기 →' : '선택하기 →'}</button>
+                    : <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>검토 대기 중</span>
+                  }
+                </div>
               </div>
             </div>
           </div>
         ))}
       </div>
 
-      {held.length > 0 && (
+      {visibleHeld.length > 0 && (
         <div className="r-section">
           <div className="r-hd">
             <h4>⏸ 보류 중</h4>
-            <span className="cnt">{held.length}건</span>
+            <span className="cnt">{visibleHeld.length}건</span>
           </div>
-          {held.map((item) => (
-            <div key={item.id} className="r-card held" onClick={() => onJump && onJump(item.id)}>
-              <div className="r-tag" style={{ color: 'oklch(0.42 0.13 70)' }}>보류</div>
-              <div className="r-ttl">{item.text?.slice(0, 50)}</div>
-              {item.heldUntil && <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>📅 {item.heldUntil}까지</div>}
+          {visibleHeld.map((item) => (
+            <div key={item.id} className="r-card held" style={{ position: 'relative' }}>
+              <button
+                onClick={() => dismiss(item.id)}
+                style={{ position: 'absolute', top: 4, right: 4, border: 0, background: 'none', color: 'var(--ink-mute)', fontSize: 13, cursor: 'pointer', lineHeight: 1, padding: '2px 4px', opacity: 0.5 }}
+                title="무시"
+              >×</button>
+              <div onClick={() => onJump && onJump(item.id)} style={{ cursor: 'pointer' }}>
+                <div className="r-tag" style={{ color: 'oklch(0.42 0.13 70)' }}>보류</div>
+                <div className="r-ttl">{item.text?.slice(0, 50)}</div>
+                {item.heldUntil && <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>📅 {item.heldUntil}까지</div>}
+              </div>
             </div>
           ))}
         </div>
@@ -217,7 +265,7 @@ function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid }) {
 const WEEK_DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
 function TaskSidebar({ uid }) {
-  const { todayTasks, overdueTasks, weekStats, addTask, toggleTask, deleteTask } = usePersonalTasks(uid);
+  const { tasks, todayTasks, overdueTasks, weekStats, addTask, toggleTask, deleteTask, deleteAllTasks } = usePersonalTasks(uid);
   const [newTitle, setNewTitle] = useState('');
 
   const today = new Date();
@@ -257,7 +305,15 @@ function TaskSidebar({ uid }) {
           <h4>📋 오늘 업무
             <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--ink-mute)', marginLeft: 6 }}>{todayLabel}</span>
           </h4>
-          <span className="cnt">{activeTasks.length}건 남음</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="cnt">{activeTasks.length}건 남음</span>
+            {tasks.length > 0 && (
+              <button
+                onClick={() => { if (window.confirm('모든 태스크를 삭제할까요?')) deleteAllTasks(); }}
+                style={{ fontSize: 10, color: 'var(--ink-mute)', background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer' }}
+              >초기화</button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>

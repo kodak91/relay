@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import useAppStore from '../../store/appStore';
 import { useProjects } from '../../hooks/useProjects';
+import { useUnreadCounts } from '../../hooks/useUnreadCounts';
 import NewProjectModal from '../chat/NewProjectModal';
 import JoinWorkspaceModal from '../chat/JoinWorkspaceModal';
 import SlackModal from '../integrations/SlackModal';
@@ -17,6 +18,8 @@ const PROJECT_COLORS = [
 export default function LeftSidebar() {
   const { activeProject, setActiveProject, activeChannel, setActiveChannel, user } = useAppStore();
   const { projects, updateProject, deleteProject, joinByCode } = useProjects(user?.uid);
+  const active = projects.filter((p) => p.status !== '보관' && p.status !== '삭제됨');
+  const { counts: unreadCounts, markRead } = useUnreadCounts(active, user?.uid);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -26,8 +29,6 @@ export default function LeftSidebar() {
   const [showSlackModal, setShowSlackModal] = useState(false);
 
   const activeProjectData = projects.find((p) => p.id === activeProject) || null;
-
-  const active = projects.filter((p) => p.status !== '보관' && p.status !== '삭제됨');
   const archived = projects.filter((p) => p.status === '보관');
 
   useEffect(() => {
@@ -86,13 +87,14 @@ export default function LeftSidebar() {
             editing={editingId === p.id}
             editingName={editingName}
             menuOpen={menuId === p.id}
+            unreadCount={unreadCounts[p.id] || 0}
             onEditNameChange={setEditingName}
             onEditConfirm={() => confirmEdit(p.id)}
             onMenuOpen={(e) => { e.stopPropagation(); setMenuId(menuId === p.id ? null : p.id); }}
             onStartEdit={(e) => startEdit(p, e)}
             onArchive={() => archive(p.id)}
             onDelete={() => remove(p.id)}
-            onClick={() => { setActiveProject(p.id); setActiveChannel('chat'); }}
+            onClick={() => { markRead(p.id); setActiveProject(p.id); setActiveChannel('chat'); }}
             menuRef={menuId === p.id ? menuRef : null}
           />
         ))}
@@ -177,7 +179,7 @@ export default function LeftSidebar() {
   );
 }
 
-function ProjectItem({ p, active, onClick, muted, editing, editingName, menuOpen, onEditNameChange, onEditConfirm, onMenuOpen, onStartEdit, onArchive, archiveLabel = '보관', onDelete, menuRef }) {
+function ProjectItem({ p, active, onClick, muted, editing, editingName, menuOpen, unreadCount = 0, onEditNameChange, onEditConfirm, onMenuOpen, onStartEdit, onArchive, archiveLabel = '보관', onDelete, menuRef }) {
   const inputRef = useRef(null);
   useEffect(() => { if (editing && inputRef.current) inputRef.current.focus(); }, [editing]);
 
@@ -204,7 +206,7 @@ function ProjectItem({ p, active, onClick, muted, editing, editingName, menuOpen
         )}
       </div>
       <div className="meta" style={{ position: 'relative' }}>
-        {p.unreadCount > 0 && <span className="badge">{p.unreadCount}</span>}
+        {unreadCount > 0 && !active && <span className="unread-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
         <button className="proj-menu-btn" onClick={onMenuOpen} title="편집">⋯</button>
         {menuOpen && (
           <div className="proj-menu" ref={menuRef}>

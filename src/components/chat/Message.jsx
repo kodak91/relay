@@ -3,8 +3,26 @@ import ReactMarkdown from 'react-markdown';
 import useAppStore from '../../store/appStore';
 import { claudeComplete } from '../../lib/claude';
 
-// 58: all markdown links open in new tab
-const MD_LINK = { a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer noopener">{children}</a> };
+// 58: all markdown links open in new tab; 60: relay-kb:// links navigate to KB tab
+const MD_LINK = {
+  a: ({ href, children }) => {
+    if (href?.startsWith('relay-kb://')) {
+      return (
+        <a href="#" style={{ color: 'var(--accent)', textDecoration: 'underline', cursor: 'pointer' }}
+          onClick={(e) => {
+            e.preventDefault();
+            const parts = href.replace('relay-kb://', '').split('/');
+            const [, folderId, fileId] = parts;
+            const store = useAppStore.getState();
+            store.setChatTab('kb');
+            store.setKbDeepLink({ folderId: folderId || null, fileId: fileId || null });
+          }}
+        >{children}</a>
+      );
+    }
+    return <a href={href} target="_blank" rel="noreferrer noopener">{children}</a>;
+  },
+};
 
 const AVATAR_COLORS = [
   'oklch(0.45 0.20 270)',

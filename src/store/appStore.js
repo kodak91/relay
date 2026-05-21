@@ -30,6 +30,10 @@ const useAppStore = create((set, get) => ({
     return { openThreads: n };
   }),
 
+  // KB deep-link navigation
+  kbDeepLink: null,
+  setKbDeepLink: (link) => set({ kbDeepLink: link }),
+
   // Theme
   theme: 'light',
   setTheme: (theme) => set({ theme }),

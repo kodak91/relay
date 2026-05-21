@@ -163,14 +163,80 @@ function TicketBuilder({ members, title, setTitle, desc, setDesc, assigneeUid, s
   );
 }
 
-export default function Composer({ onSend, onFileSelect, fileInputRef, members = [] }) {
+function formatBytes(b) {
+  if (b < 1024) return b + 'B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(0) + 'KB';
+  return (b / (1024 * 1024)).toFixed(1) + 'MB';
+}
+
+function FilePreviewZone({ files, onRemove }) {
+  return (
+    <div className="composer-files">
+      {files.map((f, i) => (
+        <div
+          key={i}
+          className="composer-file-card"
+          style={{
+            zIndex: files.length - i,
+            transform: `translate(${i * 10}px, ${i * 4}px) rotate(${(i % 2 === 0 ? 1 : -1) * i * 0.5}deg)`,
+          }}
+        >
+          {f.preview ? (
+            <img src={f.preview} alt={f.name} className="composer-file-thumb" />
+          ) : (
+            <div className="composer-file-icon">{f.name.split('.').pop().toUpperCase()}</div>
+          )}
+          <div className="composer-file-name">{f.name.length > 16 ? f.name.slice(0, 14) + '…' : f.name}</div>
+          <div className="composer-file-size">{formatBytes(f.size)}</div>
+          <button className="composer-file-rm" onClick={() => onRemove(i)} title="제거">×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function KBSuggestions({ text, folders, selectedId, onSelect, showAll, onToggleAll }) {
+  const keywords = text.toLowerCase().split(/\s+/).filter((w) => w.length > 1);
+  const scored = folders.map((f) => {
+    const name = f.name.toLowerCase();
+    const score = keywords.filter((k) => name.includes(k)).length;
+    return { ...f, score };
+  });
+  const topFolders = showAll
+    ? folders
+    : scored.sort((a, b) => b.score - a.score).slice(0, 4);
+
+  return (
+    <div className="composer-kb-row">
+      <span className="composer-kb-label">📚 저장 위치</span>
+      {topFolders.map((f) => (
+        <button
+          key={f.id}
+          className={'composer-kb-chip' + (selectedId === f.id ? ' on' : '')}
+          onClick={() => onSelect(selectedId === f.id ? null : f.id)}
+          title={f.drivePath || f.name}
+        >
+          {f.isRoot ? '🗂' : '📁'} {f.name}
+        </button>
+      ))}
+      <button className="composer-kb-chip more" onClick={onToggleAll}>
+        {showAll ? '접기' : '다른 이름으로 저장…'}
+      </button>
+    </div>
+  );
+}
+
+export default function Composer({ onSend, onFileUpload, members = [], kbFolders = [] }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
   const [importance, setImportance] = useState(0);
   const [polishing, setPolishing] = useState(false);
   const [showAI, setShowAI] = useState(false);
-  const [showFileMenu, setShowFileMenu] = useState(false);
   const [showTypeMenu, setShowTypeMenu] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState([]);
+  const [selectedKBFolderId, setSelectedKBFolderId] = useState(null);
+  const [showSaveAs, setShowSaveAs] = useState(false);
+  const internalFileRef = useRef(null);
   const actionsRef = useRef(null);
 
   const [decisionTitle, setDecisionTitle] = useState('');
@@ -185,10 +251,29 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
   const [ticketDue, setTicketDue] = useState('');
   const [ticketPriority, setTicketPriority] = useState('보통');
 
+  const addFiles = (fileList) => {
+    const items = Array.from(fileList).map((file) => ({
+      file,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+    }));
+    setPendingFiles((prev) => [...prev, ...items]);
+  };
+
+  const removeFile = (idx) => {
+    setPendingFiles((prev) => {
+      const next = [...prev];
+      if (next[idx]?.preview) URL.revokeObjectURL(next[idx].preview);
+      next.splice(idx, 1);
+      return next;
+    });
+  };
+
   // Refs to avoid stale closures in editor callbacks
   const onEnterRef = useRef(null);
   const onUpdateRef = useRef(null);
-  const onFileSelectRef = useRef(null);
   const placeholderRef = useRef('');
 
   const isCasual = type === 'casual';
@@ -223,7 +308,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
       handleDrop: (_view, event) => {
         if (event.dataTransfer?.files?.length) {
           event.preventDefault();
-          onFileSelectRef.current?.(event.dataTransfer.files);
+          addFiles(event.dataTransfer.files);
           return true;
         }
         return false;
@@ -240,18 +325,20 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
 
   // Close dropdowns on outside click
   useEffect(() => {
-    if (!showFileMenu && !showTypeMenu) return;
+    if (!showTypeMenu) return;
     const handler = (e) => {
       if (actionsRef.current && !actionsRef.current.contains(e.target)) {
-        setShowFileMenu(false);
         setShowTypeMenu(false);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [showFileMenu, showTypeMenu]);
+  }, [showTypeMenu]);
 
   const checkSlashCommand = (md) => {
+    // 66: only fire after user presses space (prevents /! from blocking /!!)
+    if (!md.endsWith(' ')) return false;
+
     const trimmed = md.trim();
 
     // Importance shortcuts: /! = 중요(★), /!! = 매우 중요(★★)
@@ -288,6 +375,14 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
   const isAssign = type === 'assign';
 
   const handleSend = () => {
+    // 62: dispatch staged files first
+    if (pendingFiles.length > 0) {
+      onFileUpload?.(pendingFiles.map((f) => f.file), selectedKBFolderId);
+      pendingFiles.forEach((f) => { if (f.preview) URL.revokeObjectURL(f.preview); });
+      setPendingFiles([]);
+      setSelectedKBFolderId(null);
+      setShowSaveAs(false);
+    }
     if (isTicket) {
       if (!ticketTitle.trim()) return;
       const assigneeMember = members.find((m) => m.uid === ticketAssigneeUid);
@@ -402,8 +497,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
 
   const setTypeAndReset = (t) => {
     setType(t);
-    editor?.commands.clearContent();
-    setText('');
+    // 61: preserve typed text when switching types
     if (t !== 'decision') { setDecisionTitle(''); setDecisionOptions(['', '']); }
     if (t !== 'vote') { setVoteTitle(''); setVoteOptions(['', '']); }
     if (t !== 'assign') { setAssignee(null); setAssignTaskText(''); }
@@ -415,7 +509,6 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
     if (startsDoubleSlash) runPolish();
     else handleSend();
   };
-  onFileSelectRef.current = onFileSelect;
   onUpdateRef.current = (ed) => {
     const md = ed.storage.markdown.getMarkdown();
     setText(md);
@@ -423,7 +516,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
   };
 
   const tags = text.match(/#\S+/g) || [];
-  const canSend = isTicket
+  const canSend = pendingFiles.length > 0 || (isTicket
     ? ticketTitle.trim()
     : isAssign
     ? (assignee && assignTaskText.trim())
@@ -431,7 +524,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
     ? (decisionTitle.trim() && decisionOptions.filter((o) => o.trim()).length >= 2)
     : isVote
     ? (voteTitle.trim() && voteOptions.filter((o) => o.trim()).length >= 2)
-    : text.trim();
+    : text.trim());
 
   return (
     <div className={'composer' + (isCasual ? ' casual-mode' : '')}>
@@ -518,28 +611,47 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
           </div>
         )}
 
+        {/* 62: file preview zone */}
+        {pendingFiles.length > 0 && (
+          <FilePreviewZone files={pendingFiles} onRemove={removeFile} />
+        )}
+
+        {/* 62: KB save suggestions when files pending */}
+        {pendingFiles.length > 0 && kbFolders.length > 0 && (
+          <KBSuggestions
+            text={text}
+            folders={kbFolders}
+            selectedId={selectedKBFolderId}
+            onSelect={(id) => { setSelectedKBFolderId(id); setShowSaveAs(false); }}
+            showAll={showSaveAs}
+            onToggleAll={() => setShowSaveAs((v) => !v)}
+          />
+        )}
+
         <div className="actions" ref={actionsRef}>
           {/* + 파일 버튼 */}
           <div className="composer-btn-wrap">
             <button
-              className={'composer-act-btn' + (showFileMenu ? ' on' : '')}
-              onClick={() => { setShowFileMenu((v) => !v); setShowTypeMenu(false); }}
+              className={'composer-act-btn' + (pendingFiles.length > 0 ? ' has-type' : '')}
+              onClick={() => internalFileRef.current?.click()}
               title="파일 첨부"
-            >+</button>
-            {showFileMenu && (
-              <div className="composer-dropdown">
-                <button onClick={() => { fileInputRef?.current?.click(); setShowFileMenu(false); }}>
-                  <span>📎</span> 이미지 / 파일 업로드
-                </button>
-              </div>
-            )}
+            >
+              {pendingFiles.length > 0 ? `+${pendingFiles.length}` : '+'}
+            </button>
           </div>
+          <input
+            ref={internalFileRef}
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+          />
 
           {/* / 메시지 유형 버튼 */}
           <div className="composer-btn-wrap">
             <button
               className={'composer-act-btn' + (showTypeMenu ? ' on' : '') + (type !== 'text' ? ' has-type' : '')}
-              onClick={() => { setShowTypeMenu((v) => !v); setShowFileMenu(false); }}
+              onClick={() => setShowTypeMenu((v) => !v)}
               title="메시지 유형"
             >
               {type !== 'text'

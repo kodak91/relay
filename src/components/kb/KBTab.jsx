@@ -1,8 +1,9 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import useAppStore from '../../store/appStore';
 import { useKB } from '../../hooks/useKB';
 import KBFileDetail from './KBFileDetail';
 import DriveConnectModal from './DriveConnectModal';
+import KBMediaTab from './KBMediaTab';
 import { getStoredToken, requestDriveAccess } from '../../lib/driveApi';
 
 export const EXT_COLORS = {
@@ -17,13 +18,14 @@ export const EXT_COLORS = {
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 
 export default function KBTab({ projectId }) {
-  const { user } = useAppStore();
+  const { user, kbDeepLink, setKbDeepLink } = useAppStore();
   const {
     folders, files, loading, syncing,
     connectDriveRoot, disconnectDrive, syncFromDrive,
     uploadToDrive, deleteFile,
   } = useKB(projectId);
 
+  const [kbSubTab, setKbSubTab] = useState('drive');
   const [activeFolderId, setActiveFolderId] = useState(null);
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState('grid');
@@ -32,6 +34,16 @@ export default function KBTab({ projectId }) {
   const [showDriveModal, setShowDriveModal] = useState(false);
   const [syncError, setSyncError] = useState('');
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!kbDeepLink) return;
+    if (kbDeepLink.folderId) setActiveFolderId(kbDeepLink.folderId);
+    if (kbDeepLink.fileId) {
+      const f = files.find((fi) => fi.id === kbDeepLink.fileId);
+      if (f) setOpenFile(f);
+    }
+    setKbDeepLink(null);
+  }, [kbDeepLink, files, setKbDeepLink]);
 
   const activeFolder = folders.find((f) => f.id === activeFolderId) || folders[0] || null;
   const effectiveFolderId = activeFolderId || folders[0]?.id || null;
@@ -113,6 +125,21 @@ export default function KBTab({ projectId }) {
 
   const isConnected = folders.length > 0;
 
+  // 자료함 tab doesn't need Drive at all
+  if (kbSubTab === 'media') {
+    return (
+      <div className="kb-main" style={{ display: 'flex', flexDirection: 'column' }}>
+        <div className="kb-subtab-bar">
+          <button className="kb-subtab" onClick={() => setKbSubTab('drive')}>
+            <span className="drive-g-ico xs">G</span> 드라이브
+          </button>
+          <button className="kb-subtab on">📦 자료함</button>
+        </div>
+        <KBMediaTab projectId={projectId} />
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="kb-main" style={{ display: 'grid', placeItems: 'center' }}>
@@ -121,23 +148,33 @@ export default function KBTab({ projectId }) {
     );
   }
 
-  // No Drive connected yet — show big connect CTA
-  if (!isConnected) {
+  // No Drive connected yet — show big connect CTA (only for drive sub-tab)
+  if (!isConnected && kbSubTab === 'drive') {
     return (
-      <div className="kb-main" style={{ display: 'grid', placeItems: 'center' }}>
-        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-          <span className="drive-g-ico" style={{ width: 56, height: 56, fontSize: 32 }}>G</span>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Drive 폴더 연동</div>
-            <div style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 300 }}>
-              Google Drive 폴더를 연결하면 하위 폴더 구조가 그대로 KB 트리로 표시됩니다.
-            </div>
-          </div>
-          <button className="btn-drive-connect" style={{ padding: '10px 20px', fontSize: 13 }}
-            onClick={() => setShowDriveModal(true)}>
-            <span className="drive-g-ico sm">G</span>
-            Drive 폴더 연동하기
+      <div className="kb-main">
+        <div className="kb-subtab-bar">
+          <button className={'kb-subtab' + (kbSubTab === 'drive' ? ' on' : '')} onClick={() => setKbSubTab('drive')}>
+            <span className="drive-g-ico xs">G</span> 드라이브
           </button>
+          <button className={'kb-subtab' + (kbSubTab === 'media' ? ' on' : '')} onClick={() => setKbSubTab('media')}>
+            📦 자료함
+          </button>
+        </div>
+        <div style={{ flex: 1, display: 'grid', placeItems: 'center' }}>
+          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            <span className="drive-g-ico" style={{ width: 56, height: 56, fontSize: 32 }}>G</span>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Drive 폴더 연동</div>
+              <div style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 300 }}>
+                Google Drive 폴더를 연결하면 하위 폴더 구조가 그대로 KB 트리로 표시됩니다.
+              </div>
+            </div>
+            <button className="btn-drive-connect" style={{ padding: '10px 20px', fontSize: 13 }}
+              onClick={() => setShowDriveModal(true)}>
+              <span className="drive-g-ico sm">G</span>
+              Drive 폴더 연동하기
+            </button>
+          </div>
         </div>
         {showDriveModal && (
           <DriveConnectModal onConnect={handleConnectDrive} onClose={() => setShowDriveModal(false)} />
@@ -148,6 +185,19 @@ export default function KBTab({ projectId }) {
 
   return (
     <div className="kb-main" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
+      {/* Sub-tab bar */}
+      <div className="kb-subtab-bar">
+        <button className={'kb-subtab' + (kbSubTab === 'drive' ? ' on' : '')} onClick={() => setKbSubTab('drive')}>
+          <span className="drive-g-ico xs">G</span> 드라이브
+        </button>
+        <button className={'kb-subtab' + (kbSubTab === 'media' ? ' on' : '')} onClick={() => setKbSubTab('media')}>
+          📦 자료함
+        </button>
+      </div>
+
+      {kbSubTab === 'media' && <KBMediaTab projectId={projectId} />}
+
+      {kbSubTab === 'drive' && <>
       {/* Toolbar */}
       <div className="kb-toolbar">
         <div className="kb-search">
@@ -188,18 +238,14 @@ export default function KBTab({ projectId }) {
             <button className="kb-tree-disc" onClick={disconnectDrive} title="연동 해제">✕</button>
           </div>
           {folders.map((f) => (
-            <button
+            <KBTreeRow
               key={f.id}
-              className={'kb-tree-row' + ((effectiveFolderId === f.id && !search) ? ' on' : '')}
-              style={{ paddingLeft: 12 + (f.depth || 0) * 14 }}
-              onClick={() => { setActiveFolderId(f.id); setSearch(''); }}
-            >
-              <span className="kb-tree-ico drive">
-                {f.isRoot ? '🗂' : '📁'}
-              </span>
-              <span className="nm">{f.name}</span>
-              <span className="mono cnt">{files.filter((x) => x.folderId === f.id).length}</span>
-            </button>
+              folder={f}
+              active={effectiveFolderId === f.id && !search}
+              fileCount={files.filter((x) => x.folderId === f.id).length}
+              projectId={projectId}
+              onSelect={() => { setActiveFolderId(f.id); setSearch(''); }}
+            />
           ))}
 
           {/* Sync info */}
@@ -251,7 +297,7 @@ export default function KBTab({ projectId }) {
 
           {viewMode === 'grid' ? (
             <div className="kb-grid">
-              {displayed.map((f) => <KBFileCard key={f.id} file={f} onClick={() => setOpenFile(f)} />)}
+              {displayed.map((f) => <KBFileCard key={f.id} file={f} projectId={projectId} onClick={() => setOpenFile(f)} />)}
               <button className="kb-add-card" onClick={() => fileInputRef.current?.click()}>
                 <span className="plus">＋</span>
                 <span>파일 업로드</span>
@@ -264,7 +310,7 @@ export default function KBTab({ projectId }) {
                 <span>이름</span><span>버전</span><span>업로더</span>
                 <span>크기</span><span>날짜</span><span>소스</span>
               </div>
-              {displayed.map((f) => <KBFileRow key={f.id} file={f} onClick={() => setOpenFile(f)} />)}
+              {displayed.map((f) => <KBFileRow key={f.id} file={f} projectId={projectId} onClick={() => setOpenFile(f)} />)}
             </div>
           )}
 
@@ -297,16 +343,60 @@ export default function KBTab({ projectId }) {
       {showDriveModal && (
         <DriveConnectModal onConnect={handleConnectDrive} onClose={() => setShowDriveModal(false)} />
       )}
+      </>}
     </div>
   );
 }
 
-export function KBFileCard({ file, onClick }) {
+function KBCopyBtn({ link, style }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = (e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <button
+      className="kb-copy-btn"
+      style={style}
+      onClick={handleCopy}
+      title="경로 복사"
+    >
+      {copied ? '✓' : '⎘'}
+    </button>
+  );
+}
+
+function KBTreeRow({ folder, active, fileCount, projectId, onSelect }) {
+  const link = `relay-kb://${projectId}/${folder.id}`;
+  return (
+    <div
+      className={'kb-tree-row' + (active ? ' on' : '')}
+      style={{ paddingLeft: 12 + (folder.depth || 0) * 14, display: 'flex', alignItems: 'center' }}
+    >
+      <button
+        style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', minWidth: 0 }}
+        onClick={onSelect}
+      >
+        <span className="kb-tree-ico drive">{folder.isRoot ? '🗂' : '📁'}</span>
+        <span className="nm" style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
+        <span className="mono cnt">{fileCount}</span>
+      </button>
+      <KBCopyBtn link={link} style={{ marginLeft: 4 }} />
+    </div>
+  );
+}
+
+export function KBFileCard({ file, projectId, onClick }) {
   const c = EXT_COLORS[file.ext] || 'oklch(0.50 0.05 80)';
   const isImage = IMAGE_EXTS.includes(file.ext);
   const isDrive = file.source === 'drive';
+  const link = projectId ? `relay-kb://${projectId}/${file.folderId}/${file.id}` : null;
   return (
-    <button className="kb-card" onClick={onClick}>
+    <button className="kb-card" onClick={onClick} style={{ position: 'relative' }}>
+      {link && <KBCopyBtn link={link} style={{ position: 'absolute', top: 6, right: 6, zIndex: 2 }} />}
       <div className="kb-card-hd">
         <div className="kb-card-ext" style={{ background: c }}>{(file.ext || '?').toUpperCase()}</div>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -343,9 +433,10 @@ export function KBFileCard({ file, onClick }) {
   );
 }
 
-export function KBFileRow({ file, onClick }) {
+export function KBFileRow({ file, projectId, onClick }) {
   const c = EXT_COLORS[file.ext] || 'oklch(0.50 0.05 80)';
   const isDrive = file.source === 'drive';
+  const link = projectId ? `relay-kb://${projectId}/${file.folderId}/${file.id}` : null;
   return (
     <button className="kb-row" onClick={onClick}>
       <span className="kb-row-name">
@@ -358,6 +449,7 @@ export function KBFileRow({ file, onClick }) {
       <span className="mono">{file.size}</span>
       <span className="mono">{file.date}</span>
       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {link && <KBCopyBtn link={link} />}
         {isDrive ? (
           <a className="kb-row-act" href={file.webViewLink} target="_blank" rel="noreferrer"
             onClick={(e) => e.stopPropagation()}>

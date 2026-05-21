@@ -14,6 +14,7 @@ import KBSaveBanner from '../kb/KBSaveBanner';
 import NotionTab from '../notion/NotionTab';
 import TicketTab from '../tickets/TicketTab';
 import { useTickets } from '../../hooks/useTickets';
+import { useKB } from '../../hooks/useKB';
 import { uploadFile, IMAGE_TYPES, formatFileSize } from '../../lib/uploadFile';
 import { postToSlack } from '../../lib/slack';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
@@ -29,6 +30,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
   const { projects, updateProject, approveMember, rejectMember, removeMember } = useProjects(user?.uid);
   const { tickets, createTicket, updateTicket } = useTickets(activeProject);
+  const { folders: kbFolders } = useKB(activeProject);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
   // Callback ref: immediately scrolls to bottom on mount (tab switch), no animation
@@ -36,7 +38,6 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     scrollRef.current = node;
     if (node) node.scrollTop = node.scrollHeight;
   }, []);
-  const fileInputRef = useRef(null);
 
   const [openThreads, setOpenThreads] = useState(new Set());
   const [replyValues, setReplyValues] = useState({});
@@ -46,7 +47,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const [uploadError, setUploadError] = useState('');
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [showMemberModal, setShowMemberModal] = useState(false);
-  const [pendingKBSave, setPendingKBSave] = useState(null);
+  const [pendingKBSave, setPendingKBSave] = useState(null); // { files, selectedFolderId }
 
   const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
 
@@ -204,8 +205,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     }
   };
 
-  // File upload handler
-  const handleFiles = async (files) => {
+  // File upload handler — called from Composer on send (kbFolderId optional)
+  const handleFiles = async (files, kbFolderId = null) => {
     if (!activeProject || !files?.length) return;
     setUploading(true);
     setUploadProgress(0);
@@ -232,7 +233,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           blob: file,
         });
       }
-      if (kbPending.length > 0) setPendingKBSave(kbPending);
+      if (kbPending.length > 0) setPendingKBSave({ files: kbPending, selectedFolderId: kbFolderId });
     } catch (e) {
       console.error('Upload failed:', e);
       setUploadError('업로드 실패: Firebase Storage가 설정되지 않았거나 권한이 없습니다.');
@@ -406,19 +407,18 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           {pendingKBSave && (
             <KBSaveBanner
               projectId={activeProject}
-              files={pendingKBSave}
+              files={pendingKBSave.files || pendingKBSave}
+              initialFolderId={pendingKBSave.selectedFolderId || null}
               user={user}
               onSave={() => setPendingKBSave(null)}
               onDismiss={() => setPendingKBSave(null)}
             />
           )}
-          <Composer onSend={handleSend} onFileSelect={handleFiles} fileInputRef={fileInputRef} members={activeProjectData?.members || []} />
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            style={{ display: 'none' }}
-            onChange={(e) => handleFiles(e.target.files)}
+          <Composer
+            onSend={handleSend}
+            onFileUpload={handleFiles}
+            members={activeProjectData?.members || []}
+            kbFolders={kbFolders}
           />
         </>
       )}

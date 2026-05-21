@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useKB } from '../../hooks/useKB';
 import { getStoredToken, requestDriveAccess } from '../../lib/driveApi';
 
-export default function KBSaveBanner({ projectId, files, user, onSave, onDismiss }) {
+export default function KBSaveBanner({ projectId, files, initialFolderId = null, user, onSave, onDismiss }) {
   const { folders, saveFromChat } = useKB(projectId);
-  const [selectedFolderId, setSelectedFolderId] = useState(null);
+  const [selectedFolderId, setSelectedFolderId] = useState(initialFolderId);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
