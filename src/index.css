@@ -1576,6 +1576,50 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 .nb-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
 .nb-tag-row { display: flex; gap: 4px; flex-wrap: wrap; }
 .nb-link { color: var(--accent); text-decoration: underline; font-size: 12px; }
+/* Notion edit mode */
+.nb-edit-row {
+  display: flex; align-items: flex-start; gap: 6px;
+  margin: 2px 0; padding: 2px 0;
+  border-radius: var(--r-2); position: relative;
+}
+.nb-edit-row:hover { background: var(--hover); }
+.nb-edit-row:hover .nb-edit-del { opacity: 1; }
+.nb-edit-prefix {
+  flex-shrink: 0; width: 28px; text-align: center;
+  font-size: 11px; font-weight: 700; color: var(--ink-mute);
+  margin-top: 6px;
+}
+.nb-edit-ta {
+  flex: 1; border: 1px solid transparent; border-radius: var(--r-2);
+  padding: 4px 6px; font-size: 15px; font-family: var(--font-sans);
+  color: var(--ink); background: transparent; outline: none;
+  resize: none; line-height: 1.6; overflow: hidden;
+  min-height: 32px;
+}
+.nb-edit-ta:focus { border-color: var(--accent-line); background: var(--surface); }
+.nb-edit-h1 { font-size: 2em; font-weight: 700; }
+.nb-edit-h2 { font-size: 1.5em; font-weight: 700; }
+.nb-edit-h3 { font-size: 1.2em; font-weight: 600; }
+.nb-edit-del {
+  flex-shrink: 0; opacity: 0; border: 0; background: transparent;
+  color: var(--ink-mute); font-size: 16px; cursor: pointer;
+  padding: 2px 4px; margin-top: 3px; border-radius: 4px; line-height: 1;
+  transition: opacity 0.1s, color 0.1s;
+}
+.nb-edit-del:hover { color: var(--rose); }
+.nb-edit-saving { font-size: 11px; color: var(--ink-mute); margin-top: 7px; flex-shrink: 0; }
+.nb-edit-static { opacity: 0.85; }
+.nb-add-block {
+  display: flex; gap: 8px; align-items: center;
+  margin-top: 16px; padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.nb-add-input {
+  flex: 1; border: 1px solid var(--border); border-radius: var(--r-2);
+  padding: 7px 10px; font-size: 13px; background: var(--surface);
+  outline: none; color: var(--ink); font-family: var(--font-sans);
+}
+.nb-add-input:focus { border-color: var(--accent-line); }
 
 /* File detail overlay */
 .kb-detail-overlay { position: absolute; inset: 0; background: oklch(0.10 0.012 270 / 0.4); backdrop-filter: blur(3px); z-index: 100; display: flex; justify-content: flex-end; }

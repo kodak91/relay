@@ -28,10 +28,25 @@ export default async function handler(req, res) {
       r = await fetch(`${NOTION_API}/databases/${id}`, { headers });
     } else if (action === 'database_query') {
       r = await fetch(`${NOTION_API}/databases/${id}/query`, {
-        method: 'POST',
-        headers,
+        method: 'POST', headers,
         body: JSON.stringify({ page_size: 100 }),
       });
+    } else if (action === 'update_block') {
+      const { blockType, richText, checked } = req.body;
+      const patch = { [blockType]: { rich_text: richText } };
+      if (blockType === 'to_do') patch.to_do.checked = !!checked;
+      r = await fetch(`${NOTION_API}/blocks/${id}`, {
+        method: 'PATCH', headers,
+        body: JSON.stringify(patch),
+      });
+    } else if (action === 'append_blocks') {
+      r = await fetch(`${NOTION_API}/blocks/${id}/children`, {
+        method: 'PATCH', headers,
+        body: JSON.stringify({ children: req.body.children }),
+      });
+    } else if (action === 'delete_block') {
+      r = await fetch(`${NOTION_API}/blocks/${id}`, { method: 'DELETE', headers });
+      if (r.status === 200) return res.status(200).json({ ok: true });
     } else {
       return res.status(400).json({ error: '알 수 없는 action입니다.' });
     }
