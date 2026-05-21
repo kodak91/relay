@@ -6,7 +6,7 @@ import { Markdown as MarkdownExtension } from 'tiptap-markdown';
 import { claudeComplete, AI_ACTIONS } from '../../lib/claude';
 
 const SLASH_MAP = {
-  '/승인': 'approval',
+  '/컨펌': 'approval',
   '/결정': 'decision',
   '/투표': 'vote',
   '/보고': 'update',
@@ -18,7 +18,7 @@ const SLASH_MAP = {
 
 const MESSAGE_TYPES = [
   { id: 'text',     label: '일반',   icon: '💬', slash: '' },
-  { id: 'approval', label: '/승인',  icon: '✓',  slash: '/승인' },
+  { id: 'approval', label: '/컨펌',  icon: '✓',  slash: '/컨펌' },
   { id: 'decision', label: '/결정',  icon: '◇',  slash: '/결정' },
   { id: 'vote',     label: '/투표',  icon: '◉',  slash: '/투표' },
   { id: 'update',   label: '/보고',  icon: '◆',  slash: '/보고' },
@@ -479,7 +479,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
         )}
         {isApproval && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'var(--amber-bg)', borderBottom: '1px solid var(--amber-line)', fontSize: 11, fontWeight: 700, color: 'oklch(0.42 0.13 70)' }}>
-            ✓ 승인 요청 <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>— 전송하면 컨펌 대기로 이동합니다</span>
+            ✓ 컨펌 요청 <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>— 전송하면 컨펌 대기로 이동합니다</span>
           </div>
         )}
         {startsDoubleSlash && !polishing && !isDecision && !isVote && (

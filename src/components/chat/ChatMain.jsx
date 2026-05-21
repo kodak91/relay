@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import useAppStore from '../../store/appStore';
 import { useMessages } from '../../hooks/useMessages';
@@ -31,6 +31,11 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { tickets, createTicket, updateTicket } = useTickets(activeProject);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
+  // Callback ref: immediately scrolls to bottom on mount (tab switch), no animation
+  const scrollElRef = useCallback((node) => {
+    scrollRef.current = node;
+    if (node) node.scrollTop = node.scrollHeight;
+  }, []);
   const fileInputRef = useRef(null);
 
   const [openThreads, setOpenThreads] = useState(new Set());
@@ -45,6 +50,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
   const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
 
+  // Smooth scroll only for new incoming messages
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -322,7 +328,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
                 {announcements.map((m) => (
                   <div key={m.id} className="announce-panel-item">
                     <div className="announce-panel-sender">{m.senderName} · {m.ts}</div>
-                    <div className="announce-panel-text md-content"><ReactMarkdown>{m.text || ''}</ReactMarkdown></div>
+                    <div className="announce-panel-text md-content"><ReactMarkdown components={{ a: ({href, children}) => <a href={href} target="_blank" rel="noreferrer noopener">{children}</a> }}>{m.text || ''}</ReactMarkdown></div>
                   </div>
                 ))}
               </div>
@@ -364,7 +370,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       ) : (
         <>
           <TagBar messages={messages} />
-          <div className="chat-scroll" ref={scrollRef}>
+          <div className="chat-scroll" ref={scrollElRef}>
             {uploading && (
               <div className="upload-progress">
                 <div className="upload-bar" style={{ width: uploadProgress + '%' }} />

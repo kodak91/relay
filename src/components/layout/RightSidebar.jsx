@@ -5,7 +5,7 @@ import { useGlobalMessages } from '../../hooks/useGlobalMessages';
 import { usePersonalTasks } from '../../hooks/usePersonalTasks';
 
 const TYPE_LABELS = {
-  approval: '승인', decision: '결정', vote: '투표',
+  approval: '컨펌', decision: '결정', vote: '투표',
   update: '보고', announce: '공지', meeting: '회의',
 };
 

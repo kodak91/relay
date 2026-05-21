@@ -3,6 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import useAppStore from '../../store/appStore';
 import { claudeComplete } from '../../lib/claude';
 
+// 58: all markdown links open in new tab
+const MD_LINK = { a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer noopener">{children}</a> };
+
 const AVATAR_COLORS = [
   'oklch(0.45 0.20 270)',
   'oklch(0.55 0.16 25)',
@@ -179,7 +182,7 @@ function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleT
       ) : (
         <div className="msg-body md-content">
           {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
-          <ReactMarkdown>{m.text || ''}</ReactMarkdown>
+          <ReactMarkdown components={MD_LINK}>{m.text || ''}</ReactMarkdown>
           {m.editedAt && <span className="edited-badge">(편집됨)</span>}
         </div>
       )}
@@ -234,6 +237,8 @@ function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleT
 }
 
 function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onChoose, onDelete, senderName }) {
+  const { user } = useAppStore();
+  const isLead = user?.role === 'lead';
   return (
     <div className="msg">
       <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} />
@@ -253,12 +258,18 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
           <div className="dc-header">{m.title}</div>
           <div className="dc-options">
             {(m.options || []).map((opt) => (
-              <div key={opt.letter} className={'dc-opt' + (m.chosen === opt.letter ? ' chosen' : '')} onClick={() => !m.chosen && onChoose(m.id, opt.letter)}>
+              <div
+                key={opt.letter}
+                className={'dc-opt' + (m.chosen === opt.letter ? ' chosen' : '') + (!isLead && !m.chosen ? ' locked' : '')}
+                style={!isLead && !m.chosen ? { cursor: 'default', opacity: 0.6 } : {}}
+                onClick={() => !m.chosen && isLead && onChoose(m.id, opt.letter)}
+              >
                 <div className="letter">{opt.letter}</div>
                 <div className="title">{opt.title}</div>
               </div>
             ))}
           </div>
+          {!m.chosen && !isLead && <p style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-3)' }}>⏳ 팀장이 결정합니다</p>}
           {m.chosen && <p style={{ marginTop: 8, fontSize: 12, color: 'var(--emerald)', fontWeight: 600 }}>✓ {m.chosen}안 선택됨</p>}
         </div>
         <Reactions list={m.reactions} />
@@ -270,6 +281,8 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
 }
 
 function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onAct, onDelete, senderName }) {
+  const { user } = useAppStore();
+  const isLead = user?.role === 'lead';
   const [holdDate, setHoldDate] = useState('');
   const [showHoldPicker, setShowHoldPicker] = useState(false);
 
@@ -298,30 +311,34 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
         </div>
         <div className={'approval-card ' + statusClass}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-            <span style={{ fontSize: 11, color: 'oklch(0.42 0.13 70)', fontWeight: 700 }}>✓ 승인 요청</span>
+            <span style={{ fontSize: 11, color: 'oklch(0.42 0.13 70)', fontWeight: 700 }}>✓ 컨펌 요청</span>
             {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
           </div>
           <div className="ac-desc md-content">
-            <ReactMarkdown>{m.text || ''}</ReactMarkdown>
+            <ReactMarkdown components={MD_LINK}>{m.text || ''}</ReactMarkdown>
           </div>
           <div className="ac-actions">
             {isPending ? (
-              <>
-                <button className="btn accent sm" onClick={() => onAct(m.id, 'approve')}>승인</button>
-                <button className="btn minor sm" onClick={() => onAct(m.id, 'complete')}>완료</button>
-                <button className="btn ghost sm" onClick={handleHold}>보류</button>
-                {showHoldPicker && (
-                  <div className="hold-picker">
-                    <input type="date" value={holdDate} onChange={(e) => setHoldDate(e.target.value)} />
-                    <button className="btn accent sm" onClick={handleHold}>확인</button>
-                  </div>
-                )}
-              </>
+              isLead ? (
+                <>
+                  <button className="btn accent sm" onClick={() => onAct(m.id, 'approve')}>OK</button>
+                  <button className="btn minor sm" onClick={() => onAct(m.id, 'complete')}>반려</button>
+                  <button className="btn ghost sm" onClick={handleHold}>보류</button>
+                  {showHoldPicker && (
+                    <div className="hold-picker">
+                      <input type="date" value={holdDate} onChange={(e) => setHoldDate(e.target.value)} />
+                      <button className="btn accent sm" onClick={handleHold}>확인</button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <span className="ac-status" style={{ color: 'var(--ink-3)', fontSize: 12 }}>⏳ 팀장 검토 대기 중</span>
+              )
             ) : status === 'held' ? (
               <span className="ac-status held">⏸ 보류{m.heldUntil ? ` (${m.heldUntil}까지)` : ''}</span>
             ) : (
               <span className={'ac-status ' + status}>
-                {status === 'approved' ? '✓ 승인 완료' : status === 'done' ? '✓ 완료됨' : ''}
+                {status === 'approved' ? '✓ OK' : status === 'done' ? '✗ 반려됨' : ''}
               </span>
             )}
           </div>
@@ -422,7 +439,7 @@ function UpdateMsg({ m, onDelete }) {
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)' }}>◆ 중간 보고</span>
           </div>
           <div className="md-content" style={{ fontSize: 13, color: 'var(--ink-2)' }}>
-            <ReactMarkdown>{m.text || ''}</ReactMarkdown>
+            <ReactMarkdown components={MD_LINK}>{m.text || ''}</ReactMarkdown>
           </div>
           {m.progress && (
             <div className="progress-bar-wrap">
@@ -454,7 +471,7 @@ function AnnounceMsg({ m, onCollapse, onDelete }) {
             <span className="an-label">공지사항</span>
           </div>
           <div className="an-body md-content">
-            <ReactMarkdown>{m.text || ''}</ReactMarkdown>
+            <ReactMarkdown components={MD_LINK}>{m.text || ''}</ReactMarkdown>
           </div>
         </div>
         <Reactions list={m.reactions} />
@@ -502,7 +519,7 @@ function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, 
           </div>
           {m.summary && (
             <div className="meeting-summary md-content">
-              <ReactMarkdown>{m.summary}</ReactMarkdown>
+              <ReactMarkdown components={MD_LINK}>{m.summary}</ReactMarkdown>
             </div>
           )}
         </div>
@@ -580,7 +597,7 @@ function AIMsg({ m }) {
         </div>
         <div className="ai-card">
           <div className="ai-title">✦ {m.title}</div>
-          {m.text && <div className="md-content" style={{ fontSize: 13, color: 'var(--ink-2)' }}><ReactMarkdown>{m.text}</ReactMarkdown></div>}
+          {m.text && <div className="md-content" style={{ fontSize: 13, color: 'var(--ink-2)' }}><ReactMarkdown components={MD_LINK}>{m.text}</ReactMarkdown></div>}
           {m.bullets && (
             <div className="ai-bullets">
               {m.bullets.map((b, i) => (
