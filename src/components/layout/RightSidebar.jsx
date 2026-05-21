@@ -72,24 +72,38 @@ export default function RightSidebar({ onJumpToMessage }) {
 }
 
 function CatchupSection({ messages, onJump, uid }) {
-  const storageKey = uid ? `catchup_dismissed_${uid}` : 'catchup_dismissed';
+  const storageKey = `catchup_dismissed_${uid || 'anon'}`;
   const [open, setOpen] = useState(false);
-  const [dismissed, setDismissed] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem(storageKey) || '[]')); }
-    catch { return new Set(); }
-  });
+  const [dismissed, setDismissed] = useState(new Set());
   const [notifPerm, setNotifPerm] = useState(() =>
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
   );
   const seenIds = useRef(null);
 
+  // Reload dismissed set whenever uid (and thus storageKey) becomes available
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      setDismissed(new Set(stored));
+    } catch {
+      setDismissed(new Set());
+    }
+  }, [storageKey]);
+
   const dismiss = (id) => {
     setDismissed((prev) => {
       const next = new Set(prev);
       next.add(id);
-      localStorage.setItem(storageKey, JSON.stringify([...next]));
+      try { localStorage.setItem(storageKey, JSON.stringify([...next])); } catch {}
       return next;
     });
+  };
+
+  const dismissAll = () => {
+    const allIds = messages.map((m) => m.id);
+    const next = new Set([...dismissed, ...allIds]);
+    setDismissed(next);
+    try { localStorage.setItem(storageKey, JSON.stringify([...next])); } catch {}
   };
 
   const visible = useMemo(
@@ -128,6 +142,12 @@ function CatchupSection({ messages, onJump, uid }) {
           {notifPerm !== 'granted' && typeof Notification !== 'undefined' && (
             <button className="catchup-notif-btn" onClick={requestNotif} title="알림 허용">🔔 알림</button>
           )}
+          {visible.length > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); dismissAll(); }}
+              style={{ fontSize: 10, color: 'var(--ink-mute)', background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer' }}
+            >전체 무시</button>
+          )}
           <span className="cnt">{visible.length}건</span>
           <span style={{ fontSize: 10, color: 'var(--ink-mute)' }}>{open ? '▲' : '▼'}</span>
         </div>
@@ -156,17 +176,24 @@ function CatchupSection({ messages, onJump, uid }) {
 }
 
 function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid }) {
-  const storageKey = uid ? `confirm_dismissed_${uid}` : 'confirm_dismissed';
-  const [dismissed, setDismissed] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem(storageKey) || '[]')); }
-    catch { return new Set(); }
-  });
+  const storageKey = `confirm_dismissed_${uid || 'anon'}`;
+  const [dismissed, setDismissed] = useState(new Set());
+
+  // Reload dismissed set whenever uid (and thus storageKey) becomes available
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      setDismissed(new Set(stored));
+    } catch {
+      setDismissed(new Set());
+    }
+  }, [storageKey]);
 
   const dismiss = useCallback((id) => {
     setDismissed((prev) => {
       const next = new Set(prev);
       next.add(id);
-      localStorage.setItem(storageKey, JSON.stringify([...next]));
+      try { localStorage.setItem(storageKey, JSON.stringify([...next])); } catch {}
       return next;
     });
   }, [storageKey]);
@@ -178,7 +205,7 @@ function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid }) {
     const allIds = [...pending.map((i) => i.id), ...held.map((i) => i.id)];
     const next = new Set([...dismissed, ...allIds]);
     setDismissed(next);
-    localStorage.setItem(storageKey, JSON.stringify([...next]));
+    try { localStorage.setItem(storageKey, JSON.stringify([...next])); } catch {}
   };
 
   return (

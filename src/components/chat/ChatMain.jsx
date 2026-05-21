@@ -33,7 +33,12 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { folders: kbFolders } = useKB(activeProject);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
-  // Callback ref: immediately scrolls to bottom on mount (tab switch), no animation
+  const initialScrollDone = useRef(false);
+
+  // Reset when project changes so initial scroll fires again
+  useEffect(() => { initialScrollDone.current = false; }, [activeProject]);
+
+  // Callback ref: instantly jumps to bottom when chat-scroll div mounts (tab switch)
   const scrollElRef = useCallback((node) => {
     scrollRef.current = node;
     if (node) node.scrollTop = node.scrollHeight;
@@ -51,12 +56,16 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
   const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
 
-  // Smooth scroll only for new incoming messages
+  // Initial load: instant jump. Subsequent new messages: smooth scroll.
   useEffect(() => {
-    if (scrollRef.current) {
+    if (!scrollRef.current || loading) return;
+    if (!initialScrollDone.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      initialScrollDone.current = true;
+    } else {
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
     }
-  }, [messages.length]);
+  }, [messages.length, loading]);
 
   const filteredMessages = useMemo(() => {
     const now = Date.now();
