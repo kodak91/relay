@@ -1621,6 +1621,9 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   align-items: center; justify-content: center;
   color: var(--ink-mute); text-align: center;
 }
+.notion-iframe {
+  flex: 1; width: 100%; border: none; min-height: 0;
+}
 /* Notion token setup */
 .notion-token-btn {
   width: 22px; height: 22px; border-radius: 50%;
