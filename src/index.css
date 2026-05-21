@@ -1558,6 +1558,24 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-2);
   margin: 4px 0; font-size: 13px; color: var(--ink-2); cursor: default;
 }
+/* Notion database view */
+.nb-db-header { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+.nb-db-icon { font-size: 22px; }
+.nb-db-count { font-size: 12px; color: var(--ink-mute); background: var(--surface-3); padding: 2px 8px; border-radius: 999px; }
+.nb-db-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--r-2); }
+.nb-db-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.nb-db-th {
+  padding: 8px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border);
+  text-align: left; font-size: 11px; font-weight: 700; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; position: sticky; top: 0;
+}
+.nb-db-td { padding: 8px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.nb-db-tr:last-child td { border-bottom: 0; }
+.nb-db-tr:hover td { background: var(--hover); }
+.nb-db-empty { color: var(--ink-mute); }
+.nb-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+.nb-tag-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.nb-link { color: var(--accent); text-decoration: underline; font-size: 12px; }
 
 /* File detail overlay */
 .kb-detail-overlay { position: absolute; inset: 0; background: oklch(0.10 0.012 270 / 0.4); backdrop-filter: blur(3px); z-index: 100; display: flex; justify-content: flex-end; }

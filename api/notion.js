@@ -19,16 +19,23 @@ export default async function handler(req, res) {
   };
 
   try {
-    let url;
+    let r;
     if (action === 'page') {
-      url = `${NOTION_API}/pages/${id}`;
+      r = await fetch(`${NOTION_API}/pages/${id}`, { headers });
     } else if (action === 'blocks') {
-      url = `${NOTION_API}/blocks/${id}/children?page_size=100`;
+      r = await fetch(`${NOTION_API}/blocks/${id}/children?page_size=100`, { headers });
+    } else if (action === 'database') {
+      r = await fetch(`${NOTION_API}/databases/${id}`, { headers });
+    } else if (action === 'database_query') {
+      r = await fetch(`${NOTION_API}/databases/${id}/query`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ page_size: 100 }),
+      });
     } else {
       return res.status(400).json({ error: '알 수 없는 action입니다.' });
     }
 
-    const r = await fetch(url, { headers });
     const data = await r.json();
     return res.status(r.status).json(data);
   } catch (e) {

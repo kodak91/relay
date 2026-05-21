@@ -32,6 +32,16 @@ async function notionFetch(action, id, token) {
   return data;
 }
 
+// Raw fetch (returns data without throwing — for auto-detection)
+async function notionFetchRaw(action, id, token) {
+  const res = await fetch('/api/notion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, id, token }),
+  });
+  return res.json();
+}
+
 // ─── Context for token (avoids prop drilling into block renderers) ────────────
 const TokenCtx = createContext('');
 
@@ -51,6 +61,116 @@ function RichText({ items }) {
     if (rt.href) return <a key={i} href={rt.href} target="_blank" rel="noreferrer">{el}</a>;
     return <span key={i}>{el}</span>;
   });
+}
+
+// ─── Database: select color map ──────────────────────────────────────────────
+const SELECT_COLORS = {
+  default: 'oklch(0.92 0.005 80)',
+  gray:    'oklch(0.88 0.005 80)',
+  brown:   'oklch(0.85 0.06 50)',
+  orange:  'oklch(0.88 0.12 55)',
+  yellow:  'oklch(0.92 0.12 85)',
+  green:   'oklch(0.88 0.10 155)',
+  blue:    'oklch(0.88 0.10 245)',
+  purple:  'oklch(0.88 0.10 300)',
+  pink:    'oklch(0.88 0.10 340)',
+  red:     'oklch(0.88 0.12 20)',
+};
+
+function PropValue({ prop }) {
+  if (!prop) return <span className="nb-db-empty">—</span>;
+  switch (prop.type) {
+    case 'title':
+      return <span>{prop.title?.map((r) => r.plain_text).join('') || '—'}</span>;
+    case 'rich_text':
+      return <span>{prop.rich_text?.map((r) => r.plain_text).join('') || '—'}</span>;
+    case 'number':
+      return <span>{prop.number ?? '—'}</span>;
+    case 'select':
+      return prop.select
+        ? <span className="nb-tag" style={{ background: SELECT_COLORS[prop.select.color] || SELECT_COLORS.default }}>{prop.select.name}</span>
+        : <span className="nb-db-empty">—</span>;
+    case 'status':
+      return prop.status
+        ? <span className="nb-tag" style={{ background: SELECT_COLORS[prop.status.color] || SELECT_COLORS.default }}>{prop.status.name}</span>
+        : <span className="nb-db-empty">—</span>;
+    case 'multi_select':
+      return prop.multi_select?.length
+        ? <div className="nb-tag-row">{prop.multi_select.map((s) => <span key={s.id} className="nb-tag" style={{ background: SELECT_COLORS[s.color] || SELECT_COLORS.default }}>{s.name}</span>)}</div>
+        : <span className="nb-db-empty">—</span>;
+    case 'date':
+      return <span>{prop.date?.start || '—'}</span>;
+    case 'checkbox':
+      return <input type="checkbox" checked={!!prop.checkbox} readOnly style={{ cursor: 'default' }} />;
+    case 'url':
+      return prop.url
+        ? <a href={prop.url} target="_blank" rel="noreferrer" className="nb-link">{prop.url}</a>
+        : <span className="nb-db-empty">—</span>;
+    case 'email':
+      return <span>{prop.email || '—'}</span>;
+    case 'phone_number':
+      return <span>{prop.phone_number || '—'}</span>;
+    case 'people':
+      return <span>{prop.people?.map((p) => p.name || p.id).join(', ') || '—'}</span>;
+    case 'formula': {
+      const fv = prop.formula;
+      if (!fv) return <span className="nb-db-empty">—</span>;
+      if (fv.type === 'string') return <span>{fv.string || '—'}</span>;
+      if (fv.type === 'number') return <span>{fv.number ?? '—'}</span>;
+      if (fv.type === 'boolean') return <input type="checkbox" checked={!!fv.boolean} readOnly style={{ cursor: 'default' }} />;
+      if (fv.type === 'date') return <span>{fv.date?.start || '—'}</span>;
+      return <span className="nb-db-empty">—</span>;
+    }
+    default:
+      return <span className="nb-db-empty">—</span>;
+  }
+}
+
+function DatabaseView({ meta, rows }) {
+  const dbTitle = meta.title?.map((r) => r.plain_text).join('') || '데이터베이스';
+  const props = meta.properties || {};
+  // Title column first, then the rest
+  const propKeys = Object.keys(props).sort((a, b) => {
+    if (props[a].type === 'title') return -1;
+    if (props[b].type === 'title') return 1;
+    return 0;
+  });
+
+  return (
+    <div className="nb-body">
+      <div className="nb-db-header">
+        <span className="nb-db-icon">🗄</span>
+        <h1 className="nb-h1" style={{ margin: 0 }}>{dbTitle}</h1>
+        <span className="nb-db-count">{rows.length}행</span>
+      </div>
+      {rows.length === 0 ? (
+        <p style={{ color: 'var(--ink-mute)', fontSize: 13 }}>항목이 없습니다.</p>
+      ) : (
+        <div className="nb-db-wrap">
+          <table className="nb-db-table">
+            <thead>
+              <tr>
+                {propKeys.map((k) => (
+                  <th key={k} className="nb-db-th">{k}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="nb-db-tr">
+                  {propKeys.map((k) => (
+                    <td key={k} className="nb-db-td">
+                      <PropValue prop={row.properties?.[k]} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Toggle block (lazy-fetches children) ────────────────────────────────────
@@ -196,7 +316,10 @@ function NotionBlock({ block }) {
 export default function NotionTab({ projectId, project, updateProject }) {
   const { pages, addPage, deletePage } = useNotionPages(projectId);
   const [activePage, setActivePage] = useState(null);
+  const [viewType, setViewType] = useState('page'); // 'page' | 'database'
   const [blocks, setBlocks] = useState([]);
+  const [databaseMeta, setDatabaseMeta] = useState(null);
+  const [databaseRows, setDatabaseRows] = useState([]);
   const [pageTitle, setPageTitle] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -236,17 +359,36 @@ export default function NotionTab({ projectId, project, updateProject }) {
     setLoading(true);
     setError('');
     setBlocks([]);
+    setDatabaseMeta(null);
+    setDatabaseRows([]);
     setPageTitle('');
 
     try {
-      // Page metadata (title)
-      const pageData = await notionFetch('page', pageId, token);
-      const titleProp = pageData.properties?.title || pageData.properties?.Name;
-      setPageTitle(titleProp?.title?.[0]?.plain_text || page.name);
+      // Auto-detect: try page first, fall back to database
+      let meta = await notionFetchRaw('page', pageId, token);
 
-      // Blocks
-      const blocksData = await notionFetch('blocks', pageId, token);
-      setBlocks(groupBlocks(blocksData.results || []));
+      if (meta.object === 'error') {
+        // Try as database
+        meta = await notionFetchRaw('database', pageId, token);
+        if (meta.object === 'error') throw new Error(meta.message || '페이지/데이터베이스를 불러올 수 없습니다');
+
+        const dbTitle = meta.title?.map((r) => r.plain_text).join('') || page.name;
+        setPageTitle(dbTitle);
+        setDatabaseMeta(meta);
+        setViewType('database');
+
+        const query = await notionFetchRaw('database_query', pageId, token);
+        if (query.object === 'error') throw new Error(query.message);
+        setDatabaseRows(query.results || []);
+      } else {
+        // It's a page — extract title and blocks
+        const titleProp = meta.properties?.title || meta.properties?.Name;
+        setPageTitle(titleProp?.title?.[0]?.plain_text || page.name);
+        setViewType('page');
+
+        const blocksData = await notionFetch('blocks', pageId, token);
+        setBlocks(groupBlocks(blocksData.results || []));
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -423,7 +565,10 @@ export default function NotionTab({ projectId, project, updateProject }) {
                   </div>
                 </div>
               )}
-              {token && !loading && !error && blocks.length > 0 && (
+              {token && !loading && !error && viewType === 'database' && databaseMeta && (
+                <DatabaseView meta={databaseMeta} rows={databaseRows} />
+              )}
+              {token && !loading && !error && viewType === 'page' && blocks.length > 0 && (
                 <TokenCtx.Provider value={token}>
                   <div className="nb-body">
                     {blocks.map((block, i) => (
@@ -432,7 +577,7 @@ export default function NotionTab({ projectId, project, updateProject }) {
                   </div>
                 </TokenCtx.Provider>
               )}
-              {token && !loading && !error && blocks.length === 0 && !loading && (
+              {token && !loading && !error && viewType === 'page' && blocks.length === 0 && (
                 <div className="notion-content-empty" style={{ color: 'var(--ink-mute)' }}>페이지가 비어있습니다.</div>
               )}
             </div>
