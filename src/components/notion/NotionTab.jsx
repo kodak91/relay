@@ -1,10 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNotionPages } from '../../hooks/useNotionPages';
 
+// iframe embed code 또는 일반 URL에서 src 추출
+function parseEmbedInput(input) {
+  const trimmed = input.trim();
+  const srcMatch = trimmed.match(/src=["']([^"']+)["']/);
+  if (srcMatch) return srcMatch[1];
+  return trimmed;
+}
+
 export default function NotionTab({ projectId }) {
   const { pages, addPage, deletePage } = useNotionPages(projectId);
   const [activePage, setActivePage] = useState(null);
-  const [addUrl, setAddUrl] = useState('');
+  const [addInput, setAddInput] = useState('');
   const [addName, setAddName] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -14,10 +22,11 @@ export default function NotionTab({ projectId }) {
   }, [pages, activePage]);
 
   const handleAdd = async () => {
-    if (!addUrl.trim() || adding) return;
+    const embedUrl = parseEmbedInput(addInput);
+    if (!embedUrl || adding) return;
     setAdding(true);
-    await addPage(addUrl, addName);
-    setAddUrl(''); setAddName(''); setShowAdd(false);
+    await addPage(embedUrl, addName);
+    setAddInput(''); setAddName(''); setShowAdd(false);
     setAdding(false);
   };
 
@@ -26,6 +35,9 @@ export default function NotionTab({ projectId }) {
     await deletePage(page.id);
     if (activePage?.id === page.id) setActivePage(null);
   };
+
+  // 임베드 URL에서 원본 Notion 페이지 URL 추정 (ebd// 경로 제거)
+  const getNotionUrl = (url) => url?.replace(/\/ebd\/\//, '/') || url;
 
   return (
     <div className="notion-main">
@@ -38,12 +50,13 @@ export default function NotionTab({ projectId }) {
 
         {showAdd && (
           <div className="notion-add-form">
-            <input
+            <textarea
               autoFocus
-              placeholder="Notion 공개 URL (웹에 게시하기)"
-              value={addUrl}
-              onChange={(e) => setAddUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+              rows={3}
+              placeholder={'임베드 코드 또는 URL 붙여넣기\n\n예) <iframe src="https://..." />'}
+              value={addInput}
+              onChange={(e) => setAddInput(e.target.value)}
+              style={{ resize: 'none', fontSize: 12, fontFamily: 'var(--font-mono)' }}
             />
             <input
               placeholder="표시 이름 (선택)"
@@ -51,14 +64,14 @@ export default function NotionTab({ projectId }) {
               onChange={(e) => setAddName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             />
-            <div style={{ fontSize: 11, color: 'var(--ink-mute)', lineHeight: 1.5 }}>
-              Notion 페이지 → 공유 → 웹에 게시하기 → 생성된 링크 붙여넣기
+            <div style={{ fontSize: 11, color: 'var(--ink-mute)', lineHeight: 1.6 }}>
+              Notion 페이지 → 공유 → 웹에 게시 → <b>임베드 코드 복사</b> 후 붙여넣기
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button className="btn accent sm" onClick={handleAdd} disabled={!addUrl.trim() || adding}>
+              <button className="btn accent sm" onClick={handleAdd} disabled={!addInput.trim() || adding}>
                 {adding ? '…' : '추가'}
               </button>
-              <button className="btn sm" onClick={() => { setShowAdd(false); setAddUrl(''); setAddName(''); }}>취소</button>
+              <button className="btn sm" onClick={() => { setShowAdd(false); setAddInput(''); setAddName(''); }}>취소</button>
             </div>
           </div>
         )}
@@ -66,10 +79,10 @@ export default function NotionTab({ projectId }) {
         {pages.length === 0 && !showAdd && (
           <div className="notion-empty-list">
             <div style={{ fontSize: 32, marginBottom: 10 }}>📄</div>
-            <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.6 }}>
-              Notion에서 페이지를<br />
-              <b>공유 → 웹에 게시하기</b>로<br />
-              공개 URL을 생성 후 추가하세요
+            <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.7 }}>
+              Notion 페이지 → 공유<br />
+              → 웹에 게시 → <b>임베드 코드</b><br />
+              를 복사해서 추가하세요
             </div>
             <button className="btn accent sm" onClick={() => setShowAdd(true)}>+ 페이지 추가</button>
           </div>
@@ -102,7 +115,7 @@ export default function NotionTab({ projectId }) {
               <span className="notion-viewer-title">📄 {activePage.name}</span>
               <a
                 className="btn sm accent"
-                href={activePage.url}
+                href={getNotionUrl(activePage.url)}
                 target="_blank"
                 rel="noreferrer"
                 style={{ fontSize: 12 }}
@@ -115,7 +128,7 @@ export default function NotionTab({ projectId }) {
               src={activePage.url}
               className="notion-iframe"
               title={activePage.name}
-              sandbox="allow-scripts allow-same-origin allow-popups"
+              allowFullScreen
             />
           </>
         )}
