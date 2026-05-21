@@ -12,6 +12,8 @@ import MemberManagementModal from './MemberManagementModal';
 import KBTab from '../kb/KBTab';
 import KBSaveBanner from '../kb/KBSaveBanner';
 import NotionTab from '../notion/NotionTab';
+import TicketTab from '../tickets/TicketTab';
+import { useTickets } from '../../hooks/useTickets';
 import { uploadFile, IMAGE_TYPES, formatFileSize } from '../../lib/uploadFile';
 import { postToSlack } from '../../lib/slack';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
@@ -26,6 +28,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { activeProject, chatTab, setChatTab, activeTag, user } = useAppStore();
   const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
   const { projects, updateProject, approveMember, rejectMember, removeMember } = useProjects(user?.uid);
+  const { tickets, createTicket, updateTicket } = useTickets(activeProject);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -138,8 +141,34 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     await updateMessageField(activeProject, mid, { summary });
   };
 
-  const handleSend = async (msgData) => {
+  const handleSend = async (rawMsgData) => {
     if (!activeProject) return;
+    let msgData = rawMsgData;
+
+    // Ticket: create Firestore doc first to get ticketCode + ID for the chat message
+    if (msgData.type === 'ticket') {
+      const ticketCode = `${activeProjectData?.pf || 'T'}-${String(tickets.length + 1).padStart(3, '0')}`;
+      try {
+        const docRef = await createTicket({
+          ticketCode,
+          title: msgData.ticketTitle || msgData.text,
+          description: msgData.ticketDesc || '',
+          assigneeUid: msgData.assigneeUid || null,
+          assigneeName: msgData.assigneeName || null,
+          dueDate: msgData.dueDate || null,
+          priority: msgData.ticketPriority || '보통',
+          status: '열림',
+          parentId: null,
+          createdBy: user?.uid,
+          x: 80 + Math.random() * 500,
+          y: 80 + Math.random() * 150,
+        });
+        msgData = { ...msgData, ticketId: docRef?.id || null, ticketCode };
+      } catch (e) {
+        console.warn('Ticket create:', e.message);
+      }
+    }
+
     await sendMessage(activeProject, {
       ...msgData,
       senderName: user?.name || '나',
@@ -266,6 +295,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
             { id: 'chat', icon: '💬', label: '채팅', count: messages.length },
             { id: 'kb', icon: '📚', label: 'KB', count: null },
             { id: 'notion', icon: '📄', label: 'Notion', count: null },
+            { id: 'tickets', icon: '🎫', label: '워크트리', count: tickets.length || null },
             { id: 'tasks', icon: '📋', label: '태스크' },
           ].map((tab) => (
             <button key={tab.id} className={'chat-tab' + (chatTab === tab.id ? ' on' : '')} onClick={() => setChatTab(tab.id)}>
@@ -320,8 +350,17 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           project={activeProjectData}
           updateProject={(fields) => updateProject(activeProject, fields)}
         />
+      ) : chatTab === 'tickets' ? (
+        <TicketTab
+          projectId={activeProject}
+          project={activeProjectData}
+          tickets={tickets}
+          createTicket={createTicket}
+          updateTicket={updateTicket}
+          user={user}
+        />
       ) : chatTab === 'tasks' ? (
-        <TasksTab projectId={activeProject} project={activeProjectData} />
+        <TasksTab projectId={activeProject} project={activeProjectData} tickets={tickets} />
       ) : (
         <>
           <TagBar messages={messages} />

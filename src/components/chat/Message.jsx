@@ -598,6 +598,44 @@ function AIMsg({ m }) {
   );
 }
 
+function TicketMsg({ m, onDelete }) {
+  const pInfo = {
+    '긴급': 'oklch(0.52 0.18 25)',
+    '높음': 'oklch(0.52 0.16 60)',
+    '보통': 'oklch(0.52 0.08 260)',
+    '낮음': 'var(--ink-3)',
+  };
+  return (
+    <div className="msg">
+      <MsgActions m={m} onDelete={() => onDelete(m.id)} />
+      <Avatar name={m.senderName} />
+      <div style={{ flex: 1 }}>
+        <div className="msg-head">
+          <span className="name">{m.senderName}</span>
+          <span className="role">{m.senderRole}</span>
+          <span className="ts">{m.ts}</span>
+        </div>
+        <div className="ticket-card">
+          <div className="tc-hd">
+            <span className="tc-code">{m.ticketCode || '티켓'}</span>
+            <span className="tc-priority" style={{ color: pInfo[m.ticketPriority || '보통'] }}>
+              {m.ticketPriority || '보통'}
+            </span>
+            <span className="tc-badge">🎫 티켓 생성</span>
+          </div>
+          <div className="tc-title">{m.ticketTitle || m.text}</div>
+          {m.ticketDesc && <div className="tc-desc">{m.ticketDesc}</div>}
+          <div className="tc-ft">
+            {m.assigneeName && <span>담당 @{m.assigneeName}</span>}
+            {m.dueDate && <span>📅 {m.dueDate}</span>}
+            <span style={{ color: 'oklch(0.52 0.19 260)' }}>● 열림</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AssignMsg({ m, onDelete }) {
   return (
     <div className="msg">
@@ -657,6 +695,7 @@ export default function Message({ m, isGrouped, handlers }) {
     case 'update':    return <UpdateMsg {...props} />;
     case 'announce':  return <AnnounceMsg {...props} />;
     case 'meeting':   return <MeetingMsg {...props} />;
+    case 'ticket':    return <TicketMsg m={m} onDelete={deleteMsg} />;
     case 'assign':    return <AssignMsg m={m} onDelete={deleteMsg} />;
     case 'image':     return <ImageMsg m={m} />;
     case 'file':      return <FileMsg m={m} />;

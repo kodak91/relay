@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTeamTasks, taskDate } from '../../hooks/useTeamTasks';
 
 const today = new Date().toISOString().slice(0, 10);
@@ -119,8 +119,44 @@ function Dashboard({ memberTasks, members }) {
   );
 }
 
-function TaskRow({ task, onToggle }) {
+function TicketPicker({ tickets, onLink }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  const filtered = tickets.filter((t) =>
+    t.ticketCode.toLowerCase().includes(q.toLowerCase()) ||
+    t.title.toLowerCase().includes(q.toLowerCase())
+  ).slice(0, 8);
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button className="tt-link-btn" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }} title="티켓 연결">🔗</button>
+      {open && (
+        <div className="tt-ticket-picker" onClick={(e) => e.stopPropagation()}>
+          <input className="tt-picker-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="티켓 검색…" autoFocus />
+          {filtered.length === 0
+            ? <div className="tt-picker-empty">없음</div>
+            : filtered.map((t) => (
+              <button key={t.id} className="tt-picker-item" onClick={() => { onLink(t.id); setOpen(false); setQ(''); }}>
+                <span className="tt-picker-code">{t.ticketCode}</span>
+                <span className="tt-picker-name">{t.title}</span>
+              </button>
+            ))
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TaskRow({ task, onToggle, tickets = [], onLinkTicket }) {
   const isOverdue = !task.done && taskDate(task) < today;
+  const ticket = tickets.find((t) => t.id === task.ticketId);
   return (
     <div
       className={'tt-task-row' + (task.done ? ' done' : '') + (isOverdue ? ' overdue' : '')}
@@ -129,11 +165,22 @@ function TaskRow({ task, onToggle }) {
       <span className="tt-check">{task.done ? '✓' : ''}</span>
       <span className="tt-task-title">{task.title}</span>
       {isOverdue && <span className="tt-overdue-tag">지연</span>}
+      {ticket ? (
+        <span
+          className="tt-ticket-badge"
+          title={ticket.title}
+          onClick={(e) => { e.stopPropagation(); onLinkTicket(task.id, null); }}
+        >
+          {ticket.ticketCode} ✕
+        </span>
+      ) : tickets.length > 0 && (
+        <TicketPicker tickets={tickets} onLink={(ticketId) => onLinkTicket(task.id, ticketId)} />
+      )}
     </div>
   );
 }
 
-function MemberColumn({ member, tasks, onToggle }) {
+function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets }) {
   const [showHistory, setShowHistory] = useState(false);
 
   const todayTasks = useMemo(() => tasks.filter((t) => taskDate(t) === today), [tasks]);
@@ -173,7 +220,7 @@ function MemberColumn({ member, tasks, onToggle }) {
         {todayTasks.length === 0
           ? <div className="tt-empty">오늘 태스크 없음</div>
           : todayTasks.map((t) => (
-            <TaskRow key={t.id} task={t} onToggle={(id, done) => onToggle(member.uid, id, done)} />
+            <TaskRow key={t.id} task={t} tickets={tickets} onToggle={(id, done) => onToggle(member.uid, id, done)} onLinkTicket={(taskId, ticketId) => onUpdateTask(taskId, { ticketId: ticketId || null })} />
           ))
         }
       </div>
@@ -183,7 +230,7 @@ function MemberColumn({ member, tasks, onToggle }) {
           <div className="tt-sec-label overdue">지연 {overdueTasks.length}건</div>
           <div className="tt-task-list">
             {overdueTasks.map((t) => (
-              <TaskRow key={t.id} task={t} onToggle={(id, done) => onToggle(member.uid, id, done)} />
+              <TaskRow key={t.id} task={t} tickets={tickets} onToggle={(id, done) => onToggle(member.uid, id, done)} onLinkTicket={(taskId, ticketId) => onUpdateTask(taskId, { ticketId: ticketId || null })} />
             ))}
           </div>
         </>
@@ -215,9 +262,9 @@ function MemberColumn({ member, tasks, onToggle }) {
   );
 }
 
-export default function TasksTab({ projectId, project }) {
+export default function TasksTab({ projectId, project, tickets = [] }) {
   const members = useMemo(() => (project?.members || []).filter((m) => m.uid), [project]);
-  const { memberTasks, toggleTask } = useTeamTasks(members);
+  const { memberTasks, toggleTask, updateTask } = useTeamTasks(members);
 
   return (
     <div className="tt-root">
@@ -236,6 +283,8 @@ export default function TasksTab({ projectId, project }) {
               member={m}
               tasks={memberTasks[m.uid] || []}
               onToggle={toggleTask}
+              onUpdateTask={(taskId, fields) => updateTask(m.uid, taskId, fields)}
+              tickets={tickets}
             />
           ))
         )}

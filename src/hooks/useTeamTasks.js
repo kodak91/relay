@@ -29,5 +29,9 @@ export function useTeamTasks(members) {
     await updateDoc(doc(db, 'users', uid, 'tasks', taskId), { done });
   };
 
-  return { memberTasks, toggleTask };
+  const updateTask = async (uid, taskId, fields) => {
+    await updateDoc(doc(db, 'users', uid, 'tasks', taskId), fields);
+  };
+
+  return { memberTasks, toggleTask, updateTask };
 }

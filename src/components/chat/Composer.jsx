@@ -13,6 +13,7 @@ const SLASH_MAP = {
   '/공지': 'announce',
   '/회의': 'meeting',
   '/할당': 'assign',
+  '/티켓': 'ticket',
 };
 
 const MESSAGE_TYPES = [
@@ -25,6 +26,7 @@ const MESSAGE_TYPES = [
   { id: 'casual',   label: '$잡담',  icon: '☕', slash: '' },
   { id: 'meeting',  label: '/회의',  icon: '📋', slash: '/회의' },
   { id: 'assign',   label: '/할당',  icon: '📌', slash: '/할당' },
+  { id: 'ticket',   label: '/티켓',  icon: '🎫', slash: '/티켓' },
 ];
 
 function DecisionBuilder({ title, setTitle, options, setOptions }) {
@@ -138,6 +140,29 @@ function VoteBuilder({ title, setTitle, options, setOptions }) {
   );
 }
 
+function TicketBuilder({ members, title, setTitle, desc, setDesc, assigneeUid, setAssigneeUid, due, setDue, priority, setPriority }) {
+  const inputStyle = { width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '6px 10px', fontSize: 13, background: 'var(--surface-2)', outline: 'none', boxSizing: 'border-box', fontFamily: 'var(--font-sans)', color: 'var(--ink)' };
+  return (
+    <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span>🎫</span> 티켓 생성
+      </div>
+      <input style={{ ...inputStyle, marginBottom: 8 }} placeholder="티켓 제목 *" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+      <textarea style={{ ...inputStyle, marginBottom: 8, resize: 'none' }} placeholder="설명 (선택)" value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <select style={{ ...inputStyle, flex: 1 }} value={priority} onChange={(e) => setPriority(e.target.value)}>
+          {['낮음', '보통', '높음', '긴급'].map((p) => <option key={p}>{p}</option>)}
+        </select>
+        <select style={{ ...inputStyle, flex: 1 }} value={assigneeUid} onChange={(e) => setAssigneeUid(e.target.value)}>
+          <option value="">담당자 없음</option>
+          {(members || []).filter((m) => m.uid).map((m) => <option key={m.uid} value={m.uid}>{m.name}</option>)}
+        </select>
+        <input type="date" style={{ ...inputStyle, flex: 1 }} value={due} onChange={(e) => setDue(e.target.value)} />
+      </div>
+    </div>
+  );
+}
+
 export default function Composer({ onSend, onFileSelect, fileInputRef, members = [] }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
@@ -154,6 +179,11 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
   const [voteOptions, setVoteOptions] = useState(['', '']);
   const [assignee, setAssignee] = useState(null);
   const [assignTaskText, setAssignTaskText] = useState('');
+  const [ticketTitle, setTicketTitle] = useState('');
+  const [ticketDesc, setTicketDesc] = useState('');
+  const [ticketAssigneeUid, setTicketAssigneeUid] = useState('');
+  const [ticketDue, setTicketDue] = useState('');
+  const [ticketPriority, setTicketPriority] = useState('보통');
 
   // Refs to avoid stale closures in editor callbacks
   const onEnterRef = useRef(null);
@@ -165,6 +195,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
   const isDecision = type === 'decision';
   const isVote = type === 'vote';
   const isApproval = type === 'approval';
+  const isTicket = type === 'ticket';
   const startsDoubleSlash = text.startsWith('//');
   const showAccentSend = type !== 'text' && type !== 'casual';
 
@@ -257,6 +288,24 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
   const isAssign = type === 'assign';
 
   const handleSend = () => {
+    if (isTicket) {
+      if (!ticketTitle.trim()) return;
+      const assigneeMember = members.find((m) => m.uid === ticketAssigneeUid);
+      onSend({
+        type: 'ticket',
+        text: ticketTitle.trim(),
+        ticketTitle: ticketTitle.trim(),
+        ticketDesc: ticketDesc.trim(),
+        assigneeUid: ticketAssigneeUid || null,
+        assigneeName: assigneeMember?.name || null,
+        dueDate: ticketDue || null,
+        ticketPriority,
+        tags: [],
+      });
+      setTicketTitle(''); setTicketDesc(''); setTicketAssigneeUid(''); setTicketDue(''); setTicketPriority('보통');
+      setType('text');
+      return;
+    }
     if (isAssign) {
       if (!assignee || !assignTaskText.trim()) return;
       onSend({
@@ -358,6 +407,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
     if (t !== 'decision') { setDecisionTitle(''); setDecisionOptions(['', '']); }
     if (t !== 'vote') { setVoteTitle(''); setVoteOptions(['', '']); }
     if (t !== 'assign') { setAssignee(null); setAssignTaskText(''); }
+    if (t !== 'ticket') { setTicketTitle(''); setTicketDesc(''); setTicketAssigneeUid(''); setTicketDue(''); setTicketPriority('보통'); }
   };
 
   // Update refs every render so editor callbacks always see fresh state
@@ -373,7 +423,9 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
   };
 
   const tags = text.match(/#\S+/g) || [];
-  const canSend = isAssign
+  const canSend = isTicket
+    ? ticketTitle.trim()
+    : isAssign
     ? (assignee && assignTaskText.trim())
     : isDecision
     ? (decisionTitle.trim() && decisionOptions.filter((o) => o.trim()).length >= 2)
@@ -409,6 +461,17 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
           />
         )}
 
+        {isTicket && (
+          <TicketBuilder
+            members={members}
+            title={ticketTitle} setTitle={setTicketTitle}
+            desc={ticketDesc} setDesc={setTicketDesc}
+            assigneeUid={ticketAssigneeUid} setAssigneeUid={setTicketAssigneeUid}
+            due={ticketDue} setDue={setTicketDue}
+            priority={ticketPriority} setPriority={setTicketPriority}
+          />
+        )}
+
         {isCasual && !isDecision && !isVote && (
           <div className="casual-banner">
             <span className="dot" /> 잡담 모드 · 이 메시지는 <b>1시간 뒤 자동 삭제</b>됩니다
@@ -433,7 +496,7 @@ export default function Composer({ onSend, onFileSelect, fileInputRef, members =
           <div className="tags-mini">{tags.map((t, i) => <span key={i} className="tag">{t}</span>)}</div>
         )}
 
-        {!isDecision && !isVote && !isAssign && (
+        {!isDecision && !isVote && !isAssign && !isTicket && (
           <div className="ta-wrap">
             <EditorContent editor={editor} />
             <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
