@@ -331,7 +331,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           {[
             { id: 'chat', icon: '💬', label: '채팅', count: messages.length },
             { id: 'kb', icon: '📚', label: 'KB', count: null },
-            { id: 'notion', icon: '📄', label: 'Notion', count: null },
+            { id: 'notion', icon: '🔖', label: '북마크', count: null },
             { id: 'tickets', icon: '🎫', label: '워크트리', count: tickets.length || null },
             { id: 'tasks', icon: '📋', label: '태스크' },
           ].map((tab) => (
