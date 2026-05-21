@@ -11,6 +11,7 @@ import TasksTab from '../tasks/TasksTab';
 import MemberManagementModal from './MemberManagementModal';
 import KBTab from '../kb/KBTab';
 import KBSaveBanner from '../kb/KBSaveBanner';
+import MeetingModal from './MeetingModal';
 import NotionTab from '../notion/NotionTab';
 import TicketTab from '../tickets/TicketTab';
 import { useTickets } from '../../hooks/useTickets';
@@ -53,6 +54,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [showMemberModal, setShowMemberModal] = useState(false);
   const [pendingKBSave, setPendingKBSave] = useState(null); // { files, selectedFolderId }
+  const [showMeeting, setShowMeeting] = useState(false);
+  const [meetingInitialTitle, setMeetingInitialTitle] = useState('');
 
   const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
 
@@ -155,6 +158,24 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
   const saveMeetingSummary = async (mid, summary) => {
     await updateMessageField(activeProject, mid, { summary });
+  };
+
+  const handleOpenMeeting = (title = '') => {
+    setMeetingInitialTitle(title);
+    setShowMeeting(true);
+  };
+
+  const handlePostMeeting = async (meetingData) => {
+    await handleSend({
+      type: 'meeting',
+      text: meetingData.meetingTitle,
+      agenda: meetingData.agenda,
+      participants: meetingData.participants,
+      transcript: meetingData.transcript,
+      minutes: meetingData.minutes,
+      duration: meetingData.duration,
+      tags: [],
+    });
   };
 
   const handleSend = async (rawMsgData) => {
@@ -358,6 +379,15 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         />
       )}
 
+      <MeetingModal
+        open={showMeeting}
+        onClose={() => setShowMeeting(false)}
+        onPost={handlePostMeeting}
+        members={activeProjectData?.members || []}
+        initialTitle={meetingInitialTitle}
+        user={user}
+      />
+
       {chatTab === 'kb' ? (
         <KBTab projectId={activeProject} />
       ) : chatTab === 'notion' ? (
@@ -426,6 +456,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           <Composer
             onSend={handleSend}
             onFileUpload={handleFiles}
+            onOpenMeeting={handleOpenMeeting}
             members={activeProjectData?.members || []}
             kbFolders={kbFolders}
           />

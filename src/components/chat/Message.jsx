@@ -498,22 +498,17 @@ function AnnounceMsg({ m, onCollapse, onDelete }) {
   );
 }
 
-function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onSaveSummary, onDelete, senderName }) {
-  const [summarizing, setSummarizing] = useState(false);
+function fmtDuration(s) {
+  if (!s) return '';
+  const m = Math.floor(s / 60).toString().padStart(2, '0');
+  const ss = (s % 60).toString().padStart(2, '0');
+  return `${m}:${ss}`;
+}
 
-  const handleSummarize = async () => {
-    setSummarizing(true);
-    try {
-      const threadText = (m.thread || []).map((t) => `${t.senderName || t.from}: ${t.text}`).join('\n');
-      const prompt = `다음은 팀 회의 내용입니다. 아래 항목으로 정리해주세요:\n\n회의 제목: ${m.text || '(제목 없음)'}\n\n발언 내용:\n${threadText || '(발언 없음)'}\n\n아래 형식으로 출력해주세요:\n\n**안건 정리**\n- \n\n**결정이 필요한 사항**\n- \n\n**확정된 사항**\n- \n\n**회의 요약**\n(2~3문장)\n\n**회의 문화 평가**\n점수: X/100점\n- 상사에 대한 말투:\n- 지적·대들기 여부:\n- 전반적인 회의 문화:`;
-      const result = await claudeComplete(prompt, '당신은 팀 업무 관리 AI입니다. 간결하고 명확하게 한국어로 답변하세요.');
-      onSaveSummary(m.id, result);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setSummarizing(false);
-    }
-  };
+function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onSaveSummary, onDelete, senderName }) {
+  const [showFull, setShowFull] = useState(false);
+  const mins = m.minutes;
+  const hasMinutes = mins && (mins.decisions?.length || mins.actions?.length || mins.risks?.length || mins.summary);
 
   return (
     <div className="msg">
@@ -527,15 +522,74 @@ function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, 
         </div>
         <div className="meeting-card">
           <div className="meeting-header">
-            <span>📋 회의</span>
+            <span>📋 회의록</span>
+            {m.duration > 0 && <span className="meeting-meta mono">{fmtDuration(m.duration)}</span>}
+            {m.participants?.length > 0 && <span className="meeting-meta">참석 {m.participants.length}명</span>}
           </div>
           <div className="meeting-title">{m.text}</div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <button className={'btn sm' + (summarizing ? ' minor' : ' accent')} onClick={handleSummarize} disabled={summarizing}>
-              {summarizing ? <><span className="ai-typing"><span /><span /><span /></span> 요약 중…</> : '✦ AI 회의 요약'}
-            </button>
-          </div>
-          {m.summary && (
+
+          {m.agenda?.length > 0 && (
+            <div className="meeting-agenda">
+              {m.agenda.map((a, i) => <span key={i} className="meeting-agenda-item">{i + 1}. {a}</span>)}
+            </div>
+          )}
+
+          {hasMinutes && (
+            <>
+              {mins.summary && (
+                <div className="meeting-summary-text">{mins.summary}</div>
+              )}
+              <button className="meeting-toggle-btn" onClick={() => setShowFull((v) => !v)}>
+                {showFull ? '▲ 접기' : `▼ 상세 회의록 보기 (결정 ${mins.decisions?.length || 0}건 · 액션 ${mins.actions?.length || 0}건)`}
+              </button>
+              {showFull && (
+                <div className="meeting-details">
+                  {mins.decisions?.length > 0 && (
+                    <div className="meeting-section">
+                      <div className="meeting-section-title">📌 핵심 결정</div>
+                      {mins.decisions.map((d, i) => (
+                        <div key={i} className="meeting-decision">
+                          <span className="meeting-dec-num">{i + 1}</span>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>{d.text}</div>
+                            {d.detail && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>{d.detail}</div>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {mins.actions?.length > 0 && (
+                    <div className="meeting-section">
+                      <div className="meeting-section-title">✅ 액션 아이템</div>
+                      {mins.actions.map((a, i) => (
+                        <div key={i} className="meeting-action">
+                          <span className="meeting-action-dot" />
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: 13 }}>{a.text}</span>
+                            {a.assigneeName && <span className="meeting-assignee">{a.assigneeName}</span>}
+                          </div>
+                          {a.due && <span className="meeting-due mono">📅 {a.due}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {mins.risks?.length > 0 && (
+                    <div className="meeting-section">
+                      <div className="meeting-section-title">⚠ 리스크</div>
+                      {mins.risks.map((r, i) => (
+                        <div key={i} className="meeting-risk">
+                          <b>{r.text}</b>
+                          {r.detail && <div style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 2 }}>{r.detail}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {m.summary && !hasMinutes && (
             <div className="meeting-summary md-content">
               <ReactMarkdown components={MD_LINK}>{m.summary}</ReactMarkdown>
             </div>

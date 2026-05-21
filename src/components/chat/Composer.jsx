@@ -226,7 +226,7 @@ function KBSuggestions({ text, folders, selectedId, onSelect, showAll, onToggleA
   );
 }
 
-export default function Composer({ onSend, onFileUpload, members = [], kbFolders = [] }) {
+export default function Composer({ onSend, onFileUpload, onOpenMeeting, members = [], kbFolders = [] }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
   const [importance, setImportance] = useState(0);
@@ -374,7 +374,18 @@ export default function Composer({ onSend, onFileUpload, members = [], kbFolders
 
   const isAssign = type === 'assign';
 
+  const isMeeting = type === 'meeting';
+
   const handleSend = () => {
+    // Meeting: open meeting modal instead of sending a plain message
+    if (isMeeting) {
+      onOpenMeeting?.(text.trim());
+      editor?.commands.clearContent();
+      setText('');
+      setType('text');
+      return;
+    }
+
     // 62: dispatch staged files first
     if (pendingFiles.length > 0) {
       onFileUpload?.(pendingFiles.map((f) => f.file), selectedKBFolderId);
@@ -516,7 +527,7 @@ export default function Composer({ onSend, onFileUpload, members = [], kbFolders
   };
 
   const tags = text.match(/#\S+/g) || [];
-  const canSend = pendingFiles.length > 0 || (isTicket
+  const canSend = isMeeting || pendingFiles.length > 0 || (isTicket
     ? ticketTitle.trim()
     : isAssign
     ? (assignee && assignTaskText.trim())
@@ -573,6 +584,11 @@ export default function Composer({ onSend, onFileUpload, members = [], kbFolders
         {isApproval && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'var(--amber-bg)', borderBottom: '1px solid var(--amber-line)', fontSize: 11, fontWeight: 700, color: 'oklch(0.42 0.13 70)' }}>
             ✓ 컨펌 요청 <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>— 전송하면 컨펌 대기로 이동합니다</span>
+          </div>
+        )}
+        {isMeeting && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'var(--accent-soft)', borderBottom: '1px solid var(--border)', fontSize: 11, fontWeight: 700, color: 'var(--accent)' }}>
+            📋 회의 모드 <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>— 회의 제목을 입력하고 보내기를 누르면 회의가 시작됩니다</span>
           </div>
         )}
         {startsDoubleSlash && !polishing && !isDecision && !isVote && (
