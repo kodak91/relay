@@ -156,7 +156,9 @@ function TicketPicker({ tickets, onLink }) {
 
 function TaskRow({ task, onToggle, tickets = [], onLinkTicket }) {
   const isOverdue = !task.done && taskDate(task) < today;
-  const ticket = tickets.find((t) => t.id === task.ticketId);
+  // Use saved ticketCode on the task as fallback so sidebar doesn't need the tickets array
+  const ticket = tickets.find((t) => t.id === task.ticketId)
+    || (task.ticketCode ? { id: task.ticketId, ticketCode: task.ticketCode, title: task.ticketTitle || '' } : null);
   return (
     <div
       className={'tt-task-row' + (task.done ? ' done' : '') + (isOverdue ? ' overdue' : '')}
@@ -220,7 +222,12 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets }) {
         {todayTasks.length === 0
           ? <div className="tt-empty">오늘 태스크 없음</div>
           : todayTasks.map((t) => (
-            <TaskRow key={t.id} task={t} tickets={tickets} onToggle={(id, done) => onToggle(member.uid, id, done)} onLinkTicket={(taskId, ticketId) => onUpdateTask(taskId, { ticketId: ticketId || null })} />
+            <TaskRow key={t.id} task={t} tickets={tickets} onToggle={(id, done) => onToggle(member.uid, id, done)} onLinkTicket={(taskId, ticketId) => {
+                const lk = tickets.find((tk) => tk.id === ticketId);
+                onUpdateTask(taskId, ticketId
+                  ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null }
+                  : { ticketId: null, ticketCode: null, ticketTitle: null });
+              }} />
           ))
         }
       </div>
@@ -230,7 +237,12 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets }) {
           <div className="tt-sec-label overdue">지연 {overdueTasks.length}건</div>
           <div className="tt-task-list">
             {overdueTasks.map((t) => (
-              <TaskRow key={t.id} task={t} tickets={tickets} onToggle={(id, done) => onToggle(member.uid, id, done)} onLinkTicket={(taskId, ticketId) => onUpdateTask(taskId, { ticketId: ticketId || null })} />
+              <TaskRow key={t.id} task={t} tickets={tickets} onToggle={(id, done) => onToggle(member.uid, id, done)} onLinkTicket={(taskId, ticketId) => {
+                const lk = tickets.find((tk) => tk.id === ticketId);
+                onUpdateTask(taskId, ticketId
+                  ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null }
+                  : { ticketId: null, ticketCode: null, ticketTitle: null });
+              }} />
             ))}
           </div>
         </>

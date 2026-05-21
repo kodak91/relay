@@ -287,6 +287,7 @@ function TaskSidebar({ uid }) {
           <div key={t.id} className="task-row overdue" onClick={() => toggleTask(t.id, true)}>
             <div className="task-check" />
             <span className="task-text" style={{ flex: 1 }}>{t.title}</span>
+            {t.ticketCode && <span className="task-ticket-badge" title={t.ticketTitle || t.ticketCode}>{t.ticketCode}</span>}
             {t.date && <span className="task-date">{t.date.slice(5)}</span>}
             {t.assignedBy && <span className="task-assigned">by {t.assignedBy}</span>}
             <button style={{ border: 0, background: 'transparent', color: 'var(--ink-mute)', fontSize: 14, cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
@@ -299,6 +300,7 @@ function TaskSidebar({ uid }) {
           <div key={t.id} className="task-row" onClick={() => toggleTask(t.id, true)}>
             <div className="task-check" />
             <span className="task-text" style={{ flex: 1 }}>{t.title}</span>
+            {t.ticketCode && <span className="task-ticket-badge" title={t.ticketTitle || t.ticketCode}>{t.ticketCode}</span>}
             {t.assignedBy && <span className="task-assigned">by {t.assignedBy}</span>}
             <button style={{ border: 0, background: 'transparent', color: 'var(--ink-mute)', fontSize: 14, cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
               onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>×</button>
@@ -315,6 +317,7 @@ function TaskSidebar({ uid }) {
               <div key={t.id} className="task-row done" onClick={() => toggleTask(t.id, false)}>
                 <div className="task-check done-check" />
                 <span className="task-text" style={{ flex: 1 }}>{t.title}</span>
+                {t.ticketCode && <span className="task-ticket-badge done" title={t.ticketTitle || t.ticketCode}>{t.ticketCode}</span>}
                 <button style={{ border: 0, background: 'transparent', color: 'var(--ink-mute)', fontSize: 14, cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
                   onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>×</button>
               </div>

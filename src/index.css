@@ -2025,6 +2025,15 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 .tt-hist-item:not(.done) { color: var(--ink); }
 .tt-check-sm { font-size: 10px; flex-shrink: 0; width: 14px; text-align: center; }
 
+/* ── Ticket badge (shared: TasksTab + RightSidebar) ─────────────────────── */
+.task-ticket-badge {
+  font-size: 10px; font-weight: 700; font-family: var(--font-mono);
+  color: oklch(0.52 0.19 260); background: oklch(0.96 0.04 260);
+  border-radius: 4px; padding: 1px 5px; flex-shrink: 0;
+  border: 1px solid oklch(0.88 0.06 260); white-space: nowrap;
+}
+.task-ticket-badge.done { opacity: 0.45; }
+
 /* ── Ticket badge in TasksTab ────────────────────────────────────────────── */
 .tt-ticket-badge {
   font-size: 10px; font-weight: 700; font-family: var(--font-mono);
