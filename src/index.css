@@ -1625,7 +1625,63 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   flex: 1; width: 100%; border: none; min-height: 0;
 }
 
-/* ─── 북마크 탭 ──────────────────────────────────────────────────────────── */
+/* ─── 북마크 사이드바 그룹/링크 ───────────────────────────────────────────── */
+.bm-group { display: flex; flex-direction: column; }
+.bm-group-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 6px 4px 8px;
+}
+.bm-group-toggle {
+  display: flex; align-items: center; gap: 5px; flex: 1;
+  border: none; background: none; cursor: pointer;
+  font-family: var(--font-sans); font-size: 12px; font-weight: 700;
+  color: var(--ink-2); padding: 3px 4px; border-radius: var(--r-2);
+  text-align: left;
+}
+.bm-group-toggle:hover { background: var(--surface-2); }
+.bm-caret { font-size: 10px; color: var(--ink-mute); width: 10px; }
+.bm-group-name { flex: 1; }
+.bm-group-add {
+  border: none; background: none; cursor: pointer; font-size: 14px; line-height: 1;
+  color: var(--ink-mute); padding: 2px 5px; border-radius: var(--r-2);
+  font-family: var(--font-sans);
+}
+.bm-group-add:hover { background: var(--surface-2); color: var(--ink); }
+
+.bm-link-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px 5px 24px; cursor: pointer;
+  border-radius: var(--r-2); margin: 0 4px;
+  transition: background 0.1s;
+}
+.bm-link-row:hover { background: var(--surface-2); }
+.bm-link-row.on { background: var(--accent-soft); }
+.bm-link-row.on .bm-link-name { color: var(--accent); font-weight: 600; }
+.bm-link-name { flex: 1; font-size: 12px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bm-link-row .bm-open-icon {
+  font-size: 11px; color: var(--ink-mute); flex-shrink: 0;
+  opacity: 0.4; text-decoration: none; padding: 1px 3px;
+  border-radius: 3px; transition: opacity 0.1s, color 0.1s;
+}
+.bm-link-row:hover .bm-open-icon { opacity: 1; color: var(--accent); }
+.bm-link-row .notion-del-btn { opacity: 0; }
+.bm-link-row:hover .notion-del-btn { opacity: 1; }
+
+.bm-inline-form {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 10px; margin: 0 4px 4px;
+  background: var(--surface-2); border-radius: var(--r-2);
+  border: 1px solid var(--border);
+}
+.bm-inline-form input, .bm-inline-form textarea {
+  border: 1px solid var(--border); border-radius: var(--r-2);
+  padding: 5px 8px; font-size: 12px; background: var(--surface);
+  outline: none; color: var(--ink); font-family: var(--font-sans);
+  width: 100%; box-sizing: border-box;
+}
+.bm-inline-form input:focus, .bm-inline-form textarea:focus { border-color: var(--accent); }
+
+/* ─── 북마크 탭 카드 (미사용이나 유지) ──────────────────────────────────── */
 .bm-panel {
   display: flex; flex-direction: column; height: 100%; min-height: 0;
 }

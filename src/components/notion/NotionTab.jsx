@@ -1,16 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNotionPages } from '../../hooks/useNotionPages';
 import { useBookmarkGroups, useBookmarkItems } from '../../hooks/useBookmarkGroups';
 
 const NOTION_GID = '__notion__';
 
-function getDomain(url) {
-  try { return new URL(url).hostname; } catch { return ''; }
-}
-function getFavicon(url) {
-  const d = getDomain(url);
-  return d ? `https://www.google.com/s2/favicons?domain=${d}&sz=32` : null;
-}
 function parseEmbedSrc(input) {
   const m = input.trim().match(/src=["']([^"']+)["']/);
   return m ? m[1] : input.trim();
@@ -19,33 +12,28 @@ function getOpenUrl(url) {
   return url?.replace(/\/ebd\/\//, '/') || url;
 }
 
-// ─── 북마크 카드 ──────────────────────────────────────────────────────────────
-function BookmarkCard({ name, url, description, onDelete }) {
-  const favicon = getFavicon(url);
-  const domain = getDomain(url);
-  const openUrl = getOpenUrl(url);
+// ─── 사이드바 링크 행 ──────────────────────────────────────────────────────────
+function LinkRow({ name, url, isActive, onSelect, onDelete }) {
   return (
-    <div className="bm-card">
-      <button className="bm-card-del" onClick={onDelete} title="삭제">×</button>
-      <div className="bm-card-top">
-        {favicon
-          ? <img src={favicon} alt="" className="bm-card-favicon" onError={(e) => { e.target.style.display = 'none'; }} />
-          : <div className="bm-card-favicon-ph">🔗</div>
-        }
-        <div className="bm-card-name">{name}</div>
-      </div>
-      {description && <div className="bm-card-desc">{description}</div>}
-      <div className="bm-card-foot">
-        <span className="bm-card-domain">{domain}</span>
-        <a className="btn sm accent" href={openUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11 }}>열기 ↗</a>
-      </div>
+    <div className={'bm-link-row' + (isActive ? ' on' : '')} onClick={onSelect}>
+      <span className="bm-link-name">{name}</span>
+      <a
+        className="bm-open-icon"
+        href={getOpenUrl(url)}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        title="새 탭에서 열기"
+      >↗</a>
+      <span className="notion-del-btn" onClick={(e) => { e.stopPropagation(); onDelete(); }} role="button" tabIndex={-1}>×</span>
     </div>
   );
 }
 
-// ─── Notion 그룹 패널 ─────────────────────────────────────────────────────────
-function NotionGroupPanel({ projectId }) {
+// ─── Notion 그룹 섹션 ─────────────────────────────────────────────────────────
+function NotionSection({ projectId, activeItem, onSelect }) {
   const { pages, addPage, deletePage } = useNotionPages(projectId);
+  const [expanded, setExpanded] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [addInput, setAddInput] = useState('');
   const [addName, setAddName] = useState('');
@@ -61,108 +49,99 @@ function NotionGroupPanel({ projectId }) {
   };
 
   return (
-    <div className="bm-panel">
-      <div className="bm-panel-hd">
-        <span className="bm-panel-title">📄 Notion</span>
-        <button className="btn sm" onClick={() => setShowAdd((v) => !v)}>+ 페이지 추가</button>
+    <div className="bm-group">
+      <div className="bm-group-hd">
+        <button className="bm-group-toggle" onClick={() => setExpanded((v) => !v)}>
+          <span className="bm-caret">{expanded ? '▾' : '▸'}</span>
+          <span>📄</span>
+          <span className="bm-group-name">Notion</span>
+        </button>
+        <button className="bm-group-add" onClick={() => setShowAdd((v) => !v)} title="페이지 추가">+</button>
       </div>
 
       {showAdd && (
-        <div className="bm-add-form">
+        <div className="bm-inline-form">
           <textarea
-            autoFocus rows={3}
-            placeholder={'임베드 코드 붙여넣기\n예) <iframe src="https://...notion.site/ebd//..." />'}
+            autoFocus rows={2}
+            placeholder={'<iframe src="https://...notion.site/ebd//..." />'}
             value={addInput}
             onChange={(e) => setAddInput(e.target.value)}
-            style={{ resize: 'none', fontSize: 12, fontFamily: 'var(--font-mono)' }}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 11, resize: 'none' }}
           />
-          <input placeholder="표시 이름 (선택)" value={addName} onChange={(e) => setAddName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdd()} />
-          <div style={{ fontSize: 11, color: 'var(--ink-mute)' }}>Notion → 공유 → 웹에 게시 → 임베드 코드 복사</div>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <input placeholder="표시 이름" value={addName} onChange={(e) => setAddName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdd()} />
+          <div style={{ display: 'flex', gap: 5 }}>
             <button className="btn accent sm" onClick={handleAdd} disabled={!addInput.trim() || adding}>{adding ? '…' : '추가'}</button>
             <button className="btn sm" onClick={() => { setShowAdd(false); setAddInput(''); setAddName(''); }}>취소</button>
           </div>
         </div>
       )}
 
-      {pages.length === 0 && !showAdd ? (
-        <div className="bm-empty">
-          <div style={{ fontSize: 36, marginBottom: 10 }}>📄</div>
-          <div style={{ marginBottom: 12 }}>Notion 임베드 코드를 추가하세요</div>
-          <button className="btn accent sm" onClick={() => setShowAdd(true)}>+ 페이지 추가</button>
-        </div>
-      ) : (
-        <div className="bm-card-grid">
-          {pages.map((p) => (
-            <BookmarkCard
-              key={p.id}
-              name={p.name}
-              url={p.url}
-              description=""
-              onDelete={() => deletePage(p.id)}
-            />
-          ))}
-        </div>
-      )}
+      {expanded && pages.map((p) => (
+        <LinkRow
+          key={p.id}
+          name={p.name}
+          url={p.url}
+          isActive={activeItem?.id === p.id && activeItem?.groupId === NOTION_GID}
+          onSelect={() => onSelect({ id: p.id, url: p.url, name: p.name, groupId: NOTION_GID })}
+          onDelete={() => deletePage(p.id)}
+        />
+      ))}
     </div>
   );
 }
 
-// ─── 커스텀 그룹 패널 ─────────────────────────────────────────────────────────
-function BookmarkGroupPanel({ projectId, groupId, groupName }) {
-  const { items, addItem, deleteItem } = useBookmarkItems(projectId, groupId);
+// ─── 커스텀 그룹 섹션 ─────────────────────────────────────────────────────────
+function BookmarkSection({ projectId, group, activeItem, onSelect, onDeleteGroup }) {
+  const { items, addItem, deleteItem } = useBookmarkItems(projectId, group.id);
+  const [expanded, setExpanded] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [addUrl, setAddUrl] = useState('');
   const [addName, setAddName] = useState('');
-  const [addDesc, setAddDesc] = useState('');
   const [adding, setAdding] = useState(false);
 
   const handleAdd = async () => {
     if (!addUrl.trim() || adding) return;
     setAdding(true);
-    await addItem(addUrl.trim(), addName.trim(), addDesc.trim());
-    setAddUrl(''); setAddName(''); setAddDesc(''); setShowAdd(false);
+    await addItem(addUrl.trim(), addName.trim());
+    setAddUrl(''); setAddName(''); setShowAdd(false);
     setAdding(false);
   };
 
   return (
-    <div className="bm-panel">
-      <div className="bm-panel-hd">
-        <span className="bm-panel-title">📁 {groupName}</span>
-        <button className="btn sm" onClick={() => setShowAdd((v) => !v)}>+ 북마크 추가</button>
+    <div className="bm-group">
+      <div className="bm-group-hd">
+        <button className="bm-group-toggle" onClick={() => setExpanded((v) => !v)}>
+          <span className="bm-caret">{expanded ? '▾' : '▸'}</span>
+          <span>📁</span>
+          <span className="bm-group-name">{group.name}</span>
+        </button>
+        <div style={{ display: 'flex', gap: 2 }}>
+          <button className="bm-group-add" onClick={() => setShowAdd((v) => !v)} title="북마크 추가">+</button>
+          <button className="bm-group-add" onClick={onDeleteGroup} title="그룹 삭제" style={{ color: 'var(--ink-mute)' }}>×</button>
+        </div>
       </div>
 
       {showAdd && (
-        <div className="bm-add-form">
+        <div className="bm-inline-form">
           <input autoFocus placeholder="URL *" value={addUrl} onChange={(e) => setAddUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdd()} />
           <input placeholder="이름 (선택)" value={addName} onChange={(e) => setAddName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdd()} />
-          <input placeholder="설명 (선택)" value={addDesc} onChange={(e) => setAddDesc(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAdd()} />
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 5 }}>
             <button className="btn accent sm" onClick={handleAdd} disabled={!addUrl.trim() || adding}>{adding ? '…' : '추가'}</button>
-            <button className="btn sm" onClick={() => { setShowAdd(false); setAddUrl(''); setAddName(''); setAddDesc(''); }}>취소</button>
+            <button className="btn sm" onClick={() => { setShowAdd(false); setAddUrl(''); setAddName(''); }}>취소</button>
           </div>
         </div>
       )}
 
-      {items.length === 0 && !showAdd ? (
-        <div className="bm-empty">
-          <div style={{ fontSize: 36, marginBottom: 10 }}>🔗</div>
-          <div style={{ marginBottom: 12 }}>북마크를 추가하세요</div>
-          <button className="btn accent sm" onClick={() => setShowAdd(true)}>+ 북마크 추가</button>
-        </div>
-      ) : (
-        <div className="bm-card-grid">
-          {items.map((item) => (
-            <BookmarkCard
-              key={item.id}
-              name={item.name}
-              url={item.url}
-              description={item.description}
-              onDelete={() => deleteItem(item.id)}
-            />
-          ))}
-        </div>
-      )}
+      {expanded && items.map((item) => (
+        <LinkRow
+          key={item.id}
+          name={item.name}
+          url={item.url}
+          isActive={activeItem?.id === item.id && activeItem?.groupId === group.id}
+          onSelect={() => onSelect({ id: item.id, url: item.url, name: item.name, groupId: group.id })}
+          onDelete={() => deleteItem(item.id)}
+        />
+      ))}
     </div>
   );
 }
@@ -170,9 +149,17 @@ function BookmarkGroupPanel({ projectId, groupId, groupName }) {
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 export default function NotionTab({ projectId }) {
   const { groups, addGroup, deleteGroup } = useBookmarkGroups(projectId);
-  const [activeGroup, setActiveGroup] = useState(NOTION_GID);
+  const { pages } = useNotionPages(projectId);
+  const [activeItem, setActiveItem] = useState(null);
   const [showAddGroup, setShowAddGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
+
+  // 첫 페이지 자동 선택
+  useEffect(() => {
+    if (!activeItem && pages.length > 0) {
+      setActiveItem({ id: pages[0].id, url: pages[0].url, name: pages[0].name, groupId: NOTION_GID });
+    }
+  }, [pages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAddGroup = async () => {
     if (!newGroupName.trim()) return;
@@ -180,13 +167,10 @@ export default function NotionTab({ projectId }) {
     setNewGroupName(''); setShowAddGroup(false);
   };
 
-  const handleDeleteGroup = async (e, groupId) => {
-    e.stopPropagation();
-    if (activeGroup === groupId) setActiveGroup(NOTION_GID);
+  const handleDeleteGroup = async (groupId) => {
+    if (activeItem?.groupId === groupId) setActiveItem(null);
     await deleteGroup(groupId);
   };
-
-  const activeGroupName = groups.find((g) => g.id === activeGroup)?.name || '';
 
   return (
     <div className="notion-main">
@@ -198,7 +182,7 @@ export default function NotionTab({ projectId }) {
         </div>
 
         {showAddGroup && (
-          <div className="notion-add-form">
+          <div className="bm-inline-form" style={{ margin: '0 8px 8px' }}>
             <input
               autoFocus
               placeholder="그룹 이름"
@@ -206,47 +190,58 @@ export default function NotionTab({ projectId }) {
               onChange={(e) => setNewGroupName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddGroup()}
             />
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 5 }}>
               <button className="btn accent sm" onClick={handleAddGroup} disabled={!newGroupName.trim()}>추가</button>
               <button className="btn sm" onClick={() => { setShowAddGroup(false); setNewGroupName(''); }}>취소</button>
             </div>
           </div>
         )}
 
-        {/* Notion 고정 그룹 */}
-        <button
-          className={'notion-page-row' + (activeGroup === NOTION_GID ? ' on' : '')}
-          onClick={() => setActiveGroup(NOTION_GID)}
-        >
-          <span className="notion-page-ico">📄</span>
-          <span className="notion-page-name">Notion</span>
-        </button>
+        <NotionSection projectId={projectId} activeItem={activeItem} onSelect={setActiveItem} />
 
-        {/* 커스텀 그룹들 */}
         {groups.map((g) => (
-          <button
+          <BookmarkSection
             key={g.id}
-            className={'notion-page-row' + (activeGroup === g.id ? ' on' : '')}
-            onClick={() => setActiveGroup(g.id)}
-          >
-            <span className="notion-page-ico">📁</span>
-            <span className="notion-page-name">{g.name}</span>
-            <span
-              className="notion-del-btn"
-              onClick={(e) => handleDeleteGroup(e, g.id)}
-              role="button"
-              tabIndex={-1}
-            >×</span>
-          </button>
+            projectId={projectId}
+            group={g}
+            activeItem={activeItem}
+            onSelect={setActiveItem}
+            onDeleteGroup={() => handleDeleteGroup(g.id)}
+          />
         ))}
       </aside>
 
-      {/* ── 우측 패널 ── */}
-      <section className="notion-viewer" style={{ overflow: 'auto' }}>
-        {activeGroup === NOTION_GID
-          ? <NotionGroupPanel projectId={projectId} />
-          : <BookmarkGroupPanel projectId={projectId} groupId={activeGroup} groupName={activeGroupName} />
-        }
+      {/* ── 뷰어 ── */}
+      <section className="notion-viewer">
+        {!activeItem ? (
+          <div className="notion-viewer-empty">
+            <div style={{ fontSize: 52, marginBottom: 16 }}>🔖</div>
+            <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>페이지를 선택하세요</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>좌측에서 페이지 또는 북마크를 선택하세요.</div>
+          </div>
+        ) : (
+          <>
+            <div className="notion-viewer-toolbar">
+              <span className="notion-viewer-title">{activeItem.name}</span>
+              <a
+                className="btn sm accent"
+                href={getOpenUrl(activeItem.url)}
+                target="_blank"
+                rel="noreferrer"
+                style={{ fontSize: 12 }}
+              >
+                열기 ↗
+              </a>
+            </div>
+            <iframe
+              key={activeItem.id}
+              src={activeItem.url}
+              className="notion-iframe"
+              title={activeItem.name}
+              allowFullScreen
+            />
+          </>
+        )}
       </section>
     </div>
   );
