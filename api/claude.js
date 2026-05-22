@@ -1,16 +1,17 @@
-// Vercel serverless function — proxies Claude Haiku API
+// Vercel serverless function — proxies Claude API
 // Keeps the Anthropic API key server-side only
 
-// Per-request limits
-const MAX_INPUT_CHARS = 24000;  // ~6 000 tokens — generous for reports
-const MAX_OUTPUT_TOKENS = 4096; // enough for multi-section reports
+const MAX_INPUT_CHARS = 60000;
+const MAX_OUTPUT_TOKENS = 4096;
+const ALLOWED_MODELS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'];
+const DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { prompt, systemPrompt } = req.body;
+  const { prompt, systemPrompt, model } = req.body;
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
 
   if (prompt.length > MAX_INPUT_CHARS) {
@@ -22,6 +23,8 @@ export default async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'API key not configured' });
 
+  const selectedModel = ALLOWED_MODELS.includes(model) ? model : DEFAULT_MODEL;
+
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -31,7 +34,7 @@ export default async function handler(req, res) {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: selectedModel,
         max_tokens: MAX_OUTPUT_TOKENS,
         system: systemPrompt || '당신은 팀 협업 툴 Relay의 AI 어시스턴트입니다. 항상 한국어로 간결하게 답변하세요.',
         messages: [{ role: 'user', content: prompt }],
