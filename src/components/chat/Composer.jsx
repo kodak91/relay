@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -29,21 +29,34 @@ const MESSAGE_TYPES = [
   { id: 'ticket',   label: '/티켓',  icon: '🎫', slash: '/티켓' },
 ];
 
-function DecisionBuilder({ title, setTitle, options, setOptions }) {
+function DecisionBuilder({ title, setTitle, options, setOptions, members, target, setTarget, onCtrlEnter }) {
   const addOption = () => setOptions([...options, '']);
   const removeOption = (i) => { if (options.length <= 2) return; setOptions(options.filter((_, idx) => idx !== i)); };
   const updateOption = (i, v) => setOptions(options.map((o, idx) => idx === i ? v : o));
+  const inputStyle = { border: '1px solid var(--border)', borderRadius: 'var(--r-2)', background: 'var(--surface-2)', outline: 'none', fontFamily: 'var(--font-sans)', color: 'var(--ink)' };
 
   return (
     <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
         <span>◇</span> 결정 요청
+        <span style={{ marginLeft: 'auto', fontWeight: 400, color: 'var(--ink-3)', display: 'flex', alignItems: 'center', gap: 5 }}>
+          결정권자
+          <select
+            value={target?.uid || ''}
+            onChange={(e) => setTarget(members.find((m) => m.uid === e.target.value) || null)}
+            style={{ ...inputStyle, padding: '2px 6px', fontSize: 12 }}
+          >
+            <option value="">선택…</option>
+            {members.filter((m) => m.uid).map((m) => <option key={m.uid} value={m.uid}>{m.name}</option>)}
+          </select>
+        </span>
       </div>
       <input
-        style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '7px 10px', fontSize: 13, background: 'var(--surface-2)', outline: 'none', marginBottom: 8 }}
+        style={{ ...inputStyle, width: '100%', padding: '7px 10px', fontSize: 13, marginBottom: 8 }}
         placeholder="결정 안건 제목을 입력하세요…"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={onCtrlEnter}
       />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {options.map((opt, i) => (
@@ -52,10 +65,11 @@ function DecisionBuilder({ title, setTitle, options, setOptions }) {
               {String.fromCharCode(65 + i)}
             </span>
             <input
-              style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '6px 10px', fontSize: 13, background: 'var(--surface-2)', outline: 'none' }}
+              style={{ ...inputStyle, flex: 1, padding: '6px 10px', fontSize: 13 }}
               placeholder={`옵션 ${String.fromCharCode(65 + i)}`}
               value={opt}
               onChange={(e) => updateOption(i, e.target.value)}
+              onKeyDown={onCtrlEnter}
             />
             {options.length > 2 && (
               <button style={{ border: 0, background: 'transparent', color: 'var(--ink-mute)', fontSize: 16, lineHeight: 1, cursor: 'pointer' }} onClick={() => removeOption(i)}>×</button>
@@ -71,7 +85,7 @@ function DecisionBuilder({ title, setTitle, options, setOptions }) {
   );
 }
 
-function AssignBuilder({ members, assignee, setAssignee, taskText, setTaskText }) {
+function AssignBuilder({ members, assignee, setAssignee, taskText, setTaskText, onCtrlEnter }) {
   const others = members.filter((m) => m.uid);
   return (
     <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
@@ -93,12 +107,13 @@ function AssignBuilder({ members, assignee, setAssignee, taskText, setTaskText }
         placeholder="할당할 업무 내용…"
         value={taskText}
         onChange={(e) => setTaskText(e.target.value)}
+        onKeyDown={onCtrlEnter}
       />
     </div>
   );
 }
 
-function VoteBuilder({ title, setTitle, options, setOptions }) {
+function VoteBuilder({ title, setTitle, options, setOptions, onCtrlEnter }) {
   const addOption = () => setOptions([...options, '']);
   const removeOption = (i) => { if (options.length <= 2) return; setOptions(options.filter((_, idx) => idx !== i)); };
   const updateOption = (i, v) => setOptions(options.map((o, idx) => idx === i ? v : o));
@@ -113,6 +128,7 @@ function VoteBuilder({ title, setTitle, options, setOptions }) {
         placeholder="투표 제목을 입력하세요…"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={onCtrlEnter}
       />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {options.map((opt, i) => (
@@ -125,6 +141,7 @@ function VoteBuilder({ title, setTitle, options, setOptions }) {
               placeholder={`선택지 ${i + 1}`}
               value={opt}
               onChange={(e) => updateOption(i, e.target.value)}
+              onKeyDown={onCtrlEnter}
             />
             {options.length > 2 && (
               <button style={{ border: 0, background: 'transparent', color: 'var(--ink-mute)', fontSize: 16, lineHeight: 1, cursor: 'pointer' }} onClick={() => removeOption(i)}>×</button>
@@ -251,6 +268,18 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
   const [ticketDue, setTicketDue] = useState('');
   const [ticketPriority, setTicketPriority] = useState('보통');
 
+  const [approvalTarget, setApprovalTarget] = useState(null);
+  const [decisionTarget, setDecisionTarget] = useState(null);
+
+  // 팀장을 기본 대상으로 설정
+  const leadMember = useMemo(() => members.find((m) => m.role === 'lead') || members[0] || null, [members]);
+  useEffect(() => {
+    if (leadMember) {
+      setApprovalTarget((prev) => prev || leadMember);
+      setDecisionTarget((prev) => prev || leadMember);
+    }
+  }, [leadMember]);
+
   const addFiles = (fileList) => {
     const items = Array.from(fileList).map((file) => ({
       file,
@@ -376,6 +405,14 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
 
   const isMeeting = type === 'meeting';
 
+  // Ctrl+Enter (또는 Cmd+Enter) 전송 — 빌더 입력창에서 사용
+  const ctrlEnter = (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   const handleSend = () => {
     // Meeting: open meeting modal instead of sending a plain message
     if (isMeeting) {
@@ -436,6 +473,8 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
         title: decisionTitle.trim(),
         options: validOpts.map((o, i) => ({ id: String.fromCharCode(97 + i), letter: String.fromCharCode(65 + i), text: o.trim(), title: o.trim() })),
         chosen: null,
+        targetUid: decisionTarget?.uid || null,
+        targetName: decisionTarget?.name || null,
         tags: [],
       });
       setDecisionTitle('');
@@ -467,7 +506,11 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
       : text.trim();
     const msg = { type, text: cleanText, tags, importance };
     if (type === 'casual') msg.expiresAt = Date.now() + 60 * 60 * 1000;
-    if (type === 'approval') msg.status = 'pending';
+    if (type === 'approval') {
+      msg.status = 'pending';
+      msg.targetUid = approvalTarget?.uid || null;
+      msg.targetName = approvalTarget?.name || null;
+    }
     onSend(msg);
     editor?.commands.clearContent();
     setText('');
@@ -545,6 +588,8 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
           <DecisionBuilder
             title={decisionTitle} setTitle={setDecisionTitle}
             options={decisionOptions} setOptions={setDecisionOptions}
+            members={members} target={decisionTarget} setTarget={setDecisionTarget}
+            onCtrlEnter={ctrlEnter}
           />
         )}
 
@@ -552,6 +597,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
           <VoteBuilder
             title={voteTitle} setTitle={setVoteTitle}
             options={voteOptions} setOptions={setVoteOptions}
+            onCtrlEnter={ctrlEnter}
           />
         )}
 
@@ -562,6 +608,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
             setAssignee={setAssignee}
             taskText={assignTaskText}
             setTaskText={setAssignTaskText}
+            onCtrlEnter={ctrlEnter}
           />
         )}
 
@@ -583,7 +630,18 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
         )}
         {isApproval && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', background: 'var(--amber-bg)', borderBottom: '1px solid var(--amber-line)', fontSize: 11, fontWeight: 700, color: 'oklch(0.42 0.13 70)' }}>
-            ✓ 컨펌 요청 <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>— 전송하면 컨펌 대기로 이동합니다</span>
+            ✓ 컨펌 요청
+            <span style={{ marginLeft: 'auto', fontWeight: 400, color: 'var(--ink-3)', display: 'flex', alignItems: 'center', gap: 5 }}>
+              결재자
+              <select
+                value={approvalTarget?.uid || ''}
+                onChange={(e) => setApprovalTarget(members.find((m) => m.uid === e.target.value) || null)}
+                style={{ border: '1px solid var(--amber-line)', borderRadius: 'var(--r-2)', background: 'var(--amber-bg)', padding: '2px 6px', fontSize: 12, outline: 'none', fontFamily: 'var(--font-sans)', color: 'oklch(0.42 0.13 70)' }}
+              >
+                <option value="">선택…</option>
+                {members.filter((m) => m.uid).map((m) => <option key={m.uid} value={m.uid}>{m.name}</option>)}
+              </select>
+            </span>
           </div>
         )}
         {isMeeting && (
