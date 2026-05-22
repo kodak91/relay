@@ -3,7 +3,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 import useAppStore from '../../store/appStore';
 
-export default function Topbar({ project, onStartMeeting, projects, onSearchOpen }) {
+export default function Topbar({ project, projects, onSearchOpen }) {
   const { role, setRole, user, activeChannel } = useAppStore();
   const setUser = useAppStore((s) => s.setUser);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -53,10 +53,6 @@ export default function Topbar({ project, onStartMeeting, projects, onSearchOpen
       </div>
 
       <div className="right">
-        <button className="icon-btn meeting-btn" onClick={onStartMeeting} title="회의 시작">
-          <span style={{ color: 'var(--rose)', fontSize: 8 }}>●</span>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>회의</span>
-        </button>
         <div className="role-switch">
           <button className={role === 'lead' ? 'on' : ''} onClick={() => setRole('lead')}>팀장</button>
           <button className={role === 'member' ? 'on' : ''} onClick={() => setRole('member')}>팀원</button>

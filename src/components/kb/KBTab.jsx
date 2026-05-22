@@ -4,6 +4,7 @@ import { useKB } from '../../hooks/useKB';
 import KBFileDetail from './KBFileDetail';
 import DriveConnectModal from './DriveConnectModal';
 import KBMediaTab from './KBMediaTab';
+import KBMeetingTab from './KBMeetingTab';
 import { getStoredToken, requestDriveAccess } from '../../lib/driveApi';
 
 export const EXT_COLORS = {
@@ -17,7 +18,7 @@ export const EXT_COLORS = {
 };
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 
-export default function KBTab({ projectId }) {
+export default function KBTab({ projectId, members = [], onPostMeeting }) {
   const { user, kbDeepLink, setKbDeepLink } = useAppStore();
   const {
     folders, files, loading, syncing,
@@ -125,17 +126,21 @@ export default function KBTab({ projectId }) {
 
   const isConnected = folders.length > 0;
 
-  // 자료함 tab doesn't need Drive at all
-  if (kbSubTab === 'media') {
+  // 자료함 / 회의 tabs don't need Drive
+  if (kbSubTab === 'media' || kbSubTab === 'meeting') {
     return (
       <div className="kb-main" style={{ display: 'flex', flexDirection: 'column' }}>
         <div className="kb-subtab-bar">
-          <button className="kb-subtab" onClick={() => setKbSubTab('drive')}>
+          <button className={'kb-subtab' + (kbSubTab === 'drive' ? ' on' : '')} onClick={() => setKbSubTab('drive')}>
             <span className="drive-g-ico xs">G</span> 드라이브
           </button>
-          <button className="kb-subtab on">📦 자료함</button>
+          <button className={'kb-subtab' + (kbSubTab === 'media' ? ' on' : '')} onClick={() => setKbSubTab('media')}>📦 자료함</button>
+          <button className={'kb-subtab' + (kbSubTab === 'meeting' ? ' on' : '')} onClick={() => setKbSubTab('meeting')}>📅 회의</button>
         </div>
-        <KBMediaTab projectId={projectId} />
+        {kbSubTab === 'media' && <KBMediaTab projectId={projectId} />}
+        {kbSubTab === 'meeting' && (
+          <KBMeetingTab projectId={projectId} members={members} user={user} onPostMeeting={onPostMeeting} />
+        )}
       </div>
     );
   }
@@ -158,6 +163,9 @@ export default function KBTab({ projectId }) {
           </button>
           <button className={'kb-subtab' + (kbSubTab === 'media' ? ' on' : '')} onClick={() => setKbSubTab('media')}>
             📦 자료함
+          </button>
+          <button className={'kb-subtab' + (kbSubTab === 'meeting' ? ' on' : '')} onClick={() => setKbSubTab('meeting')}>
+            📅 회의
           </button>
         </div>
         <div style={{ flex: 1, display: 'grid', placeItems: 'center' }}>
@@ -192,6 +200,9 @@ export default function KBTab({ projectId }) {
         </button>
         <button className={'kb-subtab' + (kbSubTab === 'media' ? ' on' : '')} onClick={() => setKbSubTab('media')}>
           📦 자료함
+        </button>
+        <button className={'kb-subtab' + (kbSubTab === 'meeting' ? ' on' : '')} onClick={() => setKbSubTab('meeting')}>
+          📅 회의
         </button>
       </div>
 

@@ -2806,3 +2806,109 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   font-size: 13px;
 }
 .meeting-summary.md-content { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+
+/* ─── KB 회의 탭 ─────────────────────────────────────────────────────────── */
+.kb-meeting-tab {
+  display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;
+}
+.kb-meeting-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0;
+}
+.kb-meeting-title { font-size: 13px; font-weight: 700; color: var(--ink); }
+.kb-meeting-body {
+  flex: 1; overflow-y: auto; padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 24px;
+}
+.kb-meeting-section { display: flex; flex-direction: column; gap: 8px; }
+.kb-meeting-section-hd {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--ink-mute);
+  display: flex; align-items: center; gap: 6px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+.kb-meeting-section-hd .cnt { background: var(--surface-3); padding: 1px 6px; border-radius: 999px; font-size: 10px; }
+.kb-meeting-empty {
+  text-align: center; padding: 24px 16px; color: var(--ink-mute);
+  font-size: 13px; background: var(--surface-2); border-radius: var(--r-3);
+  border: 1px dashed var(--border);
+}
+
+/* 예정 회의 카드 */
+.mtg-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-3); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.mtg-card.overdue {
+  border-color: oklch(0.75 0.14 145); background: var(--emerald-bg);
+}
+.mtg-card-top { display: flex; align-items: flex-start; gap: 10px; }
+.mtg-card-info { flex: 1; min-width: 0; }
+.mtg-card-title { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 3px; }
+.mtg-card-time { display: flex; align-items: center; gap: 6px; }
+.mtg-card-ts { font-size: 11px; color: var(--ink-3); font-family: var(--font-mono); }
+.mtg-badge {
+  font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+  font-family: var(--font-mono);
+}
+.mtg-badge.overdue { background: var(--emerald-bg); color: var(--emerald); border: 1px solid var(--emerald-line); }
+.mtg-card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.mtg-del-btn {
+  border: 0; background: transparent; color: var(--ink-mute); font-size: 16px;
+  line-height: 1; cursor: pointer; padding: 0 3px; border-radius: 3px;
+}
+.mtg-del-btn:hover { color: var(--rose); }
+.mtg-agenda-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.mtg-chip {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--ink-2);
+}
+.mtg-participants { display: flex; align-items: center; gap: 3px; }
+.mtg-more { font-size: 11px; color: var(--ink-mute); margin-left: 2px; }
+
+/* 회의록 아카이브 카드 */
+.mtg-archive-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-3); overflow: hidden;
+}
+.mtg-archive-top {
+  display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+  cursor: pointer; transition: background 0.12s;
+}
+.mtg-archive-top:hover { background: var(--hover); }
+.mtg-archive-info { flex: 1; min-width: 0; }
+.mtg-archive-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+.mtg-archive-meta { font-size: 11px; color: var(--ink-mute); font-family: var(--font-mono); }
+.mtg-caret { font-size: 10px; color: var(--ink-mute); }
+.mtg-archive-body {
+  border-top: 1px solid var(--border); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--surface-2);
+}
+.mtg-archive-summary {
+  font-size: 12px; color: var(--ink-2); line-height: 1.6;
+  padding: 8px 10px; background: var(--surface); border-radius: var(--r-2);
+  border: 1px solid var(--border);
+}
+.mtg-archive-section { display: flex; flex-direction: column; gap: 4px; }
+.mtg-archive-section-hd { font-size: 11px; font-weight: 700; color: var(--ink-3); margin-bottom: 2px; }
+.mtg-archive-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 12px; color: var(--ink-2); padding: 2px 0;
+}
+.mtg-archive-dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 4px;
+  background: var(--border-2);
+}
+.mtg-archive-row.dec .mtg-archive-dot { background: var(--accent); }
+.mtg-archive-row.act .mtg-archive-dot { background: var(--emerald); }
+.mtg-archive-row.risk .mtg-archive-dot { background: var(--rose); }
+.mtg-archive-assignee {
+  margin-left: auto; font-size: 11px; color: var(--ink-mute);
+  background: var(--surface-3); padding: 1px 6px; border-radius: 999px;
+  flex-shrink: 0;
+}

@@ -11,7 +11,7 @@ import TasksTab from '../tasks/TasksTab';
 import MemberManagementModal from './MemberManagementModal';
 import KBTab from '../kb/KBTab';
 import KBSaveBanner from '../kb/KBSaveBanner';
-import MeetingModal from './MeetingModal';
+import MeetingScheduleModal from './MeetingModal';
 import NotionTab from '../notion/NotionTab';
 import TicketTab from '../tickets/TicketTab';
 import { useTickets } from '../../hooks/useTickets';
@@ -379,17 +379,17 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         />
       )}
 
-      <MeetingModal
+      <MeetingScheduleModal
         open={showMeeting}
         onClose={() => setShowMeeting(false)}
-        onPost={handlePostMeeting}
         members={activeProjectData?.members || []}
         initialTitle={meetingInitialTitle}
+        projectId={activeProject}
         user={user}
       />
 
       {chatTab === 'kb' ? (
-        <KBTab projectId={activeProject} />
+        <KBTab projectId={activeProject} members={activeProjectData?.members || []} onPostMeeting={handlePostMeeting} />
       ) : chatTab === 'notion' ? (
         <NotionTab
           projectId={activeProject}

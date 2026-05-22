@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { claudeComplete } from '../../lib/claude';
+import { useMeetings } from '../../hooks/useMeetings';
+import { serverTimestamp } from 'firebase/firestore';
 
 function fmtTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
@@ -7,8 +9,8 @@ function fmtTime(totalSeconds) {
   return `${m}:${s}`;
 }
 
-function Avatar({ name, size = 30 }) {
-  const colors = ['oklch(0.55 0.18 250)','oklch(0.52 0.18 140)','oklch(0.52 0.18 30)','oklch(0.48 0.18 310)','oklch(0.50 0.16 200)'];
+export function Avatar({ name, size = 30 }) {
+  const colors = ['oklch(0.55 0.18 250)', 'oklch(0.52 0.18 140)', 'oklch(0.52 0.18 30)', 'oklch(0.48 0.18 310)', 'oklch(0.50 0.16 200)'];
   const idx = (name || '').charCodeAt(0) % colors.length;
   return (
     <div style={{
@@ -21,7 +23,6 @@ function Avatar({ name, size = 30 }) {
   );
 }
 
-// Simple heuristic for live extraction from transcript lines
 function extractLive(lines) {
   const items = [];
   const decisionWords = ['확정', '결정', '하기로', '것으로', '정했', '선택', '채택'];
@@ -29,107 +30,23 @@ function extractLive(lines) {
   const riskWords = ['리스크', '우려', '빠듯', '문제', '어려울', '걱정', '위험', '지연'];
   lines.forEach((l) => {
     const txt = l.text;
-    if (decisionWords.some((w) => txt.includes(w))) {
-      items.push({ k: '결정', v: txt.length > 40 ? txt.slice(0, 40) + '…' : txt, speaker: l.name });
-    } else if (actionWords.some((w) => txt.includes(w))) {
-      items.push({ k: '액션', v: txt.length > 40 ? txt.slice(0, 40) + '…' : txt, speaker: l.name });
-    } else if (riskWords.some((w) => txt.includes(w))) {
-      items.push({ k: '리스크', v: txt.length > 40 ? txt.slice(0, 40) + '…' : txt, speaker: l.name });
-    }
+    if (decisionWords.some((w) => txt.includes(w)))
+      items.push({ k: '결정', v: txt.length > 40 ? txt.slice(0, 40) + '…' : txt });
+    else if (actionWords.some((w) => txt.includes(w)))
+      items.push({ k: '액션', v: txt.length > 40 ? txt.slice(0, 40) + '…' : txt });
+    else if (riskWords.some((w) => txt.includes(w)))
+      items.push({ k: '리스크', v: txt.length > 40 ? txt.slice(0, 40) + '…' : txt });
   });
   return items;
 }
 
-// ─── Setup phase ────────────────────────────────────────────────────────────
-
-function SetupPhase({ title, setTitle, agenda, setAgenda, members, selected, setSelected, onStart }) {
-  const addAgenda = () => setAgenda((prev) => [...prev, '']);
-  const updateAgenda = (i, v) => setAgenda((prev) => prev.map((a, idx) => idx === i ? v : a));
-  const removeAgenda = (i) => setAgenda((prev) => prev.filter((_, idx) => idx !== i));
-  const toggleMember = (uid) => setSelected((prev) =>
-    prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
-  );
-
-  return (
-    <div className="m-body">
-      <div className="m-section">
-        <h4>회의 제목</h4>
-        <input
-          className="m-title-input"
-          placeholder="회의 제목을 입력하세요…"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          autoFocus
-        />
-      </div>
-
-      <div className="m-section">
-        <h4>안건</h4>
-        <ul className="m-agenda">
-          {agenda.map((a, i) => (
-            <li key={i} className="m-agenda-item">
-              <span className="m-agenda-num">{i + 1}.</span>
-              <input
-                className="m-agenda-input"
-                placeholder={`안건 ${i + 1}…`}
-                value={a}
-                onChange={(e) => updateAgenda(i, e.target.value)}
-              />
-              {agenda.length > 1 && (
-                <button className="m-agenda-rm" onClick={() => removeAgenda(i)}>×</button>
-              )}
-            </li>
-          ))}
-          <li>
-            <button className="m-agenda-add" onClick={addAgenda}>+ 안건 추가</button>
-          </li>
-        </ul>
-      </div>
-
-      <div className="m-section">
-        <h4>참석자 <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>{selected.length}명 선택됨</span></h4>
-        <div className="m-people">
-          {members.filter((m) => m.uid).map((m) => {
-            const on = selected.includes(m.uid);
-            return (
-              <button key={m.uid} className={'m-person' + (on ? ' on' : '')} onClick={() => toggleMember(m.uid)}>
-                <Avatar name={m.name} size={32} />
-                <div style={{ textAlign: 'left' }}>
-                  <div className="nm">{m.name}</div>
-                  <div className="rl">{m.position || m.role || ''}</div>
-                </div>
-                <div className={'m-check' + (on ? ' on' : '')}>✓</div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="m-foot">
-        <span className="m-foot-hint">참석자 {selected.length}명 · 텍스트 기반 회의</span>
-        <button
-          className="btn accent"
-          onClick={onStart}
-          disabled={!title.trim()}
-        >
-          ● 회의 시작
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Live phase ──────────────────────────────────────────────────────────────
 
-function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActiveSpeaker, members, user, agenda, elapsed, tsScrollRef, onAddLine, onEnd, generating }) {
+function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActiveSpeaker, members, agenda, elapsed, tsScrollRef, onAddLine, onEnd, generating }) {
   const extracted = extractLive(transcript);
-  const inputRef = useRef(null);
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      onAddLine();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onAddLine(); }
   };
 
   return (
@@ -140,31 +57,23 @@ function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActi
             <h4>안건</h4>
             <ul className="m-agenda-prog">
               {agenda.map((a, i) => (
-                <li key={i} data-st="pending">
-                  <span className="dt" />
-                  <span>{a}</span>
-                </li>
+                <li key={i} data-st="pending"><span className="dt" /><span>{a}</span></li>
               ))}
             </ul>
           </div>
         )}
-
         <div className="m-section compact">
           <h4>참석자</h4>
           <div className="m-att-list">
-            {members.map((m) => {
-              const isActive = m.uid === activeSpeaker;
-              return (
-                <div key={m.uid} className={'m-att' + (isActive ? ' speaking' : '')}>
-                  <Avatar name={m.name} size={26} />
-                  <span className="nm">{m.name}</span>
-                  {isActive && <span className="m-active-dot" />}
-                </div>
-              );
-            })}
+            {members.map((m) => (
+              <div key={m.uid} className={'m-att' + (m.uid === activeSpeaker ? ' speaking' : '')}>
+                <Avatar name={m.name} size={26} />
+                <span className="nm">{m.name}</span>
+                {m.uid === activeSpeaker && <span className="m-active-dot" />}
+              </div>
+            ))}
           </div>
         </div>
-
         <div className="m-section compact">
           <h4>AI 실시간 추출</h4>
           <div className="m-ai-live">
@@ -209,19 +118,11 @@ function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActi
             </div>
           ))}
         </div>
-
         <div className="m-input-row">
-          <select
-            className="m-speaker-select"
-            value={activeSpeaker}
-            onChange={(e) => setActiveSpeaker(e.target.value)}
-          >
-            {members.map((m) => (
-              <option key={m.uid} value={m.uid}>{m.name}</option>
-            ))}
+          <select className="m-speaker-select" value={activeSpeaker} onChange={(e) => setActiveSpeaker(e.target.value)}>
+            {members.map((m) => <option key={m.uid} value={m.uid}>{m.name}</option>)}
           </select>
           <textarea
-            ref={inputRef}
             className="m-input-ta"
             placeholder="발언 내용 입력 후 Enter…"
             value={inputText}
@@ -229,11 +130,8 @@ function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActi
             onKeyDown={handleKeyDown}
             rows={2}
           />
-          <button className="btn sm accent" onClick={onAddLine} disabled={!inputText.trim()}>
-            추가
-          </button>
+          <button className="btn sm accent" onClick={onAddLine} disabled={!inputText.trim()}>추가</button>
         </div>
-
         <div className="m-foot">
           <span className="m-foot-hint">
             {transcript.length > 0 ? `발화 ${transcript.length}건 기록됨` : '회의를 종료하면 AI가 회의록을 생성합니다'}
@@ -257,35 +155,29 @@ function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActi
 function ReviewPhase({ meetingTitle, participants, transcript, minutes, generating, elapsed, onPost, onClose }) {
   const [copied, setCopied] = useState(false);
 
-  const buildMinutesText = () => {
+  const buildText = () => {
     if (!minutes) return '';
-    const lines = [];
-    lines.push(`## 회의록 — ${meetingTitle}`);
-    lines.push(`진행 시간: ${fmtTime(elapsed)} · 참석 ${participants.length}명\n`);
-    if (minutes.summary) { lines.push(`### 요약\n${minutes.summary}\n`); }
+    const lines = [`## 회의록 — ${meetingTitle}`, `진행 시간: ${fmtTime(elapsed)} · 참석 ${participants.length}명\n`];
+    if (minutes.summary) lines.push(`### 요약\n${minutes.summary}\n`);
     if (minutes.decisions?.length) {
       lines.push('### 핵심 결정');
-      minutes.decisions.forEach((d, i) => { lines.push(`${i + 1}. **${d.text}**${d.detail ? ` — ${d.detail}` : ''}`); });
+      minutes.decisions.forEach((d, i) => lines.push(`${i + 1}. **${d.text}**${d.detail ? ` — ${d.detail}` : ''}`));
       lines.push('');
     }
     if (minutes.actions?.length) {
       lines.push('### 액션 아이템');
-      minutes.actions.forEach((a) => { lines.push(`- [ ] ${a.text}${a.assigneeName ? ` (${a.assigneeName})` : ''}${a.due ? ` · ${a.due}` : ''}`); });
+      minutes.actions.forEach((a) => lines.push(`- [ ] ${a.text}${a.assigneeName ? ` (${a.assigneeName})` : ''}${a.due ? ` · ${a.due}` : ''}`));
       lines.push('');
     }
     if (minutes.risks?.length) {
       lines.push('### 리스크');
-      minutes.risks.forEach((r) => { lines.push(`- ⚠ ${r.text}${r.detail ? ` — ${r.detail}` : ''}`); });
+      minutes.risks.forEach((r) => lines.push(`- ⚠ ${r.text}${r.detail ? ` — ${r.detail}` : ''}`));
     }
     return lines.join('\n');
   };
 
   const copyMinutes = async () => {
-    try {
-      await navigator.clipboard.writeText(buildMinutesText());
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {}
+    try { await navigator.clipboard.writeText(buildText()); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
   };
 
   return (
@@ -300,9 +192,7 @@ function ReviewPhase({ meetingTitle, participants, transcript, minutes, generati
           </div>
         </div>
         <div className="m-people-stack">
-          {participants.slice(0, 5).map((p) => (
-            <Avatar key={p.uid} name={p.name} size={30} />
-          ))}
+          {participants.slice(0, 5).map((p) => <Avatar key={p.uid} name={p.name} size={30} />)}
         </div>
       </div>
 
@@ -319,21 +209,16 @@ function ReviewPhase({ meetingTitle, participants, transcript, minutes, generati
               <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--ink-2)', margin: 0 }}>{minutes.summary}</p>
             </section>
           )}
-
           {minutes?.decisions?.length > 0 && (
             <section className="rv-section">
               <h4>📌 핵심 결정 · {minutes.decisions.length}건</h4>
               <ol className="rv-list">
                 {minutes.decisions.map((d, i) => (
-                  <li key={i}>
-                    <b>{d.text}</b>
-                    {d.detail && <span className="rv-sub">{d.detail}</span>}
-                  </li>
+                  <li key={i}><b>{d.text}</b>{d.detail && <span className="rv-sub">{d.detail}</span>}</li>
                 ))}
               </ol>
             </section>
           )}
-
           {minutes?.actions?.length > 0 && (
             <section className="rv-section">
               <h4>✅ 액션 아이템 · {minutes.actions.length}건</h4>
@@ -349,7 +234,6 @@ function ReviewPhase({ meetingTitle, participants, transcript, minutes, generati
               </div>
             </section>
           )}
-
           {minutes?.risks?.length > 0 && (
             <section className="rv-section">
               <h4>⚠ 리스크 · {minutes.risks.length}건</h4>
@@ -361,22 +245,6 @@ function ReviewPhase({ meetingTitle, participants, transcript, minutes, generati
               ))}
             </section>
           )}
-
-          {minutes?.highlights?.length > 0 && (
-            <section className="rv-section rv-full">
-              <h4>📜 발화 하이라이트</h4>
-              <div className="rv-quotes">
-                {minutes.highlights.slice(0, 4).map((h, i) => (
-                  <div key={i} className="rv-q">
-                    <Avatar name={h.speakerName} size={22} />
-                    <span className="rv-q-name">{h.speakerName}</span>
-                    <span className="rv-q-text">"{h.text}"</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
           {transcript.length > 0 && !minutes?.decisions?.length && !minutes?.actions?.length && (
             <section className="rv-section rv-full">
               <h4>📜 전체 발화 · {transcript.length}건</h4>
@@ -396,27 +264,21 @@ function ReviewPhase({ meetingTitle, participants, transcript, minutes, generati
 
       <div className="m-foot">
         <button className="btn minor" onClick={onClose}>나중에</button>
-        <button className="btn minor" style={{ marginLeft: 4 }} onClick={copyMinutes}>
-          {copied ? '✓ 복사됨' : '📋 복사'}
-        </button>
+        <button className="btn minor" style={{ marginLeft: 4 }} onClick={copyMinutes}>{copied ? '✓ 복사됨' : '📋 복사'}</button>
         <span className="m-foot-hint" style={{ marginLeft: 'auto', marginRight: 12 }}>
           회의록을 채팅에 게시하면 모든 참석자에게 공유됩니다
         </span>
-        <button className="btn accent" onClick={onPost} disabled={generating}>
-          채팅에 게시 →
-        </button>
+        <button className="btn accent" onClick={onPost} disabled={generating}>채팅에 게시 →</button>
       </div>
     </div>
   );
 }
 
-// ─── Main export ─────────────────────────────────────────────────────────────
+// ─── Live meeting modal (used from KBMeetingTab) ─────────────────────────────
 
-export default function MeetingModal({ open, onClose, onPost, members = [], initialTitle = '', user }) {
-  const [phase, setPhase] = useState('setup');
-  const [meetingTitle, setMeetingTitle] = useState('');
-  const [agenda, setAgenda] = useState(['']);
-  const [selectedParticipants, setSelectedParticipants] = useState([]);
+export function MeetingLiveModal({ open, onClose, meeting, members = [], user, projectId, onPost }) {
+  const { updateMeeting } = useMeetings(projectId);
+  const [phase, setPhase] = useState('live');
   const [transcript, setTranscript] = useState([]);
   const [inputText, setInputText] = useState('');
   const [activeSpeaker, setActiveSpeaker] = useState('');
@@ -425,55 +287,38 @@ export default function MeetingModal({ open, onClose, onPost, members = [], init
   const [minutes, setMinutes] = useState(null);
   const tsScrollRef = useRef(null);
 
-  // Reset state when modal opens
+  const participantUids = meeting?.participants?.map((p) => p.uid) || [];
+  const participantMembers = members.filter((m) => participantUids.includes(m.uid));
+  const allMembers = participantMembers.length > 0 ? participantMembers : members.filter((m) => m.uid);
+
   useEffect(() => {
     if (!open) return;
-    setPhase('setup');
-    setMeetingTitle(initialTitle || '');
-    setAgenda(['']);
-    setSelectedParticipants(members.filter((m) => m.uid).map((m) => m.uid));
+    setPhase('live');
     setTranscript([]);
     setInputText('');
-    setActiveSpeaker(user?.uid || (members[0]?.uid || ''));
+    setActiveSpeaker(user?.uid || allMembers[0]?.uid || '');
     setElapsed(0);
     setGenerating(false);
     setMinutes(null);
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Live timer
   useEffect(() => {
     if (phase !== 'live') return;
     const id = setInterval(() => setElapsed((e) => e + 1), 1000);
     return () => clearInterval(id);
   }, [phase]);
 
-  // Auto-scroll transcript
   useEffect(() => {
     tsScrollRef.current?.scrollTo({ top: 1e9, behavior: 'smooth' });
   }, [transcript.length]);
 
   if (!open) return null;
 
-  const participantMembers = members.filter((m) => selectedParticipants.includes(m.uid));
-
-  const startMeeting = () => {
-    if (!meetingTitle.trim()) return;
-    setPhase('live');
-    setElapsed(0);
-    if (!activeSpeaker && members.length > 0) setActiveSpeaker(members[0].uid);
-  };
-
   const addLine = () => {
     const txt = inputText.trim();
     if (!txt) return;
-    const speaker = participantMembers.find((m) => m.uid === activeSpeaker)
-      || { name: user?.name || '나', uid: user?.uid || 'me' };
-    setTranscript((prev) => [...prev, {
-      uid: speaker.uid,
-      name: speaker.name,
-      text: txt,
-      ts: fmtTime(elapsed),
-    }]);
+    const speaker = allMembers.find((m) => m.uid === activeSpeaker) || { name: user?.name || '나', uid: user?.uid || 'me' };
+    setTranscript((prev) => [...prev, { uid: speaker.uid, name: speaker.name, text: txt, ts: fmtTime(elapsed) }]);
     setInputText('');
   };
 
@@ -482,12 +327,12 @@ export default function MeetingModal({ open, onClose, onPost, members = [], init
     setPhase('review');
     try {
       const transcriptText = transcript.map((t) => `[${t.name}] ${t.text}`).join('\n');
-      const agendaText = agenda.filter((a) => a.trim()).join(', ');
+      const agendaText = (meeting?.agenda || []).join(', ');
       const prompt = `다음은 팀 회의 내용입니다. 회의록을 JSON 형식으로 작성해주세요.
 
-회의 제목: ${meetingTitle}
+회의 제목: ${meeting?.title || '회의'}
 안건: ${agendaText || '(안건 없음)'}
-참석자: ${participantMembers.map((m) => m.name).join(', ')}
+참석자: ${allMembers.map((m) => m.name).join(', ')}
 진행 시간: ${fmtTime(elapsed)}
 
 대화 내용:
@@ -503,28 +348,38 @@ ${transcriptText || '(기록된 발화 없음)'}
 }`;
       const result = await claudeComplete(prompt, '당신은 팀 회의록 작성 AI입니다. 반드시 JSON만 응답하세요.');
       const jsonMatch = result.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        setMinutes(JSON.parse(jsonMatch[0]));
-      } else {
-        throw new Error('JSON not found in response');
+      const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : null;
+      setMinutes(parsed);
+      if (meeting?.id) {
+        await updateMeeting(meeting.id, {
+          status: 'done',
+          transcript,
+          minutes: parsed,
+          duration: elapsed,
+          endedAt: serverTimestamp(),
+        });
       }
     } catch (e) {
       console.error('Meeting minutes error:', e);
-      setMinutes({
+      const fallback = {
         decisions: [], actions: [], risks: [],
-        summary: '회의록 생성 중 오류가 발생했습니다. 발화 내용을 확인해 주세요.',
+        summary: '회의록 생성 중 오류가 발생했습니다.',
         highlights: transcript.slice(0, 3).map((t) => ({ speakerName: t.name, text: t.text })),
-      });
+      };
+      setMinutes(fallback);
+      if (meeting?.id) {
+        await updateMeeting(meeting.id, { status: 'done', transcript, minutes: fallback, duration: elapsed, endedAt: serverTimestamp() });
+      }
     } finally {
       setGenerating(false);
     }
   };
 
   const postToChat = () => {
-    onPost({
-      meetingTitle,
-      agenda: agenda.filter((a) => a.trim()),
-      participants: participantMembers,
+    onPost?.({
+      meetingTitle: meeting?.title || '회의',
+      agenda: meeting?.agenda || [],
+      participants: allMembers,
       transcript,
       minutes,
       duration: elapsed,
@@ -538,30 +393,20 @@ ${transcriptText || '(기록된 발화 없음)'}
         <header className="meeting-head">
           <div className="m-title">
             <div className={`m-rec-dot ${phase}`} />
-            <h2>{phase === 'setup' ? '회의 시작' : phase === 'live' ? '회의 진행 중' : '회의록'}</h2>
+            <h2>{phase === 'live' ? '회의 진행 중' : '회의록'}</h2>
             {phase === 'live' && <span className="m-sub mono">&nbsp;·&nbsp;{fmtTime(elapsed)}</span>}
-            {meetingTitle && phase !== 'setup' && <span className="m-sub">&nbsp;·&nbsp;{meetingTitle}</span>}
+            {meeting?.title && <span className="m-sub">&nbsp;·&nbsp;{meeting.title}</span>}
           </div>
           <button className="icon-btn" onClick={onClose} title="닫기">✕</button>
         </header>
-
-        {phase === 'setup' && (
-          <SetupPhase
-            title={meetingTitle} setTitle={setMeetingTitle}
-            agenda={agenda} setAgenda={setAgenda}
-            members={members} selected={selectedParticipants} setSelected={setSelectedParticipants}
-            onStart={startMeeting}
-          />
-        )}
 
         {phase === 'live' && (
           <LivePhase
             transcript={transcript}
             inputText={inputText} setInputText={setInputText}
             activeSpeaker={activeSpeaker} setActiveSpeaker={setActiveSpeaker}
-            members={participantMembers}
-            user={user}
-            agenda={agenda.filter((a) => a.trim())}
+            members={allMembers}
+            agenda={meeting?.agenda || []}
             elapsed={elapsed}
             tsScrollRef={tsScrollRef}
             onAddLine={addLine}
@@ -569,11 +414,10 @@ ${transcriptText || '(기록된 발화 없음)'}
             generating={generating}
           />
         )}
-
         {phase === 'review' && (
           <ReviewPhase
-            meetingTitle={meetingTitle}
-            participants={participantMembers}
+            meetingTitle={meeting?.title || '회의'}
+            participants={allMembers}
             transcript={transcript}
             minutes={minutes}
             generating={generating}
@@ -582,6 +426,137 @@ ${transcriptText || '(기록된 발화 없음)'}
             onClose={onClose}
           />
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Schedule creation modal (default export, used from Composer /회의) ───────
+
+export default function MeetingScheduleModal({ open, onClose, members = [], initialTitle = '', projectId, user }) {
+  const { addMeeting } = useMeetings(projectId);
+  const [title, setTitle] = useState('');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [agenda, setAgenda] = useState(['']);
+  const [selected, setSelected] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setTitle(initialTitle || '');
+    setScheduledAt('');
+    setAgenda(['']);
+    setSelected(members.filter((m) => m.uid).map((m) => m.uid));
+    setSaving(false);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!open) return null;
+
+  const addAgendaItem = () => setAgenda((prev) => [...prev, '']);
+  const updateAgenda = (i, v) => setAgenda((prev) => prev.map((a, idx) => idx === i ? v : a));
+  const removeAgenda = (i) => setAgenda((prev) => prev.filter((_, idx) => idx !== i));
+  const toggleMember = (uid) => setSelected((prev) => prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]);
+
+  const handleSave = async () => {
+    if (!title.trim() || saving) return;
+    setSaving(true);
+    try {
+      const participants = members.filter((m) => selected.includes(m.uid)).map((m) => ({ uid: m.uid, name: m.name }));
+      await addMeeting({
+        title: title.trim(),
+        agenda,
+        scheduledAt: scheduledAt || null,
+        participants,
+        createdBy: { uid: user?.uid, name: user?.name },
+      });
+      onClose();
+    } catch (e) {
+      console.error('addMeeting error:', e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputStyle = { width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '7px 10px', fontSize: 13, background: 'var(--surface-2)', outline: 'none', boxSizing: 'border-box', fontFamily: 'var(--font-sans)', color: 'var(--ink)' };
+
+  return (
+    <div className="meeting-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="meeting-modal" style={{ maxWidth: 520 }}>
+        <header className="meeting-head">
+          <div className="m-title">
+            <span style={{ fontSize: 16 }}>📅</span>
+            <h2>회의 예약</h2>
+          </div>
+          <button className="icon-btn" onClick={onClose} title="닫기">✕</button>
+        </header>
+
+        <div className="m-body" style={{ gap: 16 }}>
+          <div className="m-section">
+            <h4>회의 제목 *</h4>
+            <input
+              style={inputStyle}
+              placeholder="회의 제목을 입력하세요…"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          <div className="m-section">
+            <h4>일시</h4>
+            <input
+              type="datetime-local"
+              style={inputStyle}
+              value={scheduledAt}
+              onChange={(e) => setScheduledAt(e.target.value)}
+            />
+          </div>
+
+          <div className="m-section">
+            <h4>안건</h4>
+            <ul className="m-agenda">
+              {agenda.map((a, i) => (
+                <li key={i} className="m-agenda-item">
+                  <span className="m-agenda-num">{i + 1}.</span>
+                  <input
+                    className="m-agenda-input"
+                    placeholder={`안건 ${i + 1}…`}
+                    value={a}
+                    onChange={(e) => updateAgenda(i, e.target.value)}
+                  />
+                  {agenda.length > 1 && <button className="m-agenda-rm" onClick={() => removeAgenda(i)}>×</button>}
+                </li>
+              ))}
+              <li><button className="m-agenda-add" onClick={addAgendaItem}>+ 안건 추가</button></li>
+            </ul>
+          </div>
+
+          <div className="m-section">
+            <h4>참석자 <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>{selected.length}명 선택됨</span></h4>
+            <div className="m-people">
+              {members.filter((m) => m.uid).map((m) => {
+                const on = selected.includes(m.uid);
+                return (
+                  <button key={m.uid} className={'m-person' + (on ? ' on' : '')} onClick={() => toggleMember(m.uid)}>
+                    <Avatar name={m.name} size={32} />
+                    <div style={{ textAlign: 'left' }}>
+                      <div className="nm">{m.name}</div>
+                      <div className="rl">{m.position || m.role || ''}</div>
+                    </div>
+                    <div className={'m-check' + (on ? ' on' : '')}>✓</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="m-foot">
+            <button className="btn minor" onClick={onClose}>취소</button>
+            <button className="btn accent" onClick={handleSave} disabled={!title.trim() || saving}>
+              {saving ? '저장 중…' : '📅 회의 예약'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

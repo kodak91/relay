@@ -50,7 +50,7 @@ function ProtectedApp() {
 
   return (
     <div className="app">
-      <Topbar project={currentProject} onStartMeeting={() => {}} onSearchOpen={() => setSearchOpen(true)} />
+      <Topbar project={currentProject} onSearchOpen={() => setSearchOpen(true)} />
       <div className="body">
         <LeftSidebar />
         {activeChannel === 'ai' ? (
