@@ -9,7 +9,7 @@ const TYPE_LABELS = {
   update: '보고', announce: '공지', meeting: '회의',
 };
 
-export default function RightSidebar({ onJumpToMessage }) {
+export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePanelClose }) {
   const { activeProject, user } = useAppStore();
   const { projects } = useProjects();
   const [tab, setTab] = useState('confirm');
@@ -44,7 +44,11 @@ export default function RightSidebar({ onJumpToMessage }) {
   const posColor = POSITION_COLORS[user?.position] || 'var(--ink-3)';
 
   return (
-    <aside className="col-right">
+    <aside className={'col-right' + (mobilePanel ? ' mob-panel' : '')}>
+      <div className="mob-panel-hd">
+        <span style={{ fontWeight: 700, fontSize: 14 }}>업무 현황</span>
+        <button className="mob-panel-close" onClick={onMobilePanelClose}>✕</button>
+      </div>
       <div className="position-bar">
         <span className="position-badge" style={{ background: posColor }}>
           {user?.position || '—'}

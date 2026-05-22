@@ -1,0 +1,24 @@
+{
+  "name": "Relay",
+  "short_name": "Relay",
+  "description": "팀 협업 툴 Relay",
+  "start_url": "/app",
+  "display": "standalone",
+  "background_color": "#0e0e14",
+  "theme_color": "#5b21f6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

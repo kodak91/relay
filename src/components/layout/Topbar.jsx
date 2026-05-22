@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 import useAppStore from '../../store/appStore';
+import relaySymbol from '../../assets/relay-symbol.png';
 
-export default function Topbar({ project, projects, onSearchOpen }) {
+export default function Topbar({ project, projects, onSearchOpen, onHamburger }) {
   const { role, setRole, user, activeChannel } = useAppStore();
   const setUser = useAppStore((s) => s.setUser);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -20,7 +21,9 @@ export default function Topbar({ project, projects, onSearchOpen }) {
 
   return (
     <header className="topbar">
+      <button className="mob-hamburger" onClick={onHamburger} aria-label="메뉴">☰</button>
       <div className="brand">
+        <img src={relaySymbol} alt="Relay" className="brand-symbol" />
         <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.04em', color: 'var(--accent)' }}>
           Relay
         </span>

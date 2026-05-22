@@ -171,6 +171,7 @@ p { margin: 0; }
   height: 100%;
 }
 .brand-mark { height: 28px; width: auto; display: block; }
+.brand-symbol { height: 22px; width: auto; display: block; filter: drop-shadow(0 0 6px oklch(0.55 0.28 280 / 0.45)); }
 .topbar .center {
   display: flex; align-items: center; gap: 14px;
   padding: 0 22px; height: 100%;
@@ -2954,4 +2955,160 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 }
 .ai-action-btns {
   display: flex; gap: 6px;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   모바일 반응형  (≤ 767px)
+   ════════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+
+  /* ── 전체 레이아웃 ── */
+  .app { overflow: hidden; height: 100dvh; }
+  .body {
+    flex-direction: row;
+    height: calc(100dvh - 44px - 56px); /* topbar + bottom tab */
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── 좌측 사이드바 → 슬라이드 드로어 ── */
+  .col-left {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(280px, 85vw);
+    transform: translateX(-110%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 400;
+    border-right: 1px solid var(--border);
+    box-shadow: none;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .col-left.mob-open {
+    transform: translateX(0);
+    box-shadow: 6px 0 32px rgba(0, 0, 0, 0.22);
+  }
+  .mob-drawer-overlay {
+    position: fixed; inset: 0; z-index: 399;
+    background: rgba(0, 0, 0, 0.45);
+    animation: fadein 0.2s ease;
+  }
+
+  /* ── 우측 사이드바 → 기본 숨김, 패널 모드로만 표시 ── */
+  .col-right { display: none !important; }
+  .col-right.mob-panel {
+    display: flex !important;
+    position: fixed; inset: 0; z-index: 350;
+    width: 100%; border-left: none;
+    background: var(--surface);
+    overflow-y: auto;
+    animation: slide-up 0.22s ease-out;
+    flex-direction: column;
+  }
+  @keyframes slide-up {
+    from { transform: translateY(16px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+
+  /* ── 메인 컬럼 ── */
+  .col-mid { width: 100%; min-width: 0; flex: 1; overflow: hidden; }
+
+  /* ── Topbar ── */
+  .topbar { height: 44px; padding: 0 10px; gap: 6px; }
+  .topbar .center { display: none; }
+  .topbar .brand { flex: 1; }
+  .topbar .right { gap: 4px; }
+  .topbar .right .role-switch { display: none; }
+  .mob-hamburger {
+    display: flex !important;
+    align-items: center; justify-content: center;
+    width: 32px; height: 32px;
+    border: none; background: transparent; cursor: pointer;
+    font-size: 18px; color: var(--ink-2); border-radius: 8px;
+  }
+  .mob-hamburger:hover { background: var(--hover); }
+
+  /* ── 하단 탭바 ── */
+  .mob-tabbar {
+    display: flex !important;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 300;
+    height: 56px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.07);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mob-tab {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 2px; border: none; background: transparent;
+    cursor: pointer; color: var(--ink-mute);
+    transition: color 0.15s; position: relative;
+    font-family: var(--font-sans);
+  }
+  .mob-tab.on { color: var(--accent); }
+  .mob-tab-ico { font-size: 19px; line-height: 1; }
+  .mob-tab.on .mob-tab-ico { transform: scale(1.08); }
+  .mob-tab-lbl { font-size: 9px; font-weight: 600; letter-spacing: 0.01em; }
+
+  /* ── 우측 패널 헤더 (닫기 버튼) ── */
+  .mob-panel-hd {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    background: var(--surface); position: sticky; top: 0; z-index: 1;
+  }
+  .mob-panel-hd-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .mob-panel-close {
+    width: 30px; height: 30px; border: none; background: var(--surface-2);
+    border-radius: 50%; cursor: pointer; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-3);
+  }
+
+  /* ── 좌측 드로어 헤더 ── */
+  .mob-sidebar-hd {
+    display: flex !important;
+    align-items: center; justify-content: space-between;
+    padding: 12px 14px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 13px; font-weight: 700; color: var(--ink);
+    flex-shrink: 0;
+  }
+  .mob-sidebar-hd-close {
+    width: 28px; height: 28px; border: none; background: var(--surface-2);
+    border-radius: 50%; cursor: pointer; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-3);
+  }
+
+  /* ── Composer ── */
+  .composer { padding: 0; }
+  .composer .box {
+    border-radius: 0;
+    border-left: none; border-right: none;
+  }
+
+  /* ── 채팅 헤더 탭 스크롤 ── */
+  .chat-tabs {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .chat-tabs::-webkit-scrollbar { display: none; }
+  .chat-tab { white-space: nowrap; flex-shrink: 0; }
+
+  /* ── 기타 ── */
+  .chat-head { padding: 6px 10px; }
+  .meeting-modal { width: 100%; height: 100%; max-height: 100dvh; border-radius: 0; }
+  .meeting-overlay { align-items: flex-end; }
+}
+
+/* 데스크탑: 모바일 전용 요소 숨김 */
+@media (min-width: 768px) {
+  .mob-tabbar { display: none !important; }
+  .mob-drawer-overlay { display: none !important; }
+  .mob-hamburger { display: none !important; }
+  .mob-panel-hd { display: none !important; }
+  .mob-sidebar-hd { display: none !important; }
 }

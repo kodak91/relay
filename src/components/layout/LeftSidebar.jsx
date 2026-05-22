@@ -15,7 +15,7 @@ const PROJECT_COLORS = [
   'oklch(0.48 0.21 270)',
 ];
 
-export default function LeftSidebar() {
+export default function LeftSidebar({ mobileOpen, onMobileClose }) {
   const { activeProject, setActiveProject, activeChannel, setActiveChannel, user } = useAppStore();
   const { projects, updateProject, deleteProject, joinByCode } = useProjects(user?.uid);
   const active = projects.filter((p) => p.status !== '보관' && p.status !== '삭제됨');
@@ -69,7 +69,11 @@ export default function LeftSidebar() {
   };
 
   return (
-    <aside className="col-left">
+    <aside className={'col-left' + (mobileOpen ? ' mob-open' : '')}>
+      <div className="mob-sidebar-hd">
+        <span style={{ fontWeight: 700, fontSize: 14 }}>워크스페이스</span>
+        <button className="mob-sidebar-hd-close" onClick={onMobileClose}>✕</button>
+      </div>
       <div className="hd">
         <h3>워크스페이스</h3>
         <div style={{ display: 'flex', gap: 8 }}>
