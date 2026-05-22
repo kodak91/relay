@@ -336,8 +336,9 @@ p { margin: 0; }
 .col-mid {
   display: flex; flex-direction: column;
   overflow: hidden; height: 100%;
-  background: var(--surface-3);
+  background: oklch(0.975 0.008 270);
 }
+[data-theme="dark"] .col-mid { background: oklch(0.245 0.015 270); }
 .chat-head {
   display: flex; align-items: center; gap: 12px;
   padding: 0 20px; height: 56px; flex-shrink: 0;
