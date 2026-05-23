@@ -9,8 +9,8 @@
 /* ── Design tokens ────────────────────────────────────────────────────── */
 :root {
   --bg:          oklch(0.985 0.004 80);
-  --surface:     oklch(1 0 0 / 0.75);
-  --surface-2:   oklch(0.972 0.005 80 / 0.7);
+  --surface:     oklch(0.995 0.002 80);
+  --surface-2:   oklch(0.978 0.004 80);
   --surface-3:   oklch(0.955 0.007 80);
   --hover:       oklch(0.95 0.008 80);
   --border:      oklch(0.91 0.008 80);
@@ -413,8 +413,9 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 /* ── Message bubbles ──────────────────────────────────────────────────── */
 .msg {
   display: flex; gap: 10px; padding: var(--row-y) 0;
-  position: relative;
+  position: relative; min-width: 0;
 }
+.msg > *:not(.av):not(.msg-grouped-spacer):not(.msg-actions) { min-width: 0; flex: 1; }
 .msg:hover .msg-actions { opacity: 1; }
 .msg-actions {
   position: absolute; right: 0; top: 6px;
@@ -438,7 +439,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 }
 .msg-head .role.lead { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
 .msg-head .ts { font-size: 11px; color: var(--ink-mute); font-family: var(--font-mono); }
-.msg-body { font-size: 14px; color: var(--ink-2); line-height: 1.55; }
+.msg-body { font-size: 14px; color: var(--ink-2); line-height: 1.55; overflow-wrap: break-word; word-break: break-word; min-width: 0; }
 .imp { font-size: 12px; margin-right: 4px; }
 .inline-tag {
   display: inline-flex; align-items: center;
@@ -1097,6 +1098,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 .ai-msg-bubble {
   max-width: 80%; padding: 10px 14px; border-radius: var(--r-3);
   font-size: 13px; line-height: 1.55;
+  overflow-wrap: break-word; word-break: break-word;
 }
 .ai-msg.user .ai-msg-bubble { background: var(--accent); color: var(--accent-ink); border-radius: var(--r-3) var(--r-3) var(--r-1) var(--r-3); }
 .ai-msg.ai .ai-msg-bubble { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-3) var(--r-3) var(--r-3) var(--r-1); }
@@ -2966,6 +2968,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   /* ── 전체 레이아웃 ── */
   .app { overflow: hidden; height: 100dvh; }
   .body {
+    display: flex;
     flex-direction: row;
     height: calc(100dvh - 44px - 56px); /* topbar + bottom tab */
     overflow: hidden;
@@ -3000,12 +3003,13 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   .col-right { display: none !important; }
   .col-right.mob-panel {
     display: flex !important;
-    position: fixed; inset: 0; z-index: 350;
+    position: fixed; inset: 0 0 56px 0; z-index: 350;
     width: 100%; border-left: none;
-    background: var(--surface);
+    background: var(--surface-2);
     overflow-y: auto;
     animation: slide-up 0.22s ease-out;
     flex-direction: column;
+    height: calc(100dvh - 56px);
   }
   @keyframes slide-up {
     from { transform: translateY(16px); opacity: 0; }
