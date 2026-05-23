@@ -3017,14 +3017,26 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   }
 
   /* ── 메인 컬럼 ── */
-  .col-mid { width: 100%; min-width: 0; flex: 1; overflow: hidden; }
+  .col-mid { width: 100%; min-width: 0; max-width: 100%; flex: 1; overflow: hidden; }
 
-  /* ── Topbar ── */
-  .topbar { height: 44px; padding: 0 10px; gap: 6px; }
+  /* ── Topbar: grid → flex 전환 (240+442px 고정폭 제거) ── */
+  .topbar {
+    display: flex;
+    height: 44px; padding: 0 10px; gap: 6px;
+  }
   .topbar .center { display: none; }
-  .topbar .brand { flex: 1; }
-  .topbar .right { gap: 4px; }
+  .topbar .brand { flex: 1; min-width: 0; overflow: hidden; }
+  .topbar .right { gap: 4px; flex-shrink: 0; }
   .topbar .right .role-switch { display: none; }
+
+  /* ── KB 레이아웃: 220px 트리 + 1fr → 단일 컬럼 ── */
+  .kb-body { grid-template-columns: 1fr; }
+  .kb-tree { display: none; }
+  .kb-content { padding: 14px 14px 80px; }
+
+  /* ── 수평 overflow 방어 ── */
+  .app { overflow-x: hidden; }
+  .body { overflow-x: hidden; max-width: 100vw; }
   .mob-hamburger {
     display: flex !important;
     align-items: center; justify-content: center;
