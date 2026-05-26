@@ -23,13 +23,37 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
   const { messages } = useGlobalMessages(activeProjects);
   const { tasks } = usePersonalTasks(user?.uid);
 
-  const pendingApprovals = messages.filter((m) => m.type === 'approval' && (!m.status || m.status === 'pending'));
-  const heldApprovals = messages.filter((m) => m.type === 'approval' && m.status === 'held');
-  const pendingDecisions = messages.filter((m) => m.type === 'decision' && !m.chosen);
+  // Ghost-safe filters: require minimum content so incomplete Firestore docs are excluded
+  const pendingApprovals = messages.filter(
+    (m) => m.type === 'approval' && m.text && (!m.status || m.status === 'pending')
+  );
+  const heldApprovals = messages.filter(
+    (m) => m.type === 'approval' && m.text && m.status === 'held'
+  );
+  const pendingDecisions = messages.filter(
+    (m) => m.type === 'decision' && !m.chosen && (m.title || m.options?.length > 0)
+  );
   const pendingAll = [
     ...pendingApprovals.map((m) => ({ ...m, tag: '승인', kind: 'approval' })),
     ...pendingDecisions.map((m) => ({ ...m, tag: '결정', kind: 'decision' })),
   ];
+
+  // Catchup: only show messages relevant to the current user
+  const catchupMessages = messages.filter((m) => {
+    if (m.type === 'approval') {
+      return m.targetUid === user?.uid || (!m.targetUid && user?.role === 'lead');
+    }
+    if (m.type === 'decision') {
+      return m.targetUid === user?.uid || (!m.targetUid && user?.role === 'lead');
+    }
+    if (m.type === 'vote') {
+      const hasVoted = (m.options || []).some((o) =>
+        (o.votes || []).some((v) => v.uid === user?.uid)
+      );
+      return !hasVoted;
+    }
+    return true;
+  });
 
   const myTasks = tasks.filter((t) => !t.done);
   const isLead = user?.role === 'lead';
@@ -68,7 +92,7 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
       </div>
 
       {tab === 'confirm'
-        ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} catchup={messages} onJump={onJumpToMessage} isLead={isLead} uid={user?.uid} />
+        ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} catchup={catchupMessages} onJump={onJumpToMessage} isLead={isLead} uid={user?.uid} />
         : <TaskSidebar uid={user?.uid} />
       }
     </aside>

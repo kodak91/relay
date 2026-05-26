@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import useAppStore from '../../store/appStore';
 import { claudeComplete } from '../../lib/claude';
 
@@ -200,7 +201,7 @@ function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleT
       ) : (
         <div className="msg-body md-content">
           {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
-          <ReactMarkdown components={MD_LINK}>{m.text || ''}</ReactMarkdown>
+          <ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.text || ''}</ReactMarkdown>
           {m.editedAt && <span className="edited-badge">(편집됨)</span>}
         </div>
       )}
@@ -343,7 +344,7 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
             {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
           </div>
           <div className="ac-desc md-content">
-            <ReactMarkdown components={MD_LINK}>{m.text || ''}</ReactMarkdown>
+            <ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.text || ''}</ReactMarkdown>
           </div>
           <div className="ac-actions">
             {isPending ? (
@@ -468,7 +469,7 @@ function UpdateMsg({ m, onDelete }) {
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)' }}>◆ 중간 보고</span>
           </div>
           <div className="md-content" style={{ fontSize: 13, color: 'var(--ink-2)' }}>
-            <ReactMarkdown components={MD_LINK}>{m.text || ''}</ReactMarkdown>
+            <ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.text || ''}</ReactMarkdown>
           </div>
           {m.progress && (
             <div className="progress-bar-wrap">
@@ -500,7 +501,7 @@ function AnnounceMsg({ m, onCollapse, onDelete }) {
             <span className="an-label">공지사항</span>
           </div>
           <div className="an-body md-content">
-            <ReactMarkdown components={MD_LINK}>{m.text || ''}</ReactMarkdown>
+            <ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.text || ''}</ReactMarkdown>
           </div>
         </div>
         <Reactions list={m.reactions} />
@@ -602,7 +603,7 @@ function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, 
 
           {m.summary && !hasMinutes && (
             <div className="meeting-summary md-content">
-              <ReactMarkdown components={MD_LINK}>{m.summary}</ReactMarkdown>
+              <ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.summary}</ReactMarkdown>
             </div>
           )}
         </div>
@@ -680,7 +681,7 @@ function AIMsg({ m }) {
         </div>
         <div className="ai-card">
           <div className="ai-title">✦ {m.title}</div>
-          {m.text && <div className="md-content" style={{ fontSize: 13, color: 'var(--ink-2)' }}><ReactMarkdown components={MD_LINK}>{m.text}</ReactMarkdown></div>}
+          {m.text && <div className="md-content" style={{ fontSize: 13, color: 'var(--ink-2)' }}><ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.text}</ReactMarkdown></div>}
           {m.bullets && (
             <div className="ai-bullets">
               {m.bullets.map((b, i) => (
