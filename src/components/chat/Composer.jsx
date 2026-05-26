@@ -328,7 +328,9 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
   // Refs to avoid stale closures in editor callbacks
   const onEnterRef = useRef(null);
   const onUpdateRef = useRef(null);
+  const addFilesRef = useRef(null);
   const placeholderRef = useRef('');
+  addFilesRef.current = addFiles;
 
   const isCasual = type === 'casual';
   const isDecision = type === 'decision';
@@ -366,6 +368,16 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
           return true;
         }
         return false;
+      },
+      handlePaste: (_view, event) => {
+        const imageFiles = Array.from(event.clipboardData?.items || [])
+          .filter((i) => i.type.startsWith('image/'))
+          .map((i) => i.getAsFile())
+          .filter(Boolean);
+        if (imageFiles.length === 0) return false;
+        event.preventDefault();
+        addFilesRef.current?.(imageFiles);
+        return true;
       },
     },
     onUpdate: ({ editor }) => {

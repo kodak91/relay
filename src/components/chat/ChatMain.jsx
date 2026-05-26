@@ -26,6 +26,21 @@ function nowHM() {
   return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
 }
 
+function msgDateStr(m) {
+  const ts = m.createdAt?.toDate?.();
+  return ts ? ts.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+}
+
+function formatDividerLabel(dateStr) {
+  const today = new Date().toISOString().slice(0, 10);
+  const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  if (dateStr === today) return '오늘';
+  if (dateStr === yest) return '어제';
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+}
+
 export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { activeProject, chatTab, setChatTab, activeTag, user } = useAppStore();
   const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
@@ -56,6 +71,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const [pendingKBSave, setPendingKBSave] = useState(null); // { files, selectedFolderId }
   const [showMeeting, setShowMeeting] = useState(false);
   const [meetingInitialTitle, setMeetingInitialTitle] = useState('');
+  const [floatingDate, setFloatingDate] = useState('');
+  const floatTimerRef = useRef(null);
 
   const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
 
@@ -86,6 +103,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         prev &&
         m.type === 'text' &&
         prev.type === 'text' &&
+        msgDateStr(m) === msgDateStr(prev) &&
         (m.senderUid ? m.senderUid === prev.senderUid : m.senderName === prev.senderName)
       ) {
         grouped.add(m.id);
@@ -333,6 +351,19 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     await deleteMessage(activeProject, mid);
   };
 
+  const handleChatScroll = useCallback((e) => {
+    const container = e.currentTarget;
+    const scrollTop = container.scrollTop;
+    const dividers = container.querySelectorAll('[data-date]');
+    let label = '';
+    dividers.forEach((div) => {
+      if (div.offsetTop <= scrollTop + 40) label = div.getAttribute('data-date');
+    });
+    if (label) setFloatingDate(label);
+    clearTimeout(floatTimerRef.current);
+    floatTimerRef.current = setTimeout(() => setFloatingDate(''), 1500);
+  }, []);
+
   const handlers = {
     openThreads, replyValues,
     toggleThread, setReplyValue, sendReply,
@@ -458,7 +489,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       ) : (
         <>
           <TagBar messages={messages} />
-          <div className="chat-scroll" ref={scrollElRef}>
+          {floatingDate && <div className="chat-date-float">{floatingDate}</div>}
+          <div className="chat-scroll" ref={scrollElRef} onScroll={handleChatScroll}>
             {uploading && (
               <div className="upload-progress">
                 <div className="upload-bar" style={{ width: uploadProgress + '%' }} />
@@ -482,12 +514,24 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
               </div>
             ) : (
               <>
-                <div className="day-divider">오늘</div>
-                {filteredMessages.map((m) => (
-                  <div key={m.id} ref={(el) => { if (msgRefs?.current) msgRefs.current[m.id] = el; }}>
-                    <Message m={m} isGrouped={groupedSet.has(m.id)} isGroupStart={groupStartSet.has(m.id)} handlers={handlers} />
-                  </div>
-                ))}
+                {(() => {
+                  const items = [];
+                  let lastDate = null;
+                  filteredMessages.forEach((m) => {
+                    const d = msgDateStr(m);
+                    if (d !== lastDate) {
+                      const label = formatDividerLabel(d);
+                      items.push(<div key={'div-' + d} className="day-divider" data-date={label}>{label}</div>);
+                      lastDate = d;
+                    }
+                    items.push(
+                      <div key={m.id} ref={(el) => { if (msgRefs?.current) msgRefs.current[m.id] = el; }}>
+                        <Message m={m} isGrouped={groupedSet.has(m.id)} isGroupStart={groupStartSet.has(m.id)} handlers={handlers} />
+                      </div>
+                    );
+                  });
+                  return items;
+                })()}
               </>
             )}
           </div>
