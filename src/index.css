@@ -979,6 +979,12 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 .composer-kb-chip:hover { background: var(--hover); border-color: var(--ink-3); color: var(--ink); }
 .composer-kb-chip.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); font-weight: 600; }
 .composer-kb-chip.more { color: var(--ink-3); font-style: italic; border-style: dashed; }
+.composer-kb-drive-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border-radius: 3px;
+  background: oklch(0.52 0.19 260); color: #fff;
+  font-size: 8px; font-weight: 800; margin-left: 3px; flex-shrink: 0;
+}
 .send {
   padding: 7px 16px; border-radius: var(--r-2);
   border: 0; background: var(--ink); color: var(--bg);

@@ -212,32 +212,58 @@ function FilePreviewZone({ files, onRemove }) {
   );
 }
 
-function KBSuggestions({ text, folders, selectedId, onSelect, showAll, onToggleAll }) {
-  const keywords = text.toLowerCase().split(/\s+/).filter((w) => w.length > 1);
+const RECENT_KB_KEY = 'relay_recent_kb';
+function getRecentIds() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KB_KEY) || '[]'); } catch { return []; }
+}
+function pushRecentId(id) {
+  const next = [id, ...getRecentIds().filter((v) => v !== id)].slice(0, 5);
+  try { localStorage.setItem(RECENT_KB_KEY, JSON.stringify(next)); } catch {}
+}
+
+function KBSuggestions({ pendingFiles = [], text, folders, selectedId, onSelect }) {
+  const recentIds = getRecentIds();
+  // Score folders by file name keywords + typed text keywords
+  const keywords = [
+    ...text.toLowerCase().split(/\s+/).filter((w) => w.length > 1),
+    ...pendingFiles.map((f) =>
+      f.name.toLowerCase().replace(/\.[^.]+$/, '').replace(/[-_.]/g, ' ').split(/\s+/)
+    ).flat().filter((w) => w.length > 1),
+  ];
   const scored = folders.map((f) => {
     const name = f.name.toLowerCase();
     const score = keywords.filter((k) => name.includes(k)).length;
-    return { ...f, score };
+    const recentRank = recentIds.indexOf(f.id);
+    return { ...f, score, recentRank };
   });
-  const topFolders = showAll
-    ? folders
-    : scored.sort((a, b) => b.score - a.score).slice(0, 4);
+  const recents = scored.filter((f) => f.recentRank >= 0).sort((a, b) => a.recentRank - b.recentRank).slice(0, 2);
+  const suggestions = scored.filter((f) => f.recentRank < 0 && f.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
+  const fallback = keywords.length === 0 && recents.length === 0 ? scored.slice(0, 3) : [];
+  const shown = [...new Map([...recents, ...suggestions, ...fallback].map((f) => [f.id, f])).values()];
 
   return (
     <div className="composer-kb-row">
-      <span className="composer-kb-label">📚 저장 위치</span>
-      {topFolders.map((f) => (
+      <span className="composer-kb-label">💾 저장</span>
+      {shown.map((f) => (
         <button
           key={f.id}
           className={'composer-kb-chip' + (selectedId === f.id ? ' on' : '')}
-          onClick={() => onSelect(selectedId === f.id ? null : f.id)}
+          onClick={() => {
+            const next = selectedId === f.id ? null : f.id;
+            if (next) pushRecentId(next);
+            onSelect(next);
+          }}
           title={f.drivePath || f.name}
         >
-          {f.isRoot ? '🗂' : '📁'} {f.name}
+          {f.recentRank >= 0 ? '⏱' : (f.isRoot ? '🗂' : '📁')} {f.name}
+          {f.driveFolderId && <span className="composer-kb-drive-badge">G</span>}
         </button>
       ))}
-      <button className="composer-kb-chip more" onClick={onToggleAll}>
-        {showAll ? '접기' : '다른 이름으로 저장…'}
+      <button
+        className={'composer-kb-chip more' + (selectedId === '__manual__' ? ' on' : '')}
+        onClick={() => onSelect(selectedId === '__manual__' ? null : '__manual__')}
+      >
+        {selectedId === '__manual__' ? '✓ 수동 저장' : '수동 저장…'}
       </button>
     </div>
   );
@@ -252,7 +278,6 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
   const [showTypeMenu, setShowTypeMenu] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
   const [selectedKBFolderId, setSelectedKBFolderId] = useState(null);
-  const [showSaveAs, setShowSaveAs] = useState(false);
   const internalFileRef = useRef(null);
   const actionsRef = useRef(null);
 
@@ -423,13 +448,16 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
       return;
     }
 
-    // 62: dispatch staged files first
+    // Files: upload + send combined with caption text
     if (pendingFiles.length > 0) {
-      onFileUpload?.(pendingFiles.map((f) => f.file), selectedKBFolderId);
+      const caption = text.trim();
+      onFileUpload?.(pendingFiles.map((f) => f.file), selectedKBFolderId, caption);
       pendingFiles.forEach((f) => { if (f.preview) URL.revokeObjectURL(f.preview); });
       setPendingFiles([]);
       setSelectedKBFolderId(null);
-      setShowSaveAs(false);
+      editor?.commands.clearContent();
+      setText('');
+      return;
     }
     if (isTicket) {
       if (!ticketTitle.trim()) return;
@@ -690,15 +718,14 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
           <FilePreviewZone files={pendingFiles} onRemove={removeFile} />
         )}
 
-        {/* 62: KB save suggestions when files pending */}
+        {/* KB/Drive save suggestions when files pending */}
         {pendingFiles.length > 0 && kbFolders.length > 0 && (
           <KBSuggestions
+            pendingFiles={pendingFiles}
             text={text}
             folders={kbFolders}
             selectedId={selectedKBFolderId}
-            onSelect={(id) => { setSelectedKBFolderId(id); setShowSaveAs(false); }}
-            showAll={showSaveAs}
-            onToggleAll={() => setShowSaveAs((v) => !v)}
+            onSelect={setSelectedKBFolderId}
           />
         )}
 

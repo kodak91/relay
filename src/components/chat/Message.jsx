@@ -390,6 +390,7 @@ function ImageMsg({ m }) {
           <span className="role">{m.senderRole}</span>
           <span className="ts">{m.ts}</span>
         </div>
+        {m.text && <div className="msg-body" style={{ marginBottom: 4 }}><p>{m.text}</p></div>}
         <div className="image-preview" onClick={() => setExpanded(true)}>
           <img src={m.fileUrl} alt={m.fileName} loading="lazy" />
           <div className="image-name">{m.fileName}</div>

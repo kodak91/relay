@@ -31,7 +31,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
   const { projects, updateProject, approveMember, rejectMember, removeMember } = useProjects(user?.uid);
   const { tickets, createTicket, updateTicket } = useTickets(activeProject);
-  const { folders: kbFolders } = useKB(activeProject);
+  const { folders: kbFolders, saveFromChat: saveToKB } = useKB(activeProject);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
   const initialScrollDone = useRef(false);
@@ -260,25 +260,29 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     }
   };
 
-  // File upload handler — called from Composer on send (kbFolderId optional)
-  const handleFiles = async (files, kbFolderId = null) => {
+  // File upload: called from Composer on send. kbFolderId='__manual__' → show banner; folder ID → auto-save; null → no save.
+  const handleFiles = async (files, kbFolderId = null, caption = '') => {
     if (!activeProject || !files?.length) return;
     setUploading(true);
     setUploadProgress(0);
     setUploadError('');
     const kbPending = [];
+    const autoSave = kbFolderId && kbFolderId !== '__manual__';
     try {
-      for (const file of Array.from(files)) {
+      const fileArr = Array.from(files);
+      for (let i = 0; i < fileArr.length; i++) {
+        const file = fileArr[i];
         const isImage = IMAGE_TYPES.includes(file.type);
         const url = await uploadFile(file, setUploadProgress);
+        // First file carries the caption text; subsequent files are clean
         await handleSend({
           type: isImage ? 'image' : 'file',
           fileUrl: url,
           fileName: file.name,
           fileSize: formatFileSize(file.size),
           fileType: file.type,
-          text: '',
-          tags: [],
+          text: i === 0 ? caption : '',
+          tags: i === 0 ? (caption.match(/#\S+/g) || []) : [],
         });
         kbPending.push({
           name: file.name,
@@ -288,7 +292,25 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           blob: file,
         });
       }
-      if (kbPending.length > 0) setPendingKBSave({ files: kbPending, selectedFolderId: kbFolderId });
+      if (autoSave && kbPending.length > 0) {
+        // Auto-save to selected KB/Drive folder (falls back to Firebase Storage URL if no Drive token)
+        for (const f of kbPending) {
+          try {
+            await saveToKB({
+              ...f,
+              folderId: kbFolderId,
+              uploader: user?.name || '',
+              uploaderUid: user?.uid || '',
+              token: null,
+            });
+          } catch (e) {
+            console.warn('Auto KB save:', e.message);
+          }
+        }
+      } else if (kbPending.length > 0) {
+        // Show manual save banner (folder pre-selected if '__manual__' chosen)
+        setPendingKBSave({ files: kbPending, selectedFolderId: null });
+      }
     } catch (e) {
       console.error('Upload failed:', e);
       setUploadError('업로드 실패: Firebase Storage가 설정되지 않았거나 권한이 없습니다.');
