@@ -1,8 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import useAppStore from '../../store/appStore';
 import { claudeComplete } from '../../lib/claude';
+
+const QUICK_EMOJIS = ['✅', '⭕', '❌', '👀', '😊', '😢'];
+const MsgContext = createContext({ uid: null, onReact: null });
 
 // 58: all markdown links open in new tab; 60: relay-kb:// links navigate to KB tab
 const MD_LINK = {
@@ -51,20 +54,40 @@ function Avatar({ name, size = 36 }) {
 
 function MsgActions({ m, onReply, onEdit, onDelete }) {
   const { user } = useAppStore();
+  const { onReact } = useContext(MsgContext);
   const [dropOpen, setDropOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const dropRef = useRef(null);
+  const pickerRef = useRef(null);
   const isMine = user?.uid && m.senderUid === user.uid;
 
   useEffect(() => {
-    if (!dropOpen) return;
-    const handler = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false); };
+    if (!dropOpen && !pickerOpen) return;
+    const handler = (e) => {
+      if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false);
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) setPickerOpen(false);
+    };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [dropOpen]);
+  }, [dropOpen, pickerOpen]);
 
   return (
     <div className="msg-actions">
-      <button title="리액션">😊</button>
+      <div style={{ position: 'relative' }} ref={pickerRef}>
+        <button title="이모지 리액션" onClick={() => setPickerOpen((v) => !v)}>😊</button>
+        {pickerOpen && (
+          <div className="emoji-picker-pop">
+            {QUICK_EMOJIS.map((e) => (
+              <button
+                key={e}
+                className="emoji-pick-btn"
+                onClick={() => { onReact?.(e); setPickerOpen(false); }}
+                title={e}
+              >{e}</button>
+            ))}
+          </div>
+        )}
+      </div>
       {onReply && <button title="답글" onClick={onReply}>↩</button>}
       <div style={{ position: 'relative' }} ref={dropRef}>
         <button title="더보기" onClick={() => setDropOpen((v) => !v)}>⋯</button>
@@ -87,13 +110,24 @@ function MsgActions({ m, onReply, onEdit, onDelete }) {
 }
 
 function Reactions({ list }) {
+  const { uid, onReact } = useContext(MsgContext);
   if (!list || list.length === 0) return null;
+  const visible = list.filter((r) => (r.uids?.length ?? r.n ?? 0) > 0);
+  if (visible.length === 0) return null;
   return (
     <div className="rx-row">
-      {list.map((r, i) => (
-        <button key={i} className={'rx' + (r.mine ? ' mine' : '')}>{r.e} {r.n}</button>
-      ))}
-      <button className="rx-add">+</button>
+      {visible.map((r, i) => {
+        const count = r.uids?.length ?? r.n ?? 0;
+        const mine = uid ? (r.uids?.includes(uid) ?? !!r.mine) : !!r.mine;
+        return (
+          <button
+            key={i}
+            className={'rx' + (mine ? ' mine' : '')}
+            onClick={() => onReact?.(r.e)}
+            title={r.e}
+          >{r.e} {count}</button>
+        );
+      })}
     </div>
   );
 }
@@ -831,7 +865,7 @@ function MeetingInviteMsg({ m, onRsvp }) {
 
 export default function Message({ m, isGrouped, isGroupStart, handlers }) {
   const { user } = useAppStore();
-  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, deleteMsg, rsvpMeeting } = handlers;
+  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, deleteMsg, rsvpMeeting, addReaction } = handlers;
   const threadOpen = openThreads.has(m.id);
   const replyValue = replyValues[m.id] || '';
 
@@ -856,20 +890,25 @@ export default function Message({ m, isGrouped, isGroupStart, handlers }) {
     onDelete: deleteMsg,
   };
 
+  const ctxValue = { uid: user?.uid, onReact: (emoji) => addReaction?.(m.id, emoji) };
+
+  let content;
   switch (m.type) {
-    case 'decision':      return <DecisionMsg {...props} />;
-    case 'approval':      return <ApprovalMsg {...props} />;
-    case 'vote':          return <VoteMsg {...props} />;
-    case 'update':        return <UpdateMsg {...props} />;
-    case 'announce':      return <AnnounceMsg {...props} />;
-    case 'meeting':       return <MeetingMsg {...props} />;
-    case 'meeting_invite':return <MeetingInviteMsg m={m} onRsvp={rsvpMeeting} />;
-    case 'ticket':        return <TicketMsg m={m} onDelete={deleteMsg} />;
-    case 'assign':        return <AssignMsg m={m} onDelete={deleteMsg} />;
-    case 'image':         return <ImageMsg m={m} />;
-    case 'file':          return <FileMsg m={m} />;
-    case 'casual':        return <CasualMsg {...props} />;
-    case 'ai':            return <AIMsg m={m} />;
-    default:              return <TextMsg {...props} />;
+    case 'decision':      content = <DecisionMsg {...props} />; break;
+    case 'approval':      content = <ApprovalMsg {...props} />; break;
+    case 'vote':          content = <VoteMsg {...props} />; break;
+    case 'update':        content = <UpdateMsg {...props} />; break;
+    case 'announce':      content = <AnnounceMsg {...props} />; break;
+    case 'meeting':       content = <MeetingMsg {...props} />; break;
+    case 'meeting_invite':content = <MeetingInviteMsg m={m} onRsvp={rsvpMeeting} />; break;
+    case 'ticket':        content = <TicketMsg m={m} onDelete={deleteMsg} />; break;
+    case 'assign':        content = <AssignMsg m={m} onDelete={deleteMsg} />; break;
+    case 'image':         content = <ImageMsg m={m} />; break;
+    case 'file':          content = <FileMsg m={m} />; break;
+    case 'casual':        content = <CasualMsg {...props} />; break;
+    case 'ai':            content = <AIMsg m={m} />; break;
+    default:              content = <TextMsg {...props} />; break;
   }
+
+  return <MsgContext.Provider value={ctxValue}>{content}</MsgContext.Provider>;
 }

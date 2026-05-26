@@ -157,12 +157,44 @@ function VoteBuilder({ title, setTitle, options, setOptions, onCtrlEnter }) {
   );
 }
 
-function TicketBuilder({ members, title, setTitle, desc, setDesc, assigneeUid, setAssigneeUid, due, setDue, priority, setPriority }) {
+function TicketBuilder({ members, title, setTitle, desc, setDesc, assigneeUid, setAssigneeUid, due, setDue, priority, setPriority, recentMessages }) {
   const inputStyle = { width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '6px 10px', fontSize: 13, background: 'var(--surface-2)', outline: 'none', boxSizing: 'border-box', fontFamily: 'var(--font-sans)', color: 'var(--ink)' };
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const fillWithAI = async () => {
+    if (aiLoading) return;
+    const ctx = (recentMessages || [])
+      .filter((m) => m.text)
+      .map((m) => `${m.senderName || '?'}: ${m.text}`)
+      .join('\n');
+    if (!ctx.trim()) return;
+    setAiLoading(true);
+    try {
+      const raw = await claudeComplete(
+        `다음 팀 채팅 내용을 바탕으로 티켓 초안을 JSON으로 만들어주세요.\n대화:\n${ctx}\n\n{"title":"작업 제목(한국어,50자이내)","priority":"높음|보통|낮음|긴급","description":"간단한 설명(한국어,80자이내)"}\nJSON만 출력:`
+      );
+      const json = JSON.parse(raw.replace(/```json?|```/g, '').trim());
+      if (json.title) setTitle(json.title);
+      if (json.description) setDesc(json.description);
+      if (json.priority && ['긴급','높음','보통','낮음'].includes(json.priority)) setPriority(json.priority);
+    } catch { /* ignore parse errors */ }
+    finally { setAiLoading(false); }
+  };
+
   return (
     <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
         <span>🎫</span> 티켓 생성
+        {(recentMessages || []).length > 0 && (
+          <button
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4, border: '1px solid var(--accent-line)', borderRadius: 'var(--r-2)', padding: '2px 8px', fontSize: 11, color: 'var(--accent)', background: 'var(--accent-soft)', cursor: 'pointer', fontWeight: 600 }}
+            onClick={fillWithAI}
+            disabled={aiLoading}
+            title="최근 대화 맥락으로 AI가 초안 생성"
+          >
+            {aiLoading ? '⋯' : '✦'} AI 초안
+          </button>
+        )}
       </div>
       <input style={{ ...inputStyle, marginBottom: 8 }} placeholder="티켓 제목 *" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
       <textarea style={{ ...inputStyle, marginBottom: 8, resize: 'none' }} placeholder="설명 (선택)" value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} />
@@ -269,7 +301,7 @@ function KBSuggestions({ pendingFiles = [], text, folders, selectedId, onSelect 
   );
 }
 
-export default function Composer({ onSend, onFileUpload, onOpenMeeting, members = [], kbFolders = [] }) {
+export default function Composer({ onSend, onFileUpload, onOpenMeeting, members = [], kbFolders = [], recentMessages = [] }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
   const [importance, setImportance] = useState(0);
@@ -355,6 +387,17 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
       attributes: { class: 'tiptap-ta' },
       handleKeyDown: (_view, event) => {
         if (event.key === 'Enter' && !event.shiftKey) {
+          // Ctrl/Cmd+Enter always sends (even inside a list)
+          if (event.ctrlKey || event.metaKey) {
+            event.preventDefault();
+            onEnterRef.current?.();
+            return true;
+          }
+          // Let Tiptap handle Enter inside list items (continue list / exit on empty)
+          const { $from } = _view.state.selection;
+          for (let depth = $from.depth; depth > 0; depth--) {
+            if ($from.node(depth).type.name === 'listItem') return false;
+          }
           event.preventDefault();
           onEnterRef.current?.();
           return true;
@@ -661,6 +704,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
             assigneeUid={ticketAssigneeUid} setAssigneeUid={setTicketAssigneeUid}
             due={ticketDue} setDue={setTicketDue}
             priority={ticketPriority} setPriority={setTicketPriority}
+            recentMessages={recentMessages}
           />
         )}
 

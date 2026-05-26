@@ -475,10 +475,27 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   display: flex; align-items: center; gap: 3px;
   padding: 3px 8px; border-radius: 999px;
   border: 1px solid var(--border); background: var(--surface);
-  font-size: 12px; color: var(--ink-2);
+  font-size: 12px; color: var(--ink-2); cursor: pointer;
+  transition: background 0.1s;
 }
+.rx:hover { background: var(--hover); }
 .rx.mine { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
 .rx-add { border: 1px dashed var(--border); background: transparent; border-radius: 999px; padding: 3px 8px; font-size: 12px; color: var(--ink-mute); }
+
+/* Emoji quick picker */
+.emoji-picker-pop {
+  position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-2); padding: 6px 8px;
+  display: flex; gap: 4px; z-index: 200;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.emoji-pick-btn {
+  border: 0; background: transparent; font-size: 18px;
+  padding: 4px 5px; border-radius: var(--r-1); cursor: pointer;
+  transition: background 0.1s; line-height: 1;
+}
+.emoji-pick-btn:hover { background: var(--hover); }
 
 /* Thread */
 .thread-toggle {
@@ -2550,6 +2567,27 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   padding: 6px 14px; border-radius: 20px; pointer-events: none;
   animation: fadeInUp 0.15s ease;
 }
+
+/* Ticket link/connect button */
+.tk-link-btn {
+  border: 0; background: transparent; font-size: 12px; cursor: pointer;
+  padding: 1px 4px; border-radius: var(--r-1); margin-left: auto; color: var(--ink-3);
+  transition: background 0.1s;
+}
+.tk-link-btn:hover { background: var(--hover); color: var(--accent); }
+.tk-node.connect-source { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.tk-node.connectable { cursor: pointer; border-color: oklch(0.72 0.17 65); }
+.tk-node.connectable:hover { box-shadow: 0 0 0 2px oklch(0.96 0.04 65), 0 4px 16px rgba(0,0,0,0.1); }
+
+/* Ticket comments */
+.tk-comment {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 8px; border-radius: var(--r-2);
+  background: var(--surface-2); margin-bottom: 4px;
+}
+.tk-comment-author { font-size: 11px; font-weight: 700; color: var(--ink-3); }
+.tk-comment-text { font-size: 13px; color: var(--ink-2); line-height: 1.4; }
+.tk-comment-input-row { display: flex; gap: 6px; margin-top: 6px; }
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateX(-50%) translateY(6px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }

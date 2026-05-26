@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export function useTickets(projectId) {
@@ -29,5 +29,10 @@ export function useTickets(projectId) {
     await updateDoc(doc(db, 'projects', projectId, 'tickets', ticketDocId), fields);
   };
 
-  return { tickets, loading, createTicket, updateTicket };
+  const deleteTicket = async (ticketDocId) => {
+    if (!projectId || !ticketDocId) return;
+    await deleteDoc(doc(db, 'projects', projectId, 'tickets', ticketDocId));
+  };
+
+  return { tickets, loading, createTicket, updateTicket, deleteTicket };
 }

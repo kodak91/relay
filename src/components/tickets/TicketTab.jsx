@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 const NODE_W = 230;
 const NODE_H = 92;
@@ -84,16 +86,26 @@ function Edges({ tickets, positions }) {
 }
 
 // ── Ticket Node ────────────────────────────────────────────────────────────
-function TicketNode({ ticket, pos, selected, onSelect, onDragStart, onCopy, copied }) {
+function TicketNode({ ticket, pos, selected, onSelect, onDragStart, onCopy, copied, connectFrom, onStartConnect, onConnect }) {
+  const [hovered, setHovered] = useState(false);
   const statusInfo = STATUS_INFO[ticket.status] || STATUS_INFO['열림'];
   const priorityInfo = PRIORITY_INFO[ticket.priority || '보통'] || PRIORITY_INFO['보통'];
+  const isConnectSource = connectFrom === ticket.id;
+  const inConnectMode = connectFrom !== null;
 
   return (
     <div
-      className={'tk-node' + (selected ? ' selected' : '')}
+      className={'tk-node' + (selected ? ' selected' : '') + (isConnectSource ? ' connect-source' : '') + (inConnectMode && !isConnectSource ? ' connectable' : '')}
       style={{ left: pos.x, top: pos.y, width: NODE_W }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       onMouseDown={(e) => {
         if (e.button !== 0) return;
+        if (inConnectMode && !isConnectSource) {
+          e.stopPropagation();
+          onConnect(ticket.id);
+          return;
+        }
         e.stopPropagation();
         onSelect(ticket.id);
         onDragStart(e, ticket.id);
@@ -118,13 +130,49 @@ function TicketNode({ ticket, pos, selected, onSelect, onDragStart, onCopy, copi
         <span className="tk-node-status" style={{ color: statusInfo.color }}>● {ticket.status}</span>
         {ticket.assigneeName && <span className="tk-node-meta">@{ticket.assigneeName}</span>}
         {ticket.dueDate && <span className="tk-node-meta">📅 {ticket.dueDate}</span>}
+        {(hovered || selected) && !inConnectMode && (
+          <button
+            className="tk-link-btn"
+            title="상위 티켓 연결"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onStartConnect(ticket.id); }}
+          >🔗</button>
+        )}
+        {isConnectSource && (
+          <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 700, marginLeft: 'auto' }}>연결 대상 선택…</span>
+        )}
       </div>
     </div>
   );
 }
 
+// ── Comments hook (inline) ─────────────────────────────────────────────────
+function useTicketComments(projectId, ticketId) {
+  const [comments, setComments] = useState([]);
+  useEffect(() => {
+    if (!projectId || !ticketId) return;
+    const q = query(
+      collection(db, 'projects', projectId, 'tickets', ticketId, 'comments'),
+      orderBy('createdAt', 'asc')
+    );
+    return onSnapshot(q, (snap) => {
+      setComments(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+  }, [projectId, ticketId]);
+
+  const addComment = async (text, authorName) => {
+    if (!text.trim() || !projectId || !ticketId) return;
+    await addDoc(
+      collection(db, 'projects', projectId, 'tickets', ticketId, 'comments'),
+      { text: text.trim(), authorName, createdAt: serverTimestamp() }
+    );
+  };
+
+  return { comments, addComment };
+}
+
 // ── Ticket Detail Panel ────────────────────────────────────────────────────
-function TicketDetail({ ticket, tickets, members, onUpdate, onClose }) {
+function TicketDetail({ ticket, tickets, members, projectId, user, onUpdate, onDelete, onClose }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(ticket.title);
   const [desc, setDesc] = useState(ticket.description || '');
@@ -133,6 +181,8 @@ function TicketDetail({ ticket, tickets, members, onUpdate, onClose }) {
   const [dueDate, setDueDate] = useState(ticket.dueDate || '');
   const [priority, setPriority] = useState(ticket.priority || '보통');
   const [parentId, setParentId] = useState(ticket.parentId || '');
+  const [commentText, setCommentText] = useState('');
+  const { comments, addComment } = useTicketComments(projectId, ticket.id);
 
   const children = tickets.filter((t) => t.parentId === ticket.id);
 
@@ -160,6 +210,12 @@ function TicketDetail({ ticket, tickets, members, onUpdate, onClose }) {
       parentId: parentId || null,
     });
     setEditing(false);
+  };
+
+  const handleSendComment = async () => {
+    if (!commentText.trim()) return;
+    await addComment(commentText, user?.name || '나');
+    setCommentText('');
   };
 
   const statusInfo = STATUS_INFO[ticket.status] || STATUS_INFO['열림'];
@@ -207,7 +263,14 @@ function TicketDetail({ ticket, tickets, members, onUpdate, onClose }) {
               <option key={t.id} value={t.id}>{t.ticketCode} {t.title}</option>
             ))}
           </select>
-          <button className="btn accent sm" style={{ marginTop: 4 }} onClick={save}>저장</button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button className="btn accent sm" style={{ flex: 1 }} onClick={save}>저장</button>
+            <button
+              className="btn sm"
+              style={{ background: 'var(--rose-bg)', color: 'var(--rose)', border: '1px solid var(--rose-line)' }}
+              onClick={() => { if (window.confirm('티켓을 삭제하시겠습니까?')) { onDelete(); onClose(); } }}
+            >🗑️ 삭제</button>
+          </div>
         </div>
       ) : (
         <div className="tk-detail-view">
@@ -248,6 +311,28 @@ function TicketDetail({ ticket, tickets, members, onUpdate, onClose }) {
               ))}
             </div>
           )}
+
+          {/* Comments section */}
+          <div className="tk-detail-section">
+            <div className="tk-detail-sec-label">댓글 {comments.length > 0 && `(${comments.length})`}</div>
+            {comments.map((c) => (
+              <div key={c.id} className="tk-comment">
+                <span className="tk-comment-author">{c.authorName}</span>
+                <span className="tk-comment-text">{c.text}</span>
+              </div>
+            ))}
+            <div className="tk-comment-input-row">
+              <input
+                className="tk-input"
+                placeholder="댓글 입력…"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
+                style={{ flex: 1, fontSize: 12, padding: '5px 8px' }}
+              />
+              <button className="btn accent sm" onClick={handleSendComment} disabled={!commentText.trim()}>전송</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -323,7 +408,7 @@ function CreateModal({ tickets, members, project, user, onClose, onCreate }) {
 }
 
 // ── Main TicketTab ─────────────────────────────────────────────────────────
-export default function TicketTab({ projectId, project, tickets, createTicket, updateTicket, user }) {
+export default function TicketTab({ projectId, project, tickets, createTicket, updateTicket, deleteTicket, user }) {
   const members = project?.members || [];
   const [positions, setPositions] = useState({});
   const [drag, setDrag] = useState(null);
@@ -332,6 +417,7 @@ export default function TicketTab({ projectId, project, tickets, createTicket, u
   const [selected, setSelected] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [copied, setCopied] = useState(null);
+  const [connectFrom, setConnectFrom] = useState(null);
   const canvasRef = useRef(null);
 
   // Initialize node positions (from Firestore x/y, or tree layout for new)
@@ -408,10 +494,24 @@ export default function TicketTab({ projectId, project, tickets, createTicket, u
 
   const handleCanvasDown = (e) => {
     if (e.target === canvasRef.current || e.currentTarget === e.target) {
+      if (connectFrom) { setConnectFrom(null); return; }
       setPanStart({ x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y });
       setSelected(null);
     }
   };
+
+  // Escape key cancels connect mode
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') setConnectFrom(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  const handleConnect = useCallback((targetTicketId) => {
+    if (!connectFrom || connectFrom === targetTicketId) { setConnectFrom(null); return; }
+    updateTicket(connectFrom, { parentId: targetTicketId });
+    setConnectFrom(null);
+  }, [connectFrom, updateTicket]);
 
   const copyCode = async (code) => {
     try { await navigator.clipboard.writeText(code); } catch { }
@@ -443,6 +543,12 @@ export default function TicketTab({ projectId, project, tickets, createTicket, u
         <button className="btn accent sm" onClick={() => setShowCreate(true)}>+ 새 티켓</button>
       </div>
 
+      {connectFrom && (
+        <div style={{ padding: '6px 14px', background: 'var(--accent-soft)', borderBottom: '1px solid var(--accent-line)', fontSize: 12, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          🔗 연결할 상위 티켓을 클릭하세요
+          <button style={{ marginLeft: 'auto', border: 0, background: 'transparent', color: 'var(--ink-3)', cursor: 'pointer', fontSize: 12 }} onClick={() => setConnectFrom(null)}>취소 (Esc)</button>
+        </div>
+      )}
       <div className="tk-body">
         <div
           ref={canvasRef}
@@ -461,6 +567,9 @@ export default function TicketTab({ projectId, project, tickets, createTicket, u
                 onDragStart={handleDragStart}
                 onCopy={copyCode}
                 copied={copied}
+                connectFrom={connectFrom}
+                onStartConnect={(id) => { setConnectFrom(id); setSelected(id); }}
+                onConnect={handleConnect}
               />
             ))}
           </div>
@@ -483,7 +592,10 @@ export default function TicketTab({ projectId, project, tickets, createTicket, u
             ticket={selectedTicket}
             tickets={tickets}
             members={members}
+            projectId={projectId}
+            user={user}
             onUpdate={(fields) => updateTicket(selectedTicket.id, fields)}
+            onDelete={() => deleteTicket?.(selectedTicket.id)}
             onClose={() => setSelected(null)}
           />
         )}

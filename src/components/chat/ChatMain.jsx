@@ -45,7 +45,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { activeProject, chatTab, setChatTab, activeTag, user } = useAppStore();
   const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
   const { projects, updateProject, approveMember, rejectMember, removeMember } = useProjects(user?.uid);
-  const { tickets, createTicket, updateTicket } = useTickets(activeProject);
+  const { tickets, createTicket, updateTicket, deleteTicket } = useTickets(activeProject);
   const { folders: kbFolders, saveFromChat: saveToKB } = useKB(activeProject);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
@@ -342,6 +342,25 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     await deleteMessage(activeProject, mid);
   };
 
+  const addReaction = async (mid, emoji) => {
+    if (!user?.uid) return;
+    const m = messages.find((msg) => msg.id === mid);
+    if (!m) return;
+    const reactions = [...(m.reactions || [])];
+    const idx = reactions.findIndex((r) => r.e === emoji);
+    if (idx >= 0) {
+      const uids = reactions[idx].uids || [];
+      const newUids = uids.includes(user.uid)
+        ? uids.filter((u) => u !== user.uid)
+        : [...uids, user.uid];
+      if (newUids.length === 0) reactions.splice(idx, 1);
+      else reactions[idx] = { ...reactions[idx], uids: newUids };
+    } else {
+      reactions.push({ e: emoji, uids: [user.uid] });
+    }
+    await updateMessageField(activeProject, mid, { reactions });
+  };
+
   const handleChatScroll = useCallback(() => {
     const container = scrollRef.current;
     if (!container) return;
@@ -367,7 +386,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     toggleThread, setReplyValue, sendReply,
     choose, vote, actApproval, confirmMsg, nudgeMsg,
     saveMeetingSummary, rsvpMeeting,
-    editMsg, deleteMsg,
+    editMsg, deleteMsg, addReaction,
   };
 
   if (!activeProject) {
@@ -480,6 +499,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           tickets={tickets}
           createTicket={createTicket}
           updateTicket={updateTicket}
+          deleteTicket={deleteTicket}
           user={user}
         />
       ) : chatTab === 'tasks' ? (
@@ -551,6 +571,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
             onOpenMeeting={handleOpenMeeting}
             members={activeProjectData?.members || []}
             kbFolders={kbFolders}
+            recentMessages={messages.slice(-8)}
           />
         </>
       )}
