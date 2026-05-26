@@ -749,11 +749,77 @@ function AssignMsg({ m, onDelete }) {
   );
 }
 
+// ─── Meeting invite card ─────────────────────────────────────────────────
+
+function MeetingInviteMsg({ m, onRsvp }) {
+  const { user } = useAppStore();
+  const uid = user?.uid;
+  const rsvp = m.rsvp || {};
+  const myStatus = uid ? rsvp[uid] : null;
+
+  const scheduledAt = m.scheduledAt?.toDate
+    ? m.scheduledAt.toDate()
+    : m.scheduledAt ? new Date(m.scheduledAt) : null;
+  const dtStr = scheduledAt
+    ? scheduledAt.toLocaleString('ko', { month: 'long', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  const agenda = (m.agenda || []).filter(Boolean);
+  const attendees = (m.participants || []).filter((p) => rsvp[p.uid] === 'attend');
+  const declines = (m.participants || []).filter((p) => rsvp[p.uid] === 'decline');
+  const pending = (m.participants || []).filter((p) => !rsvp[p.uid]);
+
+  const handleRsvp = (response) => {
+    onRsvp(m.id, myStatus === response ? null : response);
+  };
+
+  return (
+    <div className="msg">
+      <Avatar name={m.senderName} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="msg-head">
+          <span className="name">{m.senderName}</span>
+          <span className="ts">{m.ts}</span>
+        </div>
+        <div className="meeting-invite-card">
+          <div className="mi-badge">📅 회의 초대</div>
+          <div className="mi-title">{m.text}</div>
+          {dtStr && <div className="mi-time">🕐 {dtStr}</div>}
+          {agenda.length > 0 && (
+            <div className="mi-agenda">
+              {agenda.map((a, i) => (
+                <span key={i} className="mi-agenda-item">{i + 1}. {a}</span>
+              ))}
+            </div>
+          )}
+          <div className="mi-rsvp-bar">
+            <div className="mi-rsvp-status">
+              {attendees.length > 0 && <span className="mi-rsvp-count attend">✓ {attendees.length}명 참석</span>}
+              {declines.length > 0 && <span className="mi-rsvp-count decline">✗ {declines.length}명 불가</span>}
+              {pending.length > 0 && <span className="mi-rsvp-count pending">⋯ {pending.length}명 미응답</span>}
+            </div>
+            <div className="mi-rsvp-btns">
+              <button
+                className={'mi-btn attend' + (myStatus === 'attend' ? ' on' : '')}
+                onClick={() => handleRsvp('attend')}
+              >참석</button>
+              <button
+                className={'mi-btn decline' + (myStatus === 'decline' ? ' on' : '')}
+                onClick={() => handleRsvp('decline')}
+              >불가</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Message dispatcher ─────────────────────────────────────────────
 
 export default function Message({ m, isGrouped, handlers }) {
   const { user } = useAppStore();
-  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, deleteMsg } = handlers;
+  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, deleteMsg, rsvpMeeting } = handlers;
   const threadOpen = openThreads.has(m.id);
   const replyValue = replyValues[m.id] || '';
 
@@ -778,18 +844,19 @@ export default function Message({ m, isGrouped, handlers }) {
   };
 
   switch (m.type) {
-    case 'decision':  return <DecisionMsg {...props} />;
-    case 'approval':  return <ApprovalMsg {...props} />;
-    case 'vote':      return <VoteMsg {...props} />;
-    case 'update':    return <UpdateMsg {...props} />;
-    case 'announce':  return <AnnounceMsg {...props} />;
-    case 'meeting':   return <MeetingMsg {...props} />;
-    case 'ticket':    return <TicketMsg m={m} onDelete={deleteMsg} />;
-    case 'assign':    return <AssignMsg m={m} onDelete={deleteMsg} />;
-    case 'image':     return <ImageMsg m={m} />;
-    case 'file':      return <FileMsg m={m} />;
-    case 'casual':    return <CasualMsg {...props} />;
-    case 'ai':        return <AIMsg m={m} />;
-    default:          return <TextMsg {...props} />;
+    case 'decision':      return <DecisionMsg {...props} />;
+    case 'approval':      return <ApprovalMsg {...props} />;
+    case 'vote':          return <VoteMsg {...props} />;
+    case 'update':        return <UpdateMsg {...props} />;
+    case 'announce':      return <AnnounceMsg {...props} />;
+    case 'meeting':       return <MeetingMsg {...props} />;
+    case 'meeting_invite':return <MeetingInviteMsg m={m} onRsvp={rsvpMeeting} />;
+    case 'ticket':        return <TicketMsg m={m} onDelete={deleteMsg} />;
+    case 'assign':        return <AssignMsg m={m} onDelete={deleteMsg} />;
+    case 'image':         return <ImageMsg m={m} />;
+    case 'file':          return <FileMsg m={m} />;
+    case 'casual':        return <CasualMsg {...props} />;
+    case 'ai':            return <AIMsg m={m} />;
+    default:              return <TextMsg {...props} />;
   }
 }

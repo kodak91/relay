@@ -178,6 +178,31 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     });
   };
 
+  const handleSendMeetingInvite = async (data) => {
+    await handleSend({
+      type: 'meeting_invite',
+      text: data.title,
+      agenda: data.agenda,
+      scheduledAt: data.scheduledAt,
+      participants: data.participants,
+      rsvp: {},
+      tags: [],
+    });
+  };
+
+  const rsvpMeeting = async (mid, response) => {
+    if (!user?.uid) return;
+    const m = messages.find((msg) => msg.id === mid);
+    if (!m) return;
+    const rsvp = { ...(m.rsvp || {}) };
+    if (response === null) {
+      delete rsvp[user.uid];
+    } else {
+      rsvp[user.uid] = response;
+    }
+    await updateMessageField(activeProject, mid, { rsvp });
+  };
+
   const handleSend = async (rawMsgData) => {
     if (!activeProject) return;
     let msgData = rawMsgData;
@@ -290,7 +315,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     openThreads, replyValues,
     toggleThread, setReplyValue, sendReply,
     choose, vote, actApproval, confirmMsg, nudgeMsg,
-    saveMeetingSummary,
+    saveMeetingSummary, rsvpMeeting,
     editMsg, deleteMsg,
   };
 
@@ -386,6 +411,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         initialTitle={meetingInitialTitle}
         projectId={activeProject}
         user={user}
+        onPostToChat={handleSendMeetingInvite}
       />
 
       {chatTab === 'kb' ? (

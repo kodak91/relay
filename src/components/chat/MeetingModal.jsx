@@ -433,7 +433,7 @@ ${transcriptText || '(기록된 발화 없음)'}
 
 // ─── Schedule creation modal (default export, used from Composer /회의) ───────
 
-export default function MeetingScheduleModal({ open, onClose, members = [], initialTitle = '', projectId, user }) {
+export default function MeetingScheduleModal({ open, onClose, members = [], initialTitle = '', projectId, user, onPostToChat }) {
   const { addMeeting } = useMeetings(projectId);
   const [title, setTitle] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
@@ -462,12 +462,19 @@ export default function MeetingScheduleModal({ open, onClose, members = [], init
     setSaving(true);
     try {
       const participants = members.filter((m) => selected.includes(m.uid)).map((m) => ({ uid: m.uid, name: m.name }));
+      const cleanAgenda = agenda.filter((a) => a.trim());
       await addMeeting({
         title: title.trim(),
-        agenda,
+        agenda: cleanAgenda,
         scheduledAt: scheduledAt || null,
         participants,
         createdBy: { uid: user?.uid, name: user?.name },
+      });
+      onPostToChat?.({
+        title: title.trim(),
+        agenda: cleanAgenda,
+        scheduledAt: scheduledAt || null,
+        participants,
       });
       onClose();
     } catch (e) {
@@ -490,7 +497,7 @@ export default function MeetingScheduleModal({ open, onClose, members = [], init
           <button className="icon-btn" onClick={onClose} title="닫기">✕</button>
         </header>
 
-        <div className="m-body" style={{ gap: 16 }}>
+        <div className="m-body m-schedule-body">
           <div className="m-section">
             <h4>회의 제목 *</h4>
             <input
@@ -531,7 +538,7 @@ export default function MeetingScheduleModal({ open, onClose, members = [], init
             </ul>
           </div>
 
-          <div className="m-section">
+          <div className="m-section" style={{ borderBottom: 'none' }}>
             <h4>참석자 <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>{selected.length}명 선택됨</span></h4>
             <div className="m-people">
               {members.filter((m) => m.uid).map((m) => {
@@ -549,13 +556,13 @@ export default function MeetingScheduleModal({ open, onClose, members = [], init
               })}
             </div>
           </div>
+        </div>
 
-          <div className="m-foot">
-            <button className="btn minor" onClick={onClose}>취소</button>
-            <button className="btn accent" onClick={handleSave} disabled={!title.trim() || saving}>
-              {saving ? '저장 중…' : '📅 회의 예약'}
-            </button>
-          </div>
+        <div className="m-foot">
+          <button className="btn minor" onClick={onClose}>취소</button>
+          <button className="btn accent" onClick={handleSave} disabled={!title.trim() || saving}>
+            {saving ? '저장 중…' : '📅 회의 예약'}
+          </button>
         </div>
       </div>
     </div>

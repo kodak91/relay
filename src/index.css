@@ -2754,6 +2754,41 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 .rv-q-name { font-size: 12px; font-weight: 700; color: var(--ink-2); white-space: nowrap; padding-top: 2px; }
 .rv-q-text { font-size: 12px; color: var(--ink-3); line-height: 1.5; font-style: italic; }
 
+/* Meeting invite card */
+.meeting-invite-card {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-3); padding: 12px 14px; margin-top: 4px;
+  max-width: 480px; display: flex; flex-direction: column; gap: 6px;
+}
+.mi-badge { font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: 0.02em; }
+.mi-title { font-size: 15px; font-weight: 700; color: var(--ink); }
+.mi-time { font-size: 12px; color: var(--ink-3); font-family: var(--font-mono); }
+.mi-agenda { display: flex; flex-direction: column; gap: 2px; }
+.mi-agenda-item { font-size: 12px; color: var(--ink-2); }
+.mi-rsvp-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; gap: 8px; flex-wrap: wrap;
+}
+.mi-rsvp-status { display: flex; gap: 8px; flex-wrap: wrap; }
+.mi-rsvp-count { font-size: 11px; font-family: var(--font-mono); font-weight: 600; }
+.mi-rsvp-count.attend { color: var(--emerald); }
+.mi-rsvp-count.decline { color: var(--rose); }
+.mi-rsvp-count.pending { color: var(--ink-mute); }
+.mi-rsvp-btns { display: flex; gap: 4px; flex-shrink: 0; }
+.mi-btn {
+  font-size: 12px; font-weight: 600; padding: 4px 14px;
+  border-radius: 999px; border: 1.5px solid var(--border);
+  background: var(--surface); cursor: pointer; color: var(--ink-2);
+  transition: all 0.12s; font-family: var(--font-sans);
+}
+.mi-btn:hover { border-color: var(--border-2); background: var(--hover); }
+.mi-btn.attend.on { background: var(--emerald-bg); border-color: var(--emerald-line); color: var(--emerald); }
+.mi-btn.decline.on { background: var(--rose-bg); border-color: var(--rose-line); color: var(--rose); }
+
+/* Meeting modal: schedule body scrolls, footer stays fixed */
+.m-schedule-body { overflow-y: auto; }
+
 /* Meeting card in chat */
 .meeting-card {
   background: var(--surface-2); border: 1px solid var(--border);
