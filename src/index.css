@@ -403,7 +403,7 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 /* Chat scroll */
 .chat-scroll {
   flex: 1; overflow-y: auto; padding: 12px 20px 8px;
-  scroll-behavior: smooth;
+  display: flex; flex-direction: column-reverse;
 }
 .day-divider {
   text-align: center; font-size: 11px; color: var(--ink-mute);

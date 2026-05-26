@@ -49,15 +49,10 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { folders: kbFolders, saveFromChat: saveToKB } = useKB(activeProject);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
-  const initialScrollDone = useRef(false);
 
-  // Reset when project changes so initial scroll fires again
-  useEffect(() => { initialScrollDone.current = false; }, [activeProject]);
-
-  // Callback ref: instantly jumps to bottom when chat-scroll div mounts (tab switch)
+  // column-reverse: scrollTop=0 = visual bottom, no JS scroll needed on mount
   const scrollElRef = useCallback((node) => {
     scrollRef.current = node;
-    if (node) node.scrollTop = node.scrollHeight;
   }, []);
 
   const [openThreads, setOpenThreads] = useState(new Set());
@@ -76,15 +71,11 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
   const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
 
-  // Initial load: instant jump. Subsequent new messages: smooth scroll.
+  // With column-reverse, scrollTop=0 is visual bottom.
+  // If user is already near bottom, keep them there as new messages arrive.
   useEffect(() => {
     if (!scrollRef.current || loading) return;
-    if (!initialScrollDone.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      initialScrollDone.current = true;
-    } else {
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-    }
+    if (scrollRef.current.scrollTop < 80) scrollRef.current.scrollTop = 0;
   }, [messages.length, loading]);
 
   const filteredMessages = useMemo(() => {
@@ -351,13 +342,20 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     await deleteMessage(activeProject, mid);
   };
 
-  const handleChatScroll = useCallback((e) => {
-    const container = e.currentTarget;
-    const scrollTop = container.scrollTop;
-    const dividers = container.querySelectorAll('[data-date]');
+  const handleChatScroll = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const cTop = container.getBoundingClientRect().top;
+    // In column-reverse layout, find the divider whose rect.top is closest to
+    // (but not below) the container's top — that's the current visible section.
     let label = '';
-    dividers.forEach((div) => {
-      if (div.offsetTop <= scrollTop + 40) label = div.getAttribute('data-date');
+    let maxTop = -Infinity;
+    container.querySelectorAll('[data-date]').forEach((div) => {
+      const rect = div.getBoundingClientRect();
+      if (rect.top <= cTop + 50 && rect.top > maxTop) {
+        maxTop = rect.top;
+        label = div.getAttribute('data-date');
+      }
     });
     if (label) setFloatingDate(label);
     clearTimeout(floatTimerRef.current);
@@ -515,6 +513,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
             ) : (
               <>
                 {(() => {
+                  // Build in chronological order, then reverse for column-reverse layout.
+                  // column-reverse: first DOM element = visual bottom → newest messages at bottom.
                   const items = [];
                   let lastDate = null;
                   filteredMessages.forEach((m) => {
@@ -530,7 +530,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
                       </div>
                     );
                   });
-                  return items;
+                  return items.reverse();
                 })()}
               </>
             )}
