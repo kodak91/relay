@@ -235,6 +235,19 @@ function TicketDetail({ ticket, tickets, members, onUpdate, onClose }) {
               ))}
             </div>
           )}
+          {(ticket.history || []).length > 0 && (
+            <div className="tk-detail-section">
+              <div className="tk-detail-sec-label">✓ 완료된 태스크 ({ticket.history.length})</div>
+              {[...ticket.history].reverse().map((h, i) => (
+                <div key={i} className="tk-detail-history">
+                  <span className="tk-hist-check">✓</span>
+                  <span className="tk-hist-title">{h.taskTitle}</span>
+                  {h.memberName && <span className="tk-hist-who">@{h.memberName}</span>}
+                  <span className="tk-hist-date">{h.completedAt?.slice(0, 10)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

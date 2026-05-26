@@ -1,8 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTeamTasks, taskDate } from '../../hooks/useTeamTasks';
 
-const today = new Date().toISOString().slice(0, 10);
-
 function getWeekDates() {
   const now = new Date();
   const mon = new Date(now);
@@ -28,11 +26,11 @@ function RingChart({ pct, size = 76, stroke = 9, color }) {
   );
 }
 
-function Dashboard({ memberTasks, members }) {
+function Dashboard({ memberTasks, members, today }) {
   const weekDates = useMemo(() => getWeekDates(), []);
 
   const allTasks = useMemo(() => Object.values(memberTasks).flat(), [memberTasks]);
-  const todayTasks = useMemo(() => allTasks.filter((t) => taskDate(t) === today), [allTasks]);
+  const todayTasks = useMemo(() => allTasks.filter((t) => taskDate(t) === today), [allTasks, today]);
   const todayDoneCount = todayTasks.filter((t) => t.done).length;
   const todayRate = todayTasks.length > 0 ? todayDoneCount / todayTasks.length : 0;
 
@@ -52,7 +50,7 @@ function Dashboard({ memberTasks, members }) {
       if (cnt > bestCount) { bestCount = cnt; best = m; }
     });
     return { member: best, count: bestCount };
-  }, [memberTasks, members]);
+  }, [memberTasks, members, today]);
 
   const maxBar = Math.max(...weekStats.map((d) => d.total), 1);
   const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
@@ -155,7 +153,7 @@ function TicketPicker({ tickets, onLink }) {
 }
 
 function TaskRow({ task, onToggle, tickets = [], onLinkTicket }) {
-  const isOverdue = !task.done && taskDate(task) < today;
+  const isOverdue = !task.done && taskDate(task) < new Date().toISOString().slice(0, 10);
   // Use saved ticketCode on the task as fallback so sidebar doesn't need the tickets array
   const ticket = tickets.find((t) => t.id === task.ticketId)
     || (task.ticketCode ? { id: task.ticketId, ticketCode: task.ticketCode, title: task.ticketTitle || '' } : null);
@@ -182,11 +180,11 @@ function TaskRow({ task, onToggle, tickets = [], onLinkTicket }) {
   );
 }
 
-function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets }) {
+function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectId, today }) {
   const [showHistory, setShowHistory] = useState(false);
 
-  const todayTasks = useMemo(() => tasks.filter((t) => taskDate(t) === today), [tasks]);
-  const overdueTasks = useMemo(() => tasks.filter((t) => !t.done && taskDate(t) < today), [tasks]);
+  const todayTasks = useMemo(() => tasks.filter((t) => taskDate(t) === today), [tasks, today]);
+  const overdueTasks = useMemo(() => tasks.filter((t) => !t.done && taskDate(t) < today), [tasks, today]);
   const todayDone = todayTasks.filter((t) => t.done).length;
   const todayTotal = todayTasks.length;
   const pct = todayTotal > 0 ? todayDone / todayTotal : 0;
@@ -222,11 +220,16 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets }) {
         {todayTasks.length === 0
           ? <div className="tt-empty">오늘 태스크 없음</div>
           : todayTasks.map((t) => (
-            <TaskRow key={t.id} task={t} tickets={tickets} onToggle={(id, done) => onToggle(member.uid, id, done)} onLinkTicket={(taskId, ticketId) => {
+            <TaskRow key={t.id} task={t} tickets={tickets}
+              onToggle={(id, done) => {
+                const task = tasks.find((tk) => tk.id === id);
+                onToggle(member.uid, id, done, { ...task, memberName: member.name });
+              }}
+              onLinkTicket={(taskId, ticketId) => {
                 const lk = tickets.find((tk) => tk.id === ticketId);
                 onUpdateTask(taskId, ticketId
-                  ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null }
-                  : { ticketId: null, ticketCode: null, ticketTitle: null });
+                  ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null, ticketProjectId: projectId }
+                  : { ticketId: null, ticketCode: null, ticketTitle: null, ticketProjectId: null });
               }} />
           ))
         }
@@ -237,12 +240,17 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets }) {
           <div className="tt-sec-label overdue">지연 {overdueTasks.length}건</div>
           <div className="tt-task-list">
             {overdueTasks.map((t) => (
-              <TaskRow key={t.id} task={t} tickets={tickets} onToggle={(id, done) => onToggle(member.uid, id, done)} onLinkTicket={(taskId, ticketId) => {
-                const lk = tickets.find((tk) => tk.id === ticketId);
-                onUpdateTask(taskId, ticketId
-                  ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null }
-                  : { ticketId: null, ticketCode: null, ticketTitle: null });
-              }} />
+              <TaskRow key={t.id} task={t} tickets={tickets}
+                onToggle={(id, done) => {
+                  const task = tasks.find((tk) => tk.id === id);
+                  onToggle(member.uid, id, done, { ...task, memberName: member.name });
+                }}
+                onLinkTicket={(taskId, ticketId) => {
+                  const lk = tickets.find((tk) => tk.id === ticketId);
+                  onUpdateTask(taskId, ticketId
+                    ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null, ticketProjectId: projectId }
+                    : { ticketId: null, ticketCode: null, ticketTitle: null, ticketProjectId: null });
+                }} />
             ))}
           </div>
         </>
@@ -277,10 +285,11 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets }) {
 export default function TasksTab({ projectId, project, tickets = [] }) {
   const members = useMemo(() => (project?.members || []).filter((m) => m.uid), [project]);
   const { memberTasks, toggleTask, updateTask } = useTeamTasks(members);
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   return (
     <div className="tt-root">
-      <Dashboard memberTasks={memberTasks} members={members} />
+      <Dashboard memberTasks={memberTasks} members={members} today={today} />
       <div className="tt-columns">
         {members.length === 0 ? (
           <div className="tt-no-members">
@@ -297,6 +306,8 @@ export default function TasksTab({ projectId, project, tickets = [] }) {
               onToggle={toggleTask}
               onUpdateTask={(taskId, fields) => updateTask(m.uid, taskId, fields)}
               tickets={tickets}
+              projectId={projectId}
+              today={today}
             />
           ))
         )}

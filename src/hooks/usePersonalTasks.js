@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   collection, query, orderBy, onSnapshot,
-  addDoc, updateDoc, deleteDoc, doc, serverTimestamp,
+  addDoc, updateDoc, deleteDoc, doc, serverTimestamp, arrayUnion,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
@@ -78,7 +78,23 @@ export function usePersonalTasks(uid) {
   };
 
   const toggleTask = async (taskId, done) => {
+    const task = tasks.find((t) => t.id === taskId);
     await updateDoc(doc(db, 'users', uid, 'tasks', taskId), { done });
+    if (done && task?.ticketId && task?.ticketProjectId) {
+      try {
+        await updateDoc(doc(db, 'projects', task.ticketProjectId, 'tickets', task.ticketId), {
+          history: arrayUnion({
+            type: 'task_completed',
+            taskId,
+            taskTitle: task.title || '',
+            memberUid: uid,
+            completedAt: new Date().toISOString(),
+          }),
+        });
+      } catch (e) {
+        console.warn('Ticket history sync:', e.message);
+      }
+    }
   };
 
   const deleteTask = async (taskId) => {

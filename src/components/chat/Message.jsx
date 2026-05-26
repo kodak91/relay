@@ -256,7 +256,12 @@ function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleT
 
 function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onChoose, onDelete, senderName }) {
   const { user } = useAppStore();
-  const isLead = user?.role === 'lead';
+  // targetUid 지정 시 해당 유저만, 미지정 시 lead 역할만 결정 가능
+  const canDecide = m.targetUid
+    ? user?.uid === m.targetUid
+    : user?.role === 'lead';
+  const waitingFor = m.targetName || '팀장';
+
   return (
     <div className="msg">
       <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} />
@@ -270,6 +275,7 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
         <div className="decision-card">
           <div className="dc-meta">
             <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>◇ 결정 요청</span>
+            {m.targetName && <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>→ {m.targetName}</span>}
             {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
             {m.due && <span className="due">📅 {m.due}</span>}
           </div>
@@ -278,16 +284,17 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
             {(m.options || []).map((opt) => (
               <div
                 key={opt.letter}
-                className={'dc-opt' + (m.chosen === opt.letter ? ' chosen' : '') + (!isLead && !m.chosen ? ' locked' : '')}
-                style={!isLead && !m.chosen ? { cursor: 'default', opacity: 0.6 } : {}}
-                onClick={() => !m.chosen && isLead && onChoose(m.id, opt.letter)}
+                className={'dc-opt' + (m.chosen === opt.letter ? ' chosen' : '') + (!canDecide && !m.chosen ? ' locked' : '')}
+                style={!canDecide && !m.chosen ? { cursor: 'default', opacity: 0.6 } : {}}
+                onClick={() => !m.chosen && canDecide && onChoose(m.id, opt.letter)}
               >
                 <div className="letter">{opt.letter}</div>
                 <div className="title">{opt.title}</div>
               </div>
             ))}
           </div>
-          {!m.chosen && !isLead && <p style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-3)' }}>⏳ 팀장이 결정합니다</p>}
+          {!m.chosen && !canDecide && <p style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-3)' }}>⏳ {waitingFor}이(가) 결정합니다</p>}
+          {!m.chosen && canDecide && <p style={{ marginTop: 6, fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>👆 옵션을 선택해주세요</p>}
           {m.chosen && <p style={{ marginTop: 8, fontSize: 12, color: 'var(--emerald)', fontWeight: 600 }}>✓ {m.chosen}안 선택됨</p>}
         </div>
         <Reactions list={m.reactions} />
@@ -300,7 +307,9 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
 
 function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onAct, onDelete, senderName }) {
   const { user } = useAppStore();
-  const isLead = user?.role === 'lead';
+  // targetUid 지정 시 해당 유저만, 미지정 시 lead 역할만 액션 가능
+  const canAct = m.targetUid ? user?.uid === m.targetUid : user?.role === 'lead';
+  const waitingFor = m.targetName || '팀장';
   const [holdDate, setHoldDate] = useState('');
   const [showHoldPicker, setShowHoldPicker] = useState(false);
 
@@ -330,6 +339,7 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
         <div className={'approval-card ' + statusClass}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <span style={{ fontSize: 11, color: 'oklch(0.42 0.13 70)', fontWeight: 700 }}>✓ 컨펌 요청</span>
+            {m.targetName && <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>→ {m.targetName}</span>}
             {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
           </div>
           <div className="ac-desc md-content">
@@ -337,7 +347,7 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
           </div>
           <div className="ac-actions">
             {isPending ? (
-              isLead ? (
+              canAct ? (
                 <>
                   <button className="btn accent sm" onClick={() => onAct(m.id, 'approve')}>OK</button>
                   <button className="btn minor sm" onClick={() => onAct(m.id, 'complete')}>반려</button>
@@ -350,7 +360,7 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
                   )}
                 </>
               ) : (
-                <span className="ac-status" style={{ color: 'var(--ink-3)', fontSize: 12 }}>⏳ 팀장 검토 대기 중</span>
+                <span className="ac-status" style={{ color: 'var(--ink-3)', fontSize: 12 }}>⏳ {waitingFor} 검토 대기 중</span>
               )
             ) : status === 'held' ? (
               <span className="ac-status held">⏸ 보류{m.heldUntil ? ` (${m.heldUntil}까지)` : ''}</span>

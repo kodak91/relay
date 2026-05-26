@@ -251,7 +251,7 @@ function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid }) {
               <div className="r-foot">
                 <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>{item.ts}</span>
                 <div className="actions">
-                  {isLead
+                  {(item.targetUid === uid || (!item.targetUid && isLead))
                     ? <button>{item.kind === 'approval' ? '결정하기 →' : '선택하기 →'}</button>
                     : <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>검토 대기 중</span>
                   }

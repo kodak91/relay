@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, updateDoc, doc, arrayUnion } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export function taskDate(t) {
@@ -25,8 +25,24 @@ export function useTeamTasks(members) {
     return () => unsubs.forEach((u) => u());
   }, [memberKey]); // eslint-disable-line
 
-  const toggleTask = async (uid, taskId, done) => {
+  const toggleTask = async (uid, taskId, done, task) => {
     await updateDoc(doc(db, 'users', uid, 'tasks', taskId), { done });
+    if (done && task?.ticketId && task?.ticketProjectId) {
+      try {
+        await updateDoc(doc(db, 'projects', task.ticketProjectId, 'tickets', task.ticketId), {
+          history: arrayUnion({
+            type: 'task_completed',
+            taskId,
+            taskTitle: task.title || '',
+            memberUid: uid,
+            memberName: task.memberName || '',
+            completedAt: new Date().toISOString(),
+          }),
+        });
+      } catch (e) {
+        console.warn('Ticket history sync:', e.message);
+      }
+    }
   };
 
   const updateTask = async (uid, taskId, fields) => {
