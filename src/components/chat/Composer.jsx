@@ -610,7 +610,8 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
 
   return (
     <div className={'composer' + (isCasual ? ' casual-mode' : '')}>
-      <div className={'box' + (isCasual ? ' casual' : '') + (startsDoubleSlash ? ' polish-mode' : '')}>
+      <div className={'box-outer' + (isCasual ? ' casual' : '') + (startsDoubleSlash ? ' polish-mode' : '')}>
+        <div className="box-inner">
 
         {isDecision && (
           <DecisionBuilder
@@ -729,6 +730,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
           />
         )}
 
+        </div>
         <div className="actions" ref={actionsRef}>
           {/* + 파일 버튼 */}
           <div className="composer-btn-wrap">
@@ -794,4 +796,5 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
       </div>
     </div>
   );
+
 }

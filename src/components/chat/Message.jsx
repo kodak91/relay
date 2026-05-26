@@ -828,7 +828,7 @@ function MeetingInviteMsg({ m, onRsvp }) {
 
 // ─── Main Message dispatcher ─────────────────────────────────────────────
 
-export default function Message({ m, isGrouped, handlers }) {
+export default function Message({ m, isGrouped, isGroupStart, handlers }) {
   const { user } = useAppStore();
   const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, deleteMsg, rsvpMeeting } = handlers;
   const threadOpen = openThreads.has(m.id);
@@ -837,6 +837,7 @@ export default function Message({ m, isGrouped, handlers }) {
   const props = {
     m,
     isGrouped,
+    isGroupStart,
     threadOpen,
     replyValue,
     senderName: user?.name || '나',

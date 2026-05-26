@@ -376,7 +376,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         </div>
         <div className="chat-tabs">
           {[
-            { id: 'chat', icon: '💬', label: '채팅', count: messages.length },
+            { id: 'chat', icon: '💬', label: '채팅' },
             { id: 'kb', icon: '📚', label: 'KB', count: null },
             { id: 'notion', icon: '🔖', label: '북마크', count: null },
             { id: 'tickets', icon: '🎫', label: '워크트리', count: tickets.length || null },
