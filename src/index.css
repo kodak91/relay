@@ -8,32 +8,37 @@
 
 /* ── Design tokens ────────────────────────────────────────────────────── */
 :root {
-  --bg:          oklch(0.985 0.004 80);
-  --surface:     oklch(0.995 0.002 80);
-  --surface-2:   oklch(0.978 0.004 80);
-  --surface-3:   oklch(0.955 0.007 80);
-  --hover:       oklch(0.95 0.008 80);
-  --border:      oklch(0.91 0.008 80);
-  --border-2:    oklch(0.86 0.01 80);
-  --ink:         oklch(0.18 0.012 70);
-  --ink-2:       oklch(0.38 0.015 70);
-  --ink-3:       oklch(0.55 0.01 80);
-  --ink-mute:    oklch(0.68 0.008 80);
+  /* ─ Surfaces (user palette: #f6f7fb 밝은톤 · #fcfcfe 미색) ─ */
+  --bg:          #f6f7fb;   /* 앱 바탕 · 사이드바 */
+  --surface:     #fcfcfe;   /* 메인 콘텐츠 · 카드 · 입력창 */
+  --surface-2:   #f6f7fb;   /* 툴바 · 액션바 · 보조 패널 */
+  --surface-3:   #eceef8;   /* 뱃지 · kbd · 3단계 구분 */
+  --hover:       #e6e9f5;   /* hover 상태 */
+  --border:      #dde0ef;   /* 기본 구분선 */
+  --border-2:    #cdd1e6;   /* 강조 구분선 */
 
-  --accent:      oklch(0.48 0.21 270);
-  --accent-ink:  oklch(0.98 0.01 270);
-  --accent-soft: oklch(0.95 0.04 270);
-  --accent-line: oklch(0.85 0.1 270);
+  /* ─ Ink ─ */
+  --ink:         oklch(0.17 0.015 270);
+  --ink-2:       oklch(0.37 0.015 270);
+  --ink-3:       oklch(0.54 0.012 270);
+  --ink-mute:    oklch(0.68 0.010 270);
 
-  --amber:       oklch(0.74 0.16 70);
-  --amber-bg:    oklch(0.96 0.05 80);
-  --amber-line:  oklch(0.86 0.1 75);
-  --emerald:     oklch(0.58 0.13 160);
-  --emerald-bg:  oklch(0.95 0.04 160);
-  --emerald-line:oklch(0.83 0.08 160);
-  --rose:        oklch(0.58 0.20 25);
-  --rose-bg:     oklch(0.96 0.04 25);
-  --rose-line:   oklch(0.85 0.10 25);
+  /* ─ Accent (키컬러 #4f46e5 indigo) ─ */
+  --accent:      #4f46e5;
+  --accent-ink:  #ffffff;
+  --accent-soft: #edeafe;   /* 활성탭 · 소프트 하이라이트 */
+  --accent-line: #c4bef8;   /* 액센트 테두리 */
+
+  /* ─ Semantic ─ */
+  --amber:       oklch(0.72 0.17 65);
+  --amber-bg:    #fef8ec;
+  --amber-line:  #f0d88a;
+  --emerald:     oklch(0.55 0.14 158);
+  --emerald-bg:  #ecfaf3;
+  --emerald-line:#9de5c2;
+  --rose:        oklch(0.56 0.22 22);
+  --rose-bg:     #fef0f0;
+  --rose-line:   #f5b8b8;
 
   --r-1: 4px; --r-2: 8px; --r-3: 12px; --r-4: 16px;
   --row-y: 10px; --row-x: 16px; --msg-gap: 18px;
@@ -336,7 +341,7 @@ p { margin: 0; }
 .col-mid {
   display: flex; flex-direction: column;
   overflow: hidden; height: 100%; position: relative;
-  background: oklch(0.975 0.008 270);
+  background: var(--surface);
 }
 [data-theme="dark"] .col-mid { background: oklch(0.245 0.015 270); }
 .chat-head {
