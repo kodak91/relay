@@ -52,24 +52,25 @@ function Avatar({ name, size = 36 }) {
   );
 }
 
-function MsgActions({ m, onReply, onEdit, onDelete }) {
+function MsgActions({ m, onReply, onEdit, onDelete, members, onAddTask }) {
   const { user } = useAppStore();
   const { onReact } = useContext(MsgContext);
   const [dropOpen, setDropOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [taskPickerOpen, setTaskPickerOpen] = useState(false);
   const dropRef = useRef(null);
   const pickerRef = useRef(null);
   const isMine = user?.uid && m.senderUid === user.uid;
 
   useEffect(() => {
-    if (!dropOpen && !pickerOpen) return;
+    if (!dropOpen && !pickerOpen && !taskPickerOpen) return;
     const handler = (e) => {
-      if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false);
+      if (dropRef.current && !dropRef.current.contains(e.target)) { setDropOpen(false); setTaskPickerOpen(false); }
       if (pickerRef.current && !pickerRef.current.contains(e.target)) setPickerOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [dropOpen, pickerOpen]);
+  }, [dropOpen, pickerOpen, taskPickerOpen]);
 
   return (
     <div className="msg-actions">
@@ -101,6 +102,30 @@ function MsgActions({ m, onReply, onEdit, onDelete }) {
             )}
             {!isMine && (
               <div style={{ padding: '6px 12px', fontSize: 12, color: 'var(--ink-mute)' }}>내 메시지만 수정 가능</div>
+            )}
+            {onAddTask && (
+              <>
+                <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
+                <button onClick={() => setTaskPickerOpen((v) => !v)}>📌 태스크+</button>
+              </>
+            )}
+            {taskPickerOpen && onAddTask && (members || []).length > 0 && (
+              <div style={{ padding: '4px 6px', borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, color: 'var(--ink-3)', padding: '2px 6px', marginBottom: 2 }}>멤버 선택</div>
+                {(members || []).filter((mb) => mb.uid).map((mb) => (
+                  <button
+                    key={mb.uid}
+                    style={{ fontSize: 12 }}
+                    onClick={() => {
+                      onAddTask(mb, m);
+                      setTaskPickerOpen(false);
+                      setDropOpen(false);
+                    }}
+                  >
+                    {mb.name}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         )}
@@ -198,7 +223,7 @@ function DonutTimer({ expiresAt }) {
 
 // ─── Message type renderers ──────────────────────────────────────────────
 
-function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onConfirm, onNudge, onEdit, onDelete, senderName }) {
+function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onConfirm, onNudge, onEdit, onDelete, senderName, members, onAddTask }) {
   const { user } = useAppStore();
   const isSender = user?.uid && m.senderUid === user.uid;
   const confirmed = m.confirmedBy?.includes(user?.uid);
@@ -265,7 +290,7 @@ function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleT
   if (isGrouped) {
     return (
       <div className={'msg grouped' + (m.importance > 0 ? ' importance-msg imp-' + m.importance : '') + (isGroupStart ? ' group-start' : '')}>
-        <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={startEdit} onDelete={() => onDelete(m.id)} />
+        <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={startEdit} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
         <div className="msg-grouped-spacer" />
         <div style={{ flex: 1 }}>{body}</div>
       </div>
@@ -275,7 +300,7 @@ function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleT
   const cls = 'msg' + (m.importance > 0 ? ' importance-msg imp-' + m.importance : '') + (isGroupStart ? ' group-start' : '');
   return (
     <div className={cls}>
-      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={startEdit} onDelete={() => onDelete(m.id)} />
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={startEdit} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -289,9 +314,8 @@ function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleT
   );
 }
 
-function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onChoose, onDelete, senderName }) {
+function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onChoose, onDelete, senderName, members, onAddTask }) {
   const { user } = useAppStore();
-  // targetUid 지정 시 해당 유저만, 미지정 시 lead 역할만 결정 가능
   const canDecide = m.targetUid
     ? user?.uid === m.targetUid
     : user?.role === 'lead';
@@ -299,7 +323,7 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
 
   return (
     <div className="msg">
-      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} />
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -340,7 +364,7 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
   );
 }
 
-function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onAct, onDelete, senderName }) {
+function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onAct, onDelete, senderName, members, onAddTask }) {
   const { user } = useAppStore();
   // targetUid 지정 시 해당 유저만, 미지정 시 lead 역할만 액션 가능
   const canAct = m.targetUid ? user?.uid === m.targetUid : user?.role === 'lead';
@@ -363,7 +387,7 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
 
   return (
     <div className="msg">
-      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} />
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -441,14 +465,14 @@ function ImageMsg({ m }) {
   );
 }
 
-function VoteMsg({ m, onVote, onDelete }) {
+function VoteMsg({ m, onVote, onDelete, members, onAddTask }) {
   const { user } = useAppStore();
   const totalVotes = (m.options || []).reduce((sum, o) => sum + (o.votes?.length || 0), 0);
   const myVote = (m.options || []).find((o) => (o.votes || []).some((v) => v.uid === user?.uid || v.name === user?.name));
 
   return (
     <div className="msg">
-      <MsgActions m={m} onDelete={() => onDelete(m.id)} />
+      <MsgActions m={m} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -487,25 +511,60 @@ function VoteMsg({ m, onVote, onDelete }) {
   );
 }
 
-function UpdateMsg({ m, onDelete }) {
+function UpdateMsg({ m, onDelete, onEdit, members, onAddTask }) {
+  const { user } = useAppStore();
+  const isMine = user?.uid && m.senderUid === user.uid;
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState('');
+
+  const startEdit = () => { setEditText(m.text || ''); setEditMode(true); };
+  const saveEdit = () => {
+    if (editText.trim()) onEdit?.(m.id, editText.trim());
+    setEditMode(false);
+  };
+
   return (
     <div className="msg">
-      <MsgActions m={m} onDelete={() => onDelete(m.id)} />
+      <MsgActions
+        m={m}
+        onEdit={isMine ? startEdit : undefined}
+        onDelete={() => onDelete(m.id)}
+        members={members}
+        onAddTask={onAddTask}
+      />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
           <span className="name">{m.senderName}</span>
           <span className="role">{m.senderRole}</span>
           <span className="ts">{m.ts}</span>
+          {m.slackTs && <span style={{ fontSize: 10, color: 'var(--ink-3)', marginLeft: 4 }}>S</span>}
         </div>
         <div className="update-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)' }}>◆ 중간 보고</span>
           </div>
-          <div className="md-content" style={{ fontSize: 13, color: 'var(--ink-2)' }}>
-            <ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.text || ''}</ReactMarkdown>
-          </div>
-          {m.progress && (
+          {editMode ? (
+            <div className="edit-mode">
+              <textarea
+                className="edit-ta"
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') setEditMode(false); }}
+                rows={Math.max(3, editText.split('\n').length)}
+                autoFocus
+              />
+              <div className="edit-btns">
+                <button className="btn sm ghost" onClick={() => setEditMode(false)}>취소</button>
+                <button className="btn sm accent" onClick={saveEdit}>저장{m.slackTs ? ' (Slack 반영)' : ''}</button>
+              </div>
+            </div>
+          ) : (
+            <div className="md-content" style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+              <ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.text || ''}</ReactMarkdown>
+            </div>
+          )}
+          {m.progress && !editMode && (
             <div className="progress-bar-wrap">
               <div className="lbl"><span>{m.progress.label}</span><span className="mono">{m.progress.pct}%</span></div>
               <div className="progress-bar"><div className="fill" style={{ width: m.progress.pct + '%' }} /></div>
@@ -518,10 +577,10 @@ function UpdateMsg({ m, onDelete }) {
   );
 }
 
-function AnnounceMsg({ m, onCollapse, onDelete }) {
+function AnnounceMsg({ m, onCollapse, onDelete, members, onAddTask }) {
   return (
     <div className="msg">
-      <MsgActions m={m} onDelete={() => onDelete(m.id)} />
+      <MsgActions m={m} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -551,14 +610,14 @@ function fmtDuration(s) {
   return `${m}:${ss}`;
 }
 
-function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onSaveSummary, onDelete, senderName }) {
+function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onSaveSummary, onDelete, senderName, members, onAddTask }) {
   const [showFull, setShowFull] = useState(false);
   const mins = m.minutes;
   const hasMinutes = mins && (mins.decisions?.length || mins.actions?.length || mins.risks?.length || mins.summary);
 
   return (
     <div className="msg">
-      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} />
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -681,10 +740,10 @@ function FileMsg({ m }) {
   );
 }
 
-function CasualMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onDelete, senderName }) {
+function CasualMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onDelete, senderName, members, onAddTask }) {
   return (
     <div className="msg casual-msg" style={{ opacity: 0.9 }}>
-      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} />
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -733,7 +792,7 @@ function AIMsg({ m }) {
   );
 }
 
-function TicketMsg({ m, onDelete }) {
+function TicketMsg({ m, onDelete, members, onAddTask }) {
   const pInfo = {
     '긴급': 'oklch(0.52 0.18 25)',
     '높음': 'oklch(0.52 0.16 60)',
@@ -742,7 +801,7 @@ function TicketMsg({ m, onDelete }) {
   };
   return (
     <div className="msg">
-      <MsgActions m={m} onDelete={() => onDelete(m.id)} />
+      <MsgActions m={m} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -771,10 +830,10 @@ function TicketMsg({ m, onDelete }) {
   );
 }
 
-function AssignMsg({ m, onDelete }) {
+function AssignMsg({ m, onDelete, members, onAddTask }) {
   return (
     <div className="msg">
-      <MsgActions m={m} onDelete={() => onDelete(m.id)} />
+      <MsgActions m={m} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -865,7 +924,7 @@ function MeetingInviteMsg({ m, onRsvp }) {
 
 export default function Message({ m, isGrouped, isGroupStart, handlers }) {
   const { user } = useAppStore();
-  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, deleteMsg, rsvpMeeting, addReaction } = handlers;
+  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, deleteMsg, rsvpMeeting, addReaction, members, addTaskFromMessage } = handlers;
   const threadOpen = openThreads.has(m.id);
   const replyValue = replyValues[m.id] || '';
 
@@ -888,6 +947,8 @@ export default function Message({ m, isGrouped, isGroupStart, handlers }) {
     onCollapse: collapseAnnounce,
     onEdit: editMsg,
     onDelete: deleteMsg,
+    members,
+    onAddTask: addTaskFromMessage,
   };
 
   const ctxValue = { uid: user?.uid, onReact: (emoji) => addReaction?.(m.id, emoji) };

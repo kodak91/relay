@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, updateDoc, doc, arrayUnion } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, updateDoc, doc, arrayUnion, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export function taskDate(t) {
@@ -28,16 +28,28 @@ export function useTeamTasks(members) {
   const toggleTask = async (uid, taskId, done, task) => {
     await updateDoc(doc(db, 'users', uid, 'tasks', taskId), { done });
     if (done && task?.ticketId && task?.ticketProjectId) {
+      const historyEntry = {
+        type: 'task_completed',
+        taskId,
+        taskTitle: task.title || '',
+        detail: task.detail || '',
+        memberUid: uid,
+        memberName: task.memberName || '',
+        completedAt: new Date().toISOString(),
+      };
       try {
+        // Update ticket's inline history array
         await updateDoc(doc(db, 'projects', task.ticketProjectId, 'tickets', task.ticketId), {
-          history: arrayUnion({
-            type: 'task_completed',
-            taskId,
-            taskTitle: task.title || '',
-            memberUid: uid,
-            memberName: task.memberName || '',
-            completedAt: new Date().toISOString(),
-          }),
+          history: arrayUnion(historyEntry),
+        });
+        // Task 6: also write to top-level history collection keyed by ticketId
+        await addDoc(collection(db, 'history', task.ticketId, 'logs'), {
+          completedAt: historyEntry.completedAt,
+          completedBy: historyEntry.memberName || uid,
+          taskTitle: historyEntry.taskTitle,
+          detail: historyEntry.detail,
+          taskId,
+          memberUid: uid,
         });
       } catch (e) {
         console.warn('Ticket history sync:', e.message);

@@ -152,29 +152,63 @@ function TicketPicker({ tickets, onLink }) {
   );
 }
 
-function TaskRow({ task, onToggle, tickets = [], onLinkTicket }) {
+function TaskRow({ task, onToggle, tickets = [], onLinkTicket, onUpdateDetail }) {
+  const [expanded, setExpanded] = useState(false);
+  const [detail, setDetail] = useState(task.detail || '');
   const isOverdue = !task.done && taskDate(task) < new Date().toISOString().slice(0, 10);
-  // Use saved ticketCode on the task as fallback so sidebar doesn't need the tickets array
   const ticket = tickets.find((t) => t.id === task.ticketId)
     || (task.ticketCode ? { id: task.ticketId, ticketCode: task.ticketCode, title: task.ticketTitle || '' } : null);
+
+  const saveDetail = () => {
+    if (detail !== (task.detail || '')) onUpdateDetail?.(task.id, detail);
+  };
+
   return (
-    <div
-      className={'tt-task-row' + (task.done ? ' done' : '') + (isOverdue ? ' overdue' : '')}
-      onClick={() => onToggle(task.id, !task.done)}
-    >
-      <span className="tt-check">{task.done ? '✓' : ''}</span>
-      <span className="tt-task-title">{task.title}</span>
-      {isOverdue && <span className="tt-overdue-tag">지연</span>}
-      {ticket ? (
-        <span
-          className="tt-ticket-badge"
-          title={ticket.title}
-          onClick={(e) => { e.stopPropagation(); onLinkTicket(task.id, null); }}
+    <div>
+      <div
+        className={'tt-task-row' + (task.done ? ' done' : '') + (isOverdue ? ' overdue' : '')}
+        onClick={() => onToggle(task.id, !task.done)}
+      >
+        <button
+          className="tt-expand-btn"
+          onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
+          title="세부내용"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-3)', fontSize: 10, padding: '0 3px', flexShrink: 0 }}
         >
-          {ticket.ticketCode} ✕
-        </span>
-      ) : tickets.length > 0 && (
-        <TicketPicker tickets={tickets} onLink={(ticketId) => onLinkTicket(task.id, ticketId)} />
+          {expanded ? '▼' : '►'}
+        </button>
+        <span className="tt-check">{task.done ? '✓' : ''}</span>
+        <span className="tt-task-title">{task.title}</span>
+        {isOverdue && <span className="tt-overdue-tag">지연</span>}
+        {ticket ? (
+          <span
+            className="tt-ticket-badge"
+            title={ticket.title}
+            onClick={(e) => { e.stopPropagation(); onLinkTicket(task.id, null); }}
+          >
+            {ticket.ticketCode} ✕
+          </span>
+        ) : tickets.length > 0 && (
+          <TicketPicker tickets={tickets} onLink={(ticketId) => onLinkTicket(task.id, ticketId)} />
+        )}
+      </div>
+      {expanded && (
+        <textarea
+          className="tt-task-detail"
+          value={detail}
+          onChange={(e) => setDetail(e.target.value)}
+          onBlur={saveDetail}
+          placeholder="세부 내용 입력…"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: '100%', boxSizing: 'border-box', marginTop: 2, marginBottom: 4,
+            padding: '6px 10px', fontSize: 12, background: 'var(--surface-2)',
+            border: '1px solid var(--border)', borderRadius: 'var(--r-2)',
+            outline: 'none', resize: 'vertical', fontFamily: 'var(--font-sans)',
+            color: 'var(--ink-2)', lineHeight: 1.5, minHeight: 56,
+          }}
+          rows={2}
+        />
       )}
     </div>
   );
@@ -230,7 +264,8 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
                 onUpdateTask(taskId, ticketId
                   ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null, ticketProjectId: projectId }
                   : { ticketId: null, ticketCode: null, ticketTitle: null, ticketProjectId: null });
-              }} />
+              }}
+              onUpdateDetail={(taskId, detail) => onUpdateTask(taskId, { detail })} />
           ))
         }
       </div>
@@ -250,7 +285,8 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
                   onUpdateTask(taskId, ticketId
                     ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null, ticketProjectId: projectId }
                     : { ticketId: null, ticketCode: null, ticketTitle: null, ticketProjectId: null });
-                }} />
+                }}
+                onUpdateDetail={(taskId, detail) => onUpdateTask(taskId, { detail })} />
             ))}
           </div>
         </>

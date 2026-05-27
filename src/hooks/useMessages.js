@@ -23,12 +23,13 @@ export function useMessages(projectId) {
   }, [projectId]);
 
   const sendMessage = async (projectId, msgData) => {
-    await addDoc(collection(db, 'projects', projectId, 'messages'), {
+    const ref = await addDoc(collection(db, 'projects', projectId, 'messages'), {
       ...msgData,
       createdAt: serverTimestamp(),
       thread: [],
       reactions: [],
     });
+    return ref;
   };
 
   const addReply = async (projectId, messageId, reply) => {

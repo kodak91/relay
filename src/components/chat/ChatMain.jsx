@@ -17,8 +17,9 @@ import TicketTab from '../tickets/TicketTab';
 import { useTickets } from '../../hooks/useTickets';
 import { useKB } from '../../hooks/useKB';
 import { uploadFile, IMAGE_TYPES, formatFileSize } from '../../lib/uploadFile';
-import { postToSlack } from '../../lib/slack';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { postToSlack, slackBotPost, slackBotUpdate, slackBotDelete } from '../../lib/slack';
+import { claudeComplete } from '../../lib/claude';
+import { addDoc, collection, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
 function nowHM() {
@@ -240,7 +241,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       }
     }
 
-    await sendMessage(activeProject, {
+    const msgRef = await sendMessage(activeProject, {
       ...msgData,
       senderName: user?.name || '나',
       senderUid: user?.uid,
@@ -248,12 +249,20 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       ts: nowHM(),
     });
 
-    // Slack: /보고 messages
-    if (msgData.type === 'update' && activeProjectData?.slackWebhook) {
-      postToSlack(
-        activeProjectData.slackWebhook,
-        `📊 *[${activeProjectData.name}] 중간 보고* — ${user?.name || '팀원'}\n${msgData.text || ''}`
-      ).catch((e) => console.warn('Slack:', e.message));
+    // Slack: /보고 messages (bot token preferred for edit/delete tracking; fallback to webhook)
+    if (msgData.type === 'update') {
+      const slackText = `📊 *[${activeProjectData?.name}] 중간 보고* — ${user?.name || '팀원'}\n${msgData.text || ''}`;
+      if (activeProjectData?.slackBotToken && activeProjectData?.slackChannel) {
+        slackBotPost(activeProjectData.slackBotToken, activeProjectData.slackChannel, slackText)
+          .then((ts) => {
+            if (ts && msgRef) {
+              updateDoc(msgRef, { slackTs: ts, slackChannel: activeProjectData.slackChannel }).catch(() => {});
+            }
+          })
+          .catch((e) => console.warn('Slack bot post:', e.message));
+      } else if (activeProjectData?.slackWebhook) {
+        postToSlack(activeProjectData.slackWebhook, slackText).catch((e) => console.warn('Slack:', e.message));
+      }
     }
 
     // @assign: write task to assignee's personal task list
@@ -336,10 +345,62 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
   const editMsg = async (mid, newText) => {
     await editMessage(activeProject, mid, newText);
+    const m = messages.find((msg) => msg.id === mid);
+    if (m?.slackTs && activeProjectData?.slackBotToken && m.slackChannel) {
+      const slackText = `📊 *[${activeProjectData?.name}] 중간 보고* — ${m.senderName || ''}\n${newText}`;
+      slackBotUpdate(activeProjectData.slackBotToken, m.slackChannel, m.slackTs, slackText)
+        .catch((e) => console.warn('Slack update:', e.message));
+    }
   };
 
   const deleteMsg = async (mid) => {
+    const m = messages.find((msg) => msg.id === mid);
     await deleteMessage(activeProject, mid);
+    if (m?.slackTs && activeProjectData?.slackBotToken && m.slackChannel) {
+      slackBotDelete(activeProjectData.slackBotToken, m.slackChannel, m.slackTs)
+        .catch((e) => console.warn('Slack delete:', e.message));
+    }
+  };
+
+  // Task 3+4: Add task from message (태스크+) with notification
+  const addTaskFromMessage = async (member, msg) => {
+    if (!member?.uid || !msg) return;
+    const taskTitle = (msg.text || '').slice(0, 80) || '메시지 기반 태스크';
+    await addDoc(collection(db, 'users', member.uid, 'tasks'), {
+      title: taskTitle,
+      done: false,
+      date: new Date().toISOString().slice(0, 10),
+      assignedBy: user?.name || '팀원',
+      assignedFrom: 'chat',
+      fromMessageId: msg.id,
+      createdAt: serverTimestamp(),
+    });
+    // Task 4: notification
+    await addDoc(collection(db, 'notifications', member.uid, 'items'), {
+      type: 'task_assigned',
+      title: '새 태스크가 추가되었습니다',
+      body: taskTitle,
+      fromName: user?.name || '팀원',
+      read: false,
+      createdAt: serverTimestamp(),
+    }).catch(() => {});
+  };
+
+  // Task 8: PM AI command handler
+  const PM_SYSTEM = '당신은 이 워크스페이스의 PM AI입니다. 회의/티켓/태스크/요약 등 팀 운영 전반을 처리합니다. 한국어로 간결하고 실용적으로 답변하세요.';
+  const handlePMAI = async (query) => {
+    if (!query.trim() || !activeProject) return;
+    try {
+      const response = await claudeComplete(query, PM_SYSTEM);
+      await handleSend({
+        type: 'ai',
+        title: `PM AI — ${query.slice(0, 40)}`,
+        text: response,
+        tags: [],
+      });
+    } catch (e) {
+      console.warn('PM AI:', e.message);
+    }
   };
 
   const addReaction = async (mid, emoji) => {
@@ -387,6 +448,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     choose, vote, actApproval, confirmMsg, nudgeMsg,
     saveMeetingSummary, rsvpMeeting,
     editMsg, deleteMsg, addReaction,
+    members: activeProjectData?.members || [],
+    addTaskFromMessage,
   };
 
   if (!activeProject) {
@@ -569,6 +632,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
             onSend={handleSend}
             onFileUpload={handleFiles}
             onOpenMeeting={handleOpenMeeting}
+            onPMAI={handlePMAI}
             members={activeProjectData?.members || []}
             kbFolders={kbFolders}
             recentMessages={messages.slice(-8)}

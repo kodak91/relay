@@ -301,7 +301,7 @@ function KBSuggestions({ pendingFiles = [], text, folders, selectedId, onSelect 
   );
 }
 
-export default function Composer({ onSend, onFileUpload, onOpenMeeting, members = [], kbFolders = [], recentMessages = [] }) {
+export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, members = [], kbFolders = [], recentMessages = [] }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
   const [importance, setImportance] = useState(0);
@@ -370,6 +370,8 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
   const isApproval = type === 'approval';
   const isTicket = type === 'ticket';
   const startsDoubleSlash = text.startsWith('//');
+  // PM AI mode: starts with "/ " (slash + space) — distinct from slash-commands which have no space
+  const isPMAI = /^\/ .+/.test(text) && type === 'text';
   const showAccentSend = type !== 'text' && type !== 'casual';
 
   placeholderRef.current = isCasual
@@ -494,6 +496,17 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
   };
 
   const handleSend = () => {
+    // PM AI mode: "/ " prefix — send query to PM AI instead of chat
+    if (isPMAI) {
+      const query = text.replace(/^\/ /, '').trim();
+      if (query) {
+        onPMAI?.(query);
+        editor?.commands.clearContent();
+        setText('');
+      }
+      return;
+    }
+
     // Meeting: open meeting modal instead of sending a plain message
     if (isMeeting) {
       onOpenMeeting?.(text.trim());
@@ -643,7 +656,8 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
 
   // Update refs every render so editor callbacks always see fresh state
   onEnterRef.current = () => {
-    if (startsDoubleSlash) runPolish();
+    if (isPMAI) handleSend();
+    else if (startsDoubleSlash) runPolish();
     else handleSend();
   };
   onUpdateRef.current = (ed) => {
@@ -734,7 +748,12 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, members 
             📋 회의 모드 <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>— 회의 제목을 입력하고 보내기를 누르면 회의가 시작됩니다</span>
           </div>
         )}
-        {startsDoubleSlash && !polishing && !isDecision && !isVote && (
+        {isPMAI && !polishing && (
+          <div className="polish-banner" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent-line)', color: 'var(--accent)' }}>
+            <span className="ai-dot-sm" /> PM AI 모드 · <b>Enter</b>로 전송
+          </div>
+        )}
+        {startsDoubleSlash && !polishing && !isDecision && !isVote && !isPMAI && (
           <div className="polish-banner">
             <span className="ai-dot-sm" /> 매너모드 · <b>Enter</b>로 정중하게 변환
           </div>
