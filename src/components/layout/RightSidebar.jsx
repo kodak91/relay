@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import useAppStore from '../../store/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import { useGlobalMessages } from '../../hooks/useGlobalMessages';
@@ -39,7 +41,7 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
   ];
 
   // Catchup: only show messages relevant to the current user
-  const catchupMessages = messages.filter((m) => {
+  const catchupMessages = useMemo(() => messages.filter((m) => {
     if (m.type === 'approval') {
       return m.targetUid === user?.uid || (!m.targetUid && user?.role === 'lead');
     }
@@ -53,10 +55,66 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
       return !hasVoted;
     }
     return true;
-  });
+  }), [messages, user?.uid, user?.role]);
 
   const myTasks = tasks.filter((t) => !t.done);
   const isLead = user?.role === 'lead';
+
+  // --- Notification logic (always active, tab-independent) ---
+  const [notifPerm, setNotifPerm] = useState(() =>
+    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
+  );
+  const catchupSeenIds = useRef(null);
+
+  const requestNotif = async (e) => {
+    e?.stopPropagation();
+    const perm = await Notification.requestPermission();
+    setNotifPerm(perm);
+  };
+
+  // Browser notifications for catchup messages (approval/decision/vote/etc.)
+  useEffect(() => {
+    if (notifPerm !== 'granted') return;
+    if (catchupSeenIds.current === null) {
+      catchupSeenIds.current = new Set(catchupMessages.map((m) => m.id));
+      return;
+    }
+    catchupMessages.forEach((m) => {
+      if (!catchupSeenIds.current.has(m.id)) {
+        new Notification('Relay — 따라잡기', {
+          body: `${TYPE_LABELS[m.type] || m.type}: ${m.title || m.text?.slice(0, 60) || '(내용 없음)'}`,
+          icon: '/favicon.ico',
+        });
+      }
+    });
+    catchupSeenIds.current = new Set(catchupMessages.map((m) => m.id));
+  }, [catchupMessages, notifPerm]);
+
+  // Browser notifications for task-assignment (notifications/{uid}/items)
+  useEffect(() => {
+    if (!user?.uid) return;
+    const q = query(
+      collection(db, 'notifications', user.uid, 'items'),
+      orderBy('createdAt', 'desc')
+    );
+    let initialized = false;
+    const unsub = onSnapshot(q, (snap) => {
+      snap.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          if (!initialized) return;
+          if (Notification.permission === 'granted') {
+            const data = change.doc.data();
+            new Notification('Relay — ' + (data.title || '새 알림'), {
+              body: data.body || '',
+              icon: '/favicon.ico',
+            });
+          }
+        }
+      });
+      initialized = true;
+    });
+    return unsub;
+  }, [user?.uid]);
 
   const POSITION_COLORS = {
     '대표': 'oklch(0.38 0.18 270)',
@@ -92,21 +150,17 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
       </div>
 
       {tab === 'confirm'
-        ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} catchup={catchupMessages} onJump={onJumpToMessage} isLead={isLead} uid={user?.uid} />
+        ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} catchup={catchupMessages} onJump={onJumpToMessage} isLead={isLead} uid={user?.uid} notifPerm={notifPerm} onRequestNotif={requestNotif} />
         : <TaskSidebar uid={user?.uid} />
       }
     </aside>
   );
 }
 
-function CatchupSection({ messages, onJump, uid }) {
+function CatchupSection({ messages, onJump, uid, notifPerm, onRequestNotif }) {
   const storageKey = `catchup_dismissed_${uid || 'anon'}`;
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(new Set());
-  const [notifPerm, setNotifPerm] = useState(() =>
-    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
-  );
-  const seenIds = useRef(null);
 
   // Reload dismissed set whenever uid (and thus storageKey) becomes available
   useEffect(() => {
@@ -139,36 +193,13 @@ function CatchupSection({ messages, onJump, uid }) {
     [messages, dismissed]
   );
 
-  useEffect(() => {
-    if (notifPerm !== 'granted') return;
-    if (seenIds.current === null) {
-      seenIds.current = new Set(visible.map((m) => m.id));
-      return;
-    }
-    visible.forEach((m) => {
-      if (!seenIds.current.has(m.id)) {
-        new Notification('Relay — 따라잡기', {
-          body: `${TYPE_LABELS[m.type] || m.type}: ${m.title || m.text?.slice(0, 60) || '(내용 없음)'}`,
-          icon: '/favicon.ico',
-        });
-      }
-    });
-    seenIds.current = new Set(visible.map((m) => m.id));
-  }, [visible, notifPerm]);
-
-  const requestNotif = async (e) => {
-    e.stopPropagation();
-    const perm = await Notification.requestPermission();
-    setNotifPerm(perm);
-  };
-
   return (
     <div className="r-section">
       <div className="r-hd" style={{ cursor: 'pointer' }} onClick={() => setOpen((v) => !v)}>
         <h4>⚡ 따라잡기</h4>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {notifPerm !== 'granted' && typeof Notification !== 'undefined' && (
-            <button className="catchup-notif-btn" onClick={requestNotif} title="알림 허용">🔔 알림</button>
+            <button className="catchup-notif-btn" onClick={onRequestNotif} title="알림 허용">🔔 알림</button>
           )}
           {visible.length > 0 && (
             <button
@@ -203,7 +234,7 @@ function CatchupSection({ messages, onJump, uid }) {
   );
 }
 
-function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid }) {
+function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid, notifPerm, onRequestNotif }) {
   const storageKey = `confirm_dismissed_${uid || 'anon'}`;
   const [dismissed, setDismissed] = useState(new Set());
 
@@ -238,7 +269,7 @@ function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid }) {
 
   return (
     <div className="right-body">
-      <CatchupSection messages={catchup} onJump={onJump} uid={uid} />
+      <CatchupSection messages={catchup} onJump={onJump} uid={uid} notifPerm={notifPerm} onRequestNotif={onRequestNotif} />
 
       <div className="r-section">
         <div className="r-hd">

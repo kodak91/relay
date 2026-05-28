@@ -5,7 +5,7 @@ import useAppStore from '../../store/appStore';
 import relaySymbol from '../../assets/relay-symbol.png';
 
 export default function Topbar({ project, projects, onSearchOpen, onHamburger }) {
-  const { role, setRole, user, activeChannel } = useAppStore();
+  const { user, activeChannel } = useAppStore();
   const setUser = useAppStore((s) => s.setUser);
   const [menuOpen, setMenuOpen] = useState(false);
   const initial = user?.initial || '?';
@@ -56,14 +56,6 @@ export default function Topbar({ project, projects, onSearchOpen, onHamburger })
       </div>
 
       <div className="right">
-        <div className="role-switch">
-          <button className={role === 'lead' ? 'on' : ''} onClick={() => setRole('lead')}>팀장</button>
-          <button className={role === 'member' ? 'on' : ''} onClick={() => setRole('member')}>팀원</button>
-        </div>
-        <button className="icon-btn" title="알림">
-          🔔
-          <span className="dot" />
-        </button>
         <div className="user-menu-wrap">
           <button
             className="avatar-me"
