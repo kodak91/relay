@@ -212,21 +212,6 @@ function TicketBuilder({ members, title, setTitle, desc, setDesc, assigneeUid, s
   );
 }
 
-function FeedbackBuilder({ problem, setProblem, feature, setFeature, onCtrlEnter }) {
-  const inputStyle = { width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '7px 10px', fontSize: 13, background: 'var(--surface-2)', outline: 'none', boxSizing: 'border-box', fontFamily: 'var(--font-sans)', color: 'var(--ink)', resize: 'none' };
-  return (
-    <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
-        <span>📋</span> 피드백
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 4 }}>현재 문제</div>
-      <textarea style={{ ...inputStyle, marginBottom: 8 }} placeholder="어떤 문제가 있나요?" value={problem} onChange={(e) => setProblem(e.target.value)} rows={2} onKeyDown={onCtrlEnter} />
-      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 4 }}>원하는 기능</div>
-      <textarea style={inputStyle} placeholder="어떤 기능이나 개선이 필요한가요?" value={feature} onChange={(e) => setFeature(e.target.value)} rows={2} onKeyDown={onCtrlEnter} />
-    </div>
-  );
-}
-
 function formatBytes(b) {
   if (b < 1024) return b + 'B';
   if (b < 1024 * 1024) return (b / 1024).toFixed(0) + 'KB';
@@ -316,7 +301,7 @@ function KBSuggestions({ pendingFiles = [], text, folders, selectedId, onSelect 
   );
 }
 
-export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, members = [], kbFolders = [], recentMessages = [], communityMode = null }) {
+export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, members = [], kbFolders = [], recentMessages = [] }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
   const [importance, setImportance] = useState(0);
@@ -342,8 +327,6 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
 
   const [approvalTarget, setApprovalTarget] = useState(null);
   const [decisionTarget, setDecisionTarget] = useState(null);
-  const [feedbackProblem, setFeedbackProblem] = useState('');
-  const [feedbackFeature, setFeedbackFeature] = useState('');
 
   // 팀장을 기본 대상으로 설정
   const leadMember = useMemo(() => members.find((m) => m.role === 'lead') || members[0] || null, [members]);
@@ -386,17 +369,12 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
   const isVote = type === 'vote';
   const isApproval = type === 'approval';
   const isTicket = type === 'ticket';
-  const isFeedback = type === 'feedback';
   const startsDoubleSlash = text.startsWith('//');
   // PM AI mode: starts with "/ " (slash + space) — distinct from slash-commands which have no space
   const isPMAI = /^\/ .+/.test(text) && type === 'text';
   const showAccentSend = type !== 'text' && type !== 'casual';
 
-  placeholderRef.current = communityMode === 'admin'
-    ? (type === 'announce' ? '커뮤니티에 공지를 입력하세요…' : '커뮤니티에 메시지를 입력하세요…')
-    : communityMode === 'member'
-    ? '커뮤니티에 메시지를 입력하세요…  /피드백'
-    : isCasual
+  placeholderRef.current = isCasual
     ? '팀에게 가볍게 한마디… (1시간 뒤 사라짐)'
     : '메시지 입력…  // : 매너모드   $ : 잡담   /! /!! : 중요도   #태그';
 
@@ -469,32 +447,8 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
   }, [showTypeMenu]);
 
   const checkSlashCommand = (md) => {
-    if (!md.endsWith(' ')) return false;
-    const trimmedCommunity = md.trim();
-
-    // Community admin: only /공지 allowed
-    if (communityMode === 'admin') {
-      if (trimmedCommunity === '/공지') {
-        setType('announce');
-        editor?.commands.clearContent();
-        setText('');
-        return true;
-      }
-      return false;
-    }
-    // Community member: only /피드백 allowed
-    if (communityMode === 'member') {
-      if (trimmedCommunity === '/피드백') {
-        setType('feedback');
-        editor?.commands.clearContent();
-        setText('');
-        return true;
-      }
-      return false;
-    }
-
     // 66: only fire after user presses space (prevents /! from blocking /!!)
-    // (md.endsWith(' ') already checked above)
+    if (!md.endsWith(' ')) return false;
 
     const trimmed = md.trim();
 
@@ -641,21 +595,6 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
       return;
     }
 
-    if (isFeedback) {
-      if (!feedbackProblem.trim() && !feedbackFeature.trim()) return;
-      onSend({
-        type: 'feedback',
-        problem: feedbackProblem.trim(),
-        feature: feedbackFeature.trim(),
-        text: [feedbackProblem.trim() && `문제: ${feedbackProblem.trim()}`, feedbackFeature.trim() && `원하는 기능: ${feedbackFeature.trim()}`].filter(Boolean).join('\n'),
-        tags: [],
-      });
-      setFeedbackProblem('');
-      setFeedbackFeature('');
-      setType('text');
-      return;
-    }
-
     if (!text.trim()) return;
     const tags = text.match(/#\S+/g) || [];
     const rawForClean = type === 'casual' && text.trimStart().startsWith('$')
@@ -711,11 +650,11 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
 
   const setTypeAndReset = (t) => {
     setType(t);
+    // 61: preserve typed text when switching types
     if (t !== 'decision') { setDecisionTitle(''); setDecisionOptions(['', '']); }
     if (t !== 'vote') { setVoteTitle(''); setVoteOptions(['', '']); }
     if (t !== 'assign') { setAssignee(null); setAssignTaskText(''); }
     if (t !== 'ticket') { setTicketTitle(''); setTicketDesc(''); setTicketAssigneeUid(''); setTicketDue(''); setTicketPriority('보통'); }
-    if (t !== 'feedback') { setFeedbackProblem(''); setFeedbackFeature(''); }
   };
 
   // Update refs every render so editor callbacks always see fresh state
@@ -739,8 +678,6 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
     ? (decisionTitle.trim() && decisionOptions.filter((o) => o.trim()).length >= 2)
     : isVote
     ? (voteTitle.trim() && voteOptions.filter((o) => o.trim()).length >= 2)
-    : isFeedback
-    ? (feedbackProblem.trim() || feedbackFeature.trim())
     : text.trim());
 
   return (
@@ -772,14 +709,6 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
             setAssignee={setAssignee}
             taskText={assignTaskText}
             setTaskText={setAssignTaskText}
-            onCtrlEnter={ctrlEnter}
-          />
-        )}
-
-        {isFeedback && (
-          <FeedbackBuilder
-            problem={feedbackProblem} setProblem={setFeedbackProblem}
-            feature={feedbackFeature} setFeature={setFeedbackFeature}
             onCtrlEnter={ctrlEnter}
           />
         )}
@@ -841,10 +770,10 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
           <div className="tags-mini">{tags.map((t, i) => <span key={i} className="tag">{t}</span>)}</div>
         )}
 
-        {!isDecision && !isVote && !isAssign && !isTicket && !isFeedback && (
+        {!isDecision && !isVote && !isAssign && !isTicket && (
           <div className="ta-wrap">
             <EditorContent editor={editor} />
-            {!communityMode && <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>}
+            <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
             {showAI && (
               <div className="ai-fab-pop">
                 <div className="ai-fab-hd">
@@ -881,92 +810,65 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
 
         </div>
         <div className="actions" ref={actionsRef}>
-          {/* + 파일 버튼 — hidden in community */}
-          {!communityMode && (
-            <>
-              <div className="composer-btn-wrap">
+          {/* + 파일 버튼 */}
+          <div className="composer-btn-wrap">
+            <button
+              className={'composer-act-btn' + (pendingFiles.length > 0 ? ' has-type' : '')}
+              onClick={() => internalFileRef.current?.click()}
+              title="파일 첨부"
+            >
+              {pendingFiles.length > 0 ? `+${pendingFiles.length}` : '+'}
+            </button>
+          </div>
+          <input
+            ref={internalFileRef}
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+          />
+
+          {/* / 메시지 유형 버튼 */}
+          <div className="composer-btn-wrap">
+            <button
+              className={'composer-act-btn' + (showTypeMenu ? ' on' : '') + (type !== 'text' ? ' has-type' : '')}
+              onClick={() => setShowTypeMenu((v) => !v)}
+              title="메시지 유형"
+            >
+              {type !== 'text'
+                ? <><span style={{ opacity: 0.5 }}>/</span>{MESSAGE_TYPES.find((t) => t.id === type)?.label}</>
+                : '/'}
+            </button>
+            {showTypeMenu && (
+              <div className="composer-dropdown type-drop">
+                {MESSAGE_TYPES.map((tt) => (
+                  <button
+                    key={tt.id}
+                    className={tt.id === type ? 'active' : ''}
+                    onClick={() => { setTypeAndReset(tt.id); setShowTypeMenu(false); }}
+                  >
+                    <span className="ico">{tt.icon}</span> {tt.label}
+                  </button>
+                ))}
+                <div className="composer-dropdown-sep" />
                 <button
-                  className={'composer-act-btn' + (pendingFiles.length > 0 ? ' has-type' : '')}
-                  onClick={() => internalFileRef.current?.click()}
-                  title="파일 첨부"
+                  style={{ color: importance ? 'var(--rose)' : undefined }}
+                  onClick={() => { setImportance((importance + 1) % 3); setShowTypeMenu(false); }}
                 >
-                  {pendingFiles.length > 0 ? `+${pendingFiles.length}` : '+'}
+                  <span className="ico">{importance === 0 ? '☆' : '⭐'.repeat(importance)}</span> 중요도
                 </button>
               </div>
-              <input
-                ref={internalFileRef}
-                type="file"
-                multiple
-                style={{ display: 'none' }}
-                onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
-              />
-            </>
-          )}
-
-          {/* 커뮤니티 타입 토글 */}
-          {communityMode === 'admin' && (
-            <button
-              className={'composer-act-btn' + (type === 'announce' ? ' has-type' : '')}
-              onClick={() => setTypeAndReset(type === 'announce' ? 'text' : 'announce')}
-              title="공지/일반 전환"
-            >
-              {type === 'announce' ? '📢 공지' : '💬 일반'}
-            </button>
-          )}
-          {communityMode === 'member' && (
-            <button
-              className={'composer-act-btn' + (type === 'feedback' ? ' has-type' : '')}
-              onClick={() => setTypeAndReset(type === 'feedback' ? 'text' : 'feedback')}
-              title="피드백 모드 전환"
-            >
-              {type === 'feedback' ? '📋 피드백' : '/피드백'}
-            </button>
-          )}
-
-          {/* / 메시지 유형 버튼 — hidden in community */}
-          {!communityMode && (
-            <div className="composer-btn-wrap">
-              <button
-                className={'composer-act-btn' + (showTypeMenu ? ' on' : '') + (type !== 'text' ? ' has-type' : '')}
-                onClick={() => setShowTypeMenu((v) => !v)}
-                title="메시지 유형"
-              >
-                {type !== 'text'
-                  ? <><span style={{ opacity: 0.5 }}>/</span>{MESSAGE_TYPES.find((t) => t.id === type)?.label}</>
-                  : '/'}
-              </button>
-              {showTypeMenu && (
-                <div className="composer-dropdown type-drop">
-                  {MESSAGE_TYPES.map((tt) => (
-                    <button
-                      key={tt.id}
-                      className={tt.id === type ? 'active' : ''}
-                      onClick={() => { setTypeAndReset(tt.id); setShowTypeMenu(false); }}
-                    >
-                      <span className="ico">{tt.icon}</span> {tt.label}
-                    </button>
-                  ))}
-                  <div className="composer-dropdown-sep" />
-                  <button
-                    style={{ color: importance ? 'var(--rose)' : undefined }}
-                    onClick={() => { setImportance((importance + 1) % 3); setShowTypeMenu(false); }}
-                  >
-                    <span className="ico">{importance === 0 ? '☆' : '⭐'.repeat(importance)}</span> 중요도
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+            )}
+          </div>
 
           <span style={{ flex: 1 }} />
-          {!communityMode && <span className="kbd-hint" style={{ marginRight: 6 }}><kbd>⇧</kbd><kbd>↵</kbd> 줄바꿈</span>}
+          <span className="kbd-hint" style={{ marginRight: 6 }}><kbd>⇧</kbd><kbd>↵</kbd> 줄바꿈</span>
           <button
             className={'send' + (showAccentSend ? ' accent' : '') + (isCasual ? ' casual' : '')}
             onClick={handleSend}
             disabled={polishing || !canSend}
           >
-            {communityMode === 'admin' && type === 'announce' ? '공지 전송' : isCasual ? '가볍게 보내기' : '보내기'}
-            {' '}<span style={{ opacity: 0.6, fontSize: 11, marginLeft: 2 }}>↵</span>
+            {isCasual ? '가볍게 보내기' : '보내기'} <span style={{ opacity: 0.6, fontSize: 11, marginLeft: 2 }}>↵</span>
           </button>
         </div>
       </div>

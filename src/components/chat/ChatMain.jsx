@@ -22,17 +22,6 @@ import { claudeComplete } from '../../lib/claude';
 import { addDoc, collection, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
-const COMMUNITY_ID = '__community__';
-const COMMUNITY_ADMIN_EMAIL = 'sss@cv-3.com';
-const COMMUNITY_DATA = {
-  id: COMMUNITY_ID,
-  name: '커뮤니티',
-  type: 'community',
-  pf: '커',
-  color: 'oklch(0.52 0.19 260)',
-  members: [],
-};
-
 function nowHM() {
   const d = new Date();
   return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
@@ -89,13 +78,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     slackErrTimer.current = setTimeout(() => setSlackError(''), 7000);
   };
 
-  const isCommunity = activeProject === COMMUNITY_ID;
-  const isCommunityAdmin = isCommunity && user?.email === COMMUNITY_ADMIN_EMAIL;
-
-  const activeProjectData = useMemo(() => {
-    if (activeProject === COMMUNITY_ID) return COMMUNITY_DATA;
-    return projects.find((p) => p.id === activeProject);
-  }, [projects, activeProject]);
+  const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
 
   // With column-reverse, scrollTop=0 is visual bottom.
   // If user is already near bottom, keep them there as new messages arrive.
@@ -242,12 +225,6 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     if (!activeProject) return;
     let msgData = rawMsgData;
 
-    // Community permission guard
-    if (isCommunity) {
-      const allowed = isCommunityAdmin ? ['text', 'announce'] : ['text', 'feedback'];
-      if (!allowed.includes(msgData.type)) return;
-    }
-
     // Ticket: create Firestore doc first to get ticketCode + ID for the chat message
     if (msgData.type === 'ticket') {
       const ticketCode = `${activeProjectData?.pf || 'T'}-${String(tickets.length + 1).padStart(3, '0')}`;
@@ -314,7 +291,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
   // File upload: called from Composer on send. kbFolderId='__manual__' → show banner; folder ID → auto-save; null → no save.
   const handleFiles = async (files, kbFolderId = null, caption = '') => {
-    if (!activeProject || !files?.length || isCommunity) return;
+    if (!activeProject || !files?.length) return;
     setUploading(true);
     setUploadProgress(0);
     setUploadError('');
@@ -518,38 +495,22 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
       <div className="chat-head">
         <div className="chat-title">
-          {isCommunity ? (
-            <>
-              <span className="community-header-icon">커</span>
-              <span style={{ fontWeight: 800, fontSize: 15 }}>커뮤니티</span>
-              <span style={{ fontSize: 11, color: 'var(--ink-mute)', marginLeft: 10 }}>
-                서비스 전체 사용자 채널
-                {isCommunityAdmin && <span style={{ color: 'oklch(0.52 0.19 260)', marginLeft: 6 }}>· 관리자</span>}
-              </span>
-            </>
-          ) : (
-            <>
-              <span style={{ fontWeight: 800, fontSize: 15 }}>{activeProjectData?.name || activeProject}</span>
-              <span style={{ fontSize: 11, color: 'var(--ink-mute)', marginLeft: 10 }}>
-                {activeProjectData?.leadName && <span>팀장 {activeProjectData.leadName} · </span>}
-                <button className="member-mgmt-btn" onClick={() => setShowMemberModal(true)}>
-                  멤버관리
-                </button>
-              </span>
-            </>
-          )}
+          <span style={{ fontWeight: 800, fontSize: 15 }}>{activeProjectData?.name || activeProject}</span>
+          <span style={{ fontSize: 11, color: 'var(--ink-mute)', marginLeft: 10 }}>
+            {activeProjectData?.leadName && <span>팀장 {activeProjectData.leadName} · </span>}
+            <button className="member-mgmt-btn" onClick={() => setShowMemberModal(true)}>
+              멤버관리
+            </button>
+          </span>
         </div>
         <div className="chat-tabs">
-          {(isCommunity
-            ? [{ id: 'chat', icon: '💬', label: '채팅' }]
-            : [
-                { id: 'chat', icon: '💬', label: '채팅' },
-                { id: 'kb', icon: '📚', label: 'KB', count: null },
-                { id: 'notion', icon: '🔖', label: '북마크', count: null },
-                { id: 'tickets', icon: '🎫', label: '워크트리', count: tickets.length || null },
-                { id: 'tasks', icon: '📋', label: '태스크' },
-              ]
-          ).map((tab) => (
+          {[
+            { id: 'chat', icon: '💬', label: '채팅' },
+            { id: 'kb', icon: '📚', label: 'KB', count: null },
+            { id: 'notion', icon: '🔖', label: '북마크', count: null },
+            { id: 'tickets', icon: '🎫', label: '워크트리', count: tickets.length || null },
+            { id: 'tasks', icon: '📋', label: '태스크' },
+          ].map((tab) => (
             <button key={tab.id} className={'chat-tab' + (chatTab === tab.id ? ' on' : '')} onClick={() => setChatTab(tab.id)}>
               <span className="ico">{tab.icon}</span> {tab.label}
               {tab.count != null && <span className="mono cnt">{tab.count}</span>}
@@ -704,7 +665,6 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
             members={activeProjectData?.members || []}
             kbFolders={kbFolders}
             recentMessages={messages.slice(-8)}
-            communityMode={isCommunity ? (isCommunityAdmin ? 'admin' : 'member') : null}
           />
         </>
       )}

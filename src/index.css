@@ -314,60 +314,6 @@ p { margin: 0; }
   padding: 2px 5px; border-radius: 999px; min-width: 16px; text-align: center;
   line-height: 1.4; flex-shrink: 0;
 }
-/* ── Community ────────────────────────────────────────────────────────── */
-.community-section { padding-bottom: 4px; border-top: 1px solid var(--border); margin-top: 4px; }
-.community-label { padding-top: 10px; }
-.community-pf {
-  width: 28px; height: 28px; border-radius: 50%;
-  background: oklch(0.52 0.19 260);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 800; color: #fff; flex-shrink: 0;
-}
-.community-archived-hint {
-  font-size: 10px; color: var(--ink-3); padding: 0 16px 6px;
-}
-
-/* ── Feedback card ── */
-.feedback-card {
-  border: 1px solid var(--accent-line);
-  border-radius: var(--r-3);
-  background: var(--accent-soft);
-  overflow: hidden;
-  margin-top: 4px;
-}
-.feedback-hd {
-  padding: 8px 12px 6px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent);
-  border-bottom: 1px solid var(--accent-line);
-}
-.feedback-section {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--accent-line);
-}
-.feedback-section:last-child { border-bottom: none; }
-.feedback-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 4px;
-}
-.feedback-text {
-  font-size: 13px;
-  color: var(--ink);
-  white-space: pre-wrap;
-  line-height: 1.5;
-}
-.community-header-icon {
-  width: 26px; height: 26px; border-radius: 50%;
-  background: oklch(0.52 0.19 260);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 800; color: #fff; flex-shrink: 0; margin-right: 8px;
-}
-
 .ai-channel {
   margin: 8px 10px; padding: 10px 12px; border-radius: var(--r-3);
   background: var(--accent-soft); border: 1px solid var(--accent-line);
