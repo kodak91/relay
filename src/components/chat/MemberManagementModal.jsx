@@ -1,8 +1,9 @@
 import { useState } from 'react';
 
-export default function MemberManagementModal({ project, user, onClose, onApprove, onReject, onRemove }) {
+export default function MemberManagementModal({ project, user, onClose, onApprove, onReject, onRemove, onDelegate }) {
   const [copied, setCopied] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
+  const [delegateConfirm, setDelegateConfirm] = useState(null);
 
   const isOwner = user?.uid && project?.ownerId === user.uid;
   const members = project?.members || [];
@@ -90,14 +91,35 @@ export default function MemberManagementModal({ project, user, onClose, onApprov
                   <div className="member-role">{m.role === 'lead' ? '팀장' : '팀원'}</div>
                 </div>
                 {isOwner && m.uid !== user?.uid && (
-                  <button
-                    className="btn ghost sm"
-                    disabled={!!actionLoading}
-                    onClick={() => doAction(() => onRemove(m.uid), 'remove-' + m.uid)}
-                    style={{ color: 'var(--rose)', flexShrink: 0 }}
-                  >
-                    − 제외
-                  </button>
+                  <div className="member-actions" style={{ gap: 4 }}>
+                    {m.role !== 'lead' && onDelegate && (
+                      delegateConfirm === m.uid ? (
+                        <>
+                          <button
+                            className="btn accent sm"
+                            disabled={!!actionLoading}
+                            onClick={() => { doAction(() => onDelegate(m.uid), 'delegate-' + m.uid); setDelegateConfirm(null); }}
+                          >확인</button>
+                          <button className="btn ghost sm" onClick={() => setDelegateConfirm(null)}>취소</button>
+                        </>
+                      ) : (
+                        <button
+                          className="btn ghost sm"
+                          disabled={!!actionLoading}
+                          onClick={() => setDelegateConfirm(m.uid)}
+                          style={{ color: 'var(--accent)', flexShrink: 0 }}
+                        >팀장 위임</button>
+                      )
+                    )}
+                    {delegateConfirm !== m.uid && (
+                      <button
+                        className="btn ghost sm"
+                        disabled={!!actionLoading}
+                        onClick={() => doAction(() => onRemove(m.uid), 'remove-' + m.uid)}
+                        style={{ color: 'var(--rose)', flexShrink: 0 }}
+                      >− 제외</button>
+                    )}
+                  </div>
                 )}
               </div>
             ))

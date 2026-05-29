@@ -122,9 +122,27 @@ export function useProjects(userId) {
     });
   };
 
+  const delegateLead = async (projectId, newLeadUid) => {
+    const ref = doc(db, 'projects', projectId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const newLeadMember = (data.members || []).find((m) => m.uid === newLeadUid);
+    if (!newLeadMember) return;
+    const updatedMembers = (data.members || []).map((m) => ({
+      ...m,
+      role: m.uid === newLeadUid ? 'lead' : 'member',
+    }));
+    await updateDoc(ref, {
+      members: updatedMembers,
+      ownerId: newLeadUid,
+      leadName: newLeadMember.name || '',
+    });
+  };
+
   return {
     projects, loading,
     addProject, updateProject, deleteProject,
-    joinByCode, approveMember, rejectMember, removeMember,
+    joinByCode, approveMember, rejectMember, removeMember, delegateLead,
   };
 }

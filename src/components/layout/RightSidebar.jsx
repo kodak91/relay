@@ -517,12 +517,12 @@ function TaskSidebar({ uid, activeProject, taskState }) {
             <div key={ws.date} className={'week-day' + (ws.date === currentDay ? ' today' : '')}>
               <div className="wd-label">{WEEK_DAYS[i]}</div>
               <div className="wd-done">{ws.done}</div>
-              <div className="wd-sep">/</div>
-              <div className="wd-total">{ws.total || '—'}</div>
+              <div className="wd-sep">—</div>
+              <div className="wd-total">{ws.total || 0}</div>
             </div>
           ))}
         </div>
-        <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 4 }}>완료 / 전체</div>
+        <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 4 }}>완료 — 전체</div>
       </div>
 
       {/* Daily tasks */}

@@ -46,7 +46,7 @@ function formatDividerLabel(dateStr) {
 export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { activeProject, chatTab, setChatTab, activeTag, user } = useAppStore();
   const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
-  const { projects, updateProject, approveMember, rejectMember, removeMember } = useProjects(user?.uid);
+  const { projects, updateProject, approveMember, rejectMember, removeMember, delegateLead } = useProjects(user?.uid);
   const { tickets, createTicket, updateTicket, deleteTicket } = useTickets(activeProject);
   const { folders: kbFolders, saveFromChat: saveToKB } = useKB(activeProject);
   const { addTask } = useTasks(activeProject);
@@ -64,6 +64,12 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
   const [showAnnouncements, setShowAnnouncements] = useState(false);
+  const announceStorageKey = `announce_dismissed_${user?.uid || 'anon'}_${activeProject || ''}`;
+  const [dismissedAnnounces, setDismissedAnnounces] = useState(new Set());
+  useEffect(() => {
+    try { setDismissedAnnounces(new Set(JSON.parse(localStorage.getItem(announceStorageKey) || '[]'))); }
+    catch { setDismissedAnnounces(new Set()); }
+  }, [announceStorageKey]);
   const [showMemberModal, setShowMemberModal] = useState(false);
   const [pendingKBSave, setPendingKBSave] = useState(null); // { files, selectedFolderId }
   const [showMeeting, setShowMeeting] = useState(false);
@@ -497,17 +503,22 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       <div className="chat-head">
         <div className="chat-title">
           <span style={{ fontWeight: 800, fontSize: 15 }}>{activeProjectData?.name || activeProject}</span>
-          <span style={{ fontSize: 11, color: 'var(--ink-mute)', marginLeft: 10 }}>
+          {/* Desktop: 팀장 + 멤버관리 */}
+          <span className="chat-lead-info">
             {activeProjectData?.leadName && <span>팀장 {activeProjectData.leadName} · </span>}
             <button className="member-mgmt-btn" onClick={() => setShowMemberModal(true)}>
               멤버관리
             </button>
           </span>
+          {/* Mobile: compact 멤버 button */}
+          <button className="chat-member-btn-mob" onClick={() => setShowMemberModal(true)}>
+            멤버
+          </button>
         </div>
         <div className="chat-tabs">
           {[
             { id: 'chat', icon: '💬', label: '채팅' },
-            { id: 'kb', icon: '📚', label: 'KB', count: null },
+            { id: 'kb', icon: '📚', label: '저장소', count: null },
             { id: 'notion', icon: '🔖', label: '북마크', count: null },
             { id: 'tickets', icon: '🎫', label: '워크트리', count: tickets.length || null },
             { id: 'tasks', icon: '📋', label: '태스크' },
@@ -519,30 +530,48 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           ))}
         </div>
         {/* Announcements button */}
-        {announcements.length > 0 && (
-          <div style={{ position: 'relative', marginLeft: 'auto', flexShrink: 0, zIndex: 200 }}>
-            <button
-              className={'announce-toggle' + (showAnnouncements ? ' on' : '')}
-              onClick={() => setShowAnnouncements((v) => !v)}
-            >
-              📢 공지 <span className="cnt">{announcements.length}</span>
-            </button>
-            {showAnnouncements && (
-              <div className="announce-panel">
-                <div className="announce-panel-hd">
-                  <span>📢 공지사항</span>
-                  <button onClick={() => setShowAnnouncements(false)}>✕</button>
-                </div>
-                {announcements.map((m) => (
-                  <div key={m.id} className="announce-panel-item">
-                    <div className="announce-panel-sender">{m.senderName} · {m.ts}</div>
-                    <div className="announce-panel-text md-content"><ReactMarkdown components={{ a: ({href, children}) => <a href={href} target="_blank" rel="noreferrer noopener">{children}</a> }}>{m.text || ''}</ReactMarkdown></div>
+        {announcements.length > 0 && (() => {
+          const visibleAnnounces = announcements.filter((m) => !dismissedAnnounces.has(m.id));
+          const dismissAnnounce = (id) => {
+            setDismissedAnnounces((prev) => {
+              const next = new Set(prev); next.add(id);
+              try { localStorage.setItem(announceStorageKey, JSON.stringify([...next])); } catch {}
+              return next;
+            });
+          };
+          return (
+            <div style={{ position: 'relative', marginLeft: 'auto', flexShrink: 0, zIndex: 200 }}>
+              <button
+                className={'announce-toggle' + (showAnnouncements ? ' on' : '')}
+                onClick={() => setShowAnnouncements((v) => !v)}
+              >
+                📢 공지 {visibleAnnounces.length > 0 && <span className="cnt">{visibleAnnounces.length}</span>}
+              </button>
+              {showAnnouncements && (
+                <div className="announce-panel">
+                  <div className="announce-panel-hd">
+                    <span>📢 공지사항</span>
+                    <button onClick={() => setShowAnnouncements(false)}>✕</button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                  {visibleAnnounces.length === 0 && (
+                    <div style={{ padding: '14px', fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center' }}>확인한 공지가 없습니다</div>
+                  )}
+                  {visibleAnnounces.map((m) => (
+                    <div key={m.id} className="announce-panel-item" style={{ position: 'relative' }}>
+                      <button
+                        onClick={() => dismissAnnounce(m.id)}
+                        style={{ position: 'absolute', top: 8, right: 10, border: 0, background: 'none', color: 'var(--ink-mute)', fontSize: 13, cursor: 'pointer', lineHeight: 1, padding: '2px 4px' }}
+                        title="숨기기"
+                      >×</button>
+                      <div className="announce-panel-sender">{m.senderName} · {m.ts}</div>
+                      <div className="announce-panel-text md-content"><ReactMarkdown components={{ a: ({href, children}) => <a href={href} target="_blank" rel="noreferrer noopener">{children}</a> }}>{m.text || ''}</ReactMarkdown></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {slackError && (
@@ -564,6 +593,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           onApprove={(uid) => approveMember(activeProject, uid)}
           onReject={(uid) => rejectMember(activeProject, uid)}
           onRemove={(uid) => removeMember(activeProject, uid)}
+          onDelegate={(uid) => delegateLead(activeProject, uid)}
         />
       )}
 

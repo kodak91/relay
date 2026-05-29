@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   collection, onSnapshot,
-  addDoc, updateDoc, deleteDoc, doc, serverTimestamp, arrayUnion,
+  addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
@@ -101,17 +101,24 @@ export function usePersonalTasks(uid) {
   const toggleTask = async (taskId, done) => {
     const task = tasks.find((t) => t.id === taskId);
     await updateDoc(doc(db, 'users', uid, 'tasks', taskId), { done });
-    if (done && task?.ticketId && task?.ticketProjectId) {
+    if (task?.ticketId && task?.ticketProjectId) {
+      const ticketRef = doc(db, 'projects', task.ticketProjectId, 'tickets', task.ticketId);
       try {
-        await updateDoc(doc(db, 'projects', task.ticketProjectId, 'tickets', task.ticketId), {
-          history: arrayUnion({
-            type: 'task_completed',
-            taskId,
-            taskTitle: task.title || '',
-            memberUid: uid,
-            completedAt: new Date().toISOString(),
-          }),
-        });
+        const ticketSnap = await getDoc(ticketRef);
+        if (ticketSnap.exists()) {
+          const currentHistory = ticketSnap.data().history || [];
+          const filtered = currentHistory.filter((h) => h.taskId !== taskId);
+          if (done) {
+            filtered.push({
+              type: 'task_completed',
+              taskId,
+              taskTitle: task.title || '',
+              memberUid: uid,
+              completedAt: new Date().toISOString(),
+            });
+          }
+          await updateDoc(ticketRef, { history: filtered });
+        }
       } catch (e) {
         console.warn('Ticket history sync:', e.message);
       }

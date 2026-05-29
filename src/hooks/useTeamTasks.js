@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, updateDoc, doc, arrayUnion, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, updateDoc, doc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export const PROJECT_TASK_UID = '__project__';
@@ -95,30 +95,36 @@ export function useTeamTasks(members, projectId) {
     } else {
       await updateDoc(doc(db, 'users', uid, 'tasks', taskId), { done });
     }
-    if (done && target?.ticketId && target?.ticketProjectId) {
-      const historyEntry = {
-        type: 'task_completed',
-        taskId,
-        taskTitle: target.title || '',
-        detail: target.detail || '',
-        memberUid: target.assigneeUid || uid,
-        memberName: target.memberName || target.assigneeName || '',
-        completedAt: new Date().toISOString(),
-      };
+    if (target?.ticketId && target?.ticketProjectId) {
+      const ticketRef = doc(db, 'projects', target.ticketProjectId, 'tickets', target.ticketId);
       try {
-        // Update ticket's inline history array
-        await updateDoc(doc(db, 'projects', target.ticketProjectId, 'tickets', target.ticketId), {
-          history: arrayUnion(historyEntry),
-        });
-        // Task 6: also write to top-level history collection keyed by ticketId
-        await addDoc(collection(db, 'history', target.ticketId, 'logs'), {
-          completedAt: historyEntry.completedAt,
-          completedBy: historyEntry.memberName || historyEntry.memberUid,
-          taskTitle: historyEntry.taskTitle,
-          detail: historyEntry.detail,
-          taskId,
-          memberUid: historyEntry.memberUid,
-        });
+        const ticketSnap = await getDoc(ticketRef);
+        if (ticketSnap.exists()) {
+          const currentHistory = ticketSnap.data().history || [];
+          const filtered = currentHistory.filter((h) => h.taskId !== taskId);
+          if (done) {
+            filtered.push({
+              type: 'task_completed',
+              taskId,
+              taskTitle: target.title || '',
+              detail: target.detail || '',
+              memberUid: target.assigneeUid || uid,
+              memberName: target.memberName || target.assigneeName || '',
+              completedAt: new Date().toISOString(),
+            });
+            await updateDoc(ticketRef, { history: filtered });
+            await addDoc(collection(db, 'history', target.ticketId, 'logs'), {
+              completedAt: new Date().toISOString(),
+              completedBy: target.memberName || target.assigneeName || uid,
+              taskTitle: target.title || '',
+              detail: target.detail || '',
+              taskId,
+              memberUid: target.assigneeUid || uid,
+            });
+          } else {
+            await updateDoc(ticketRef, { history: filtered });
+          }
+        }
       } catch (e) {
         console.warn('Ticket history sync:', e.message);
       }

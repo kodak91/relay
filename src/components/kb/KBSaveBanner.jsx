@@ -21,7 +21,7 @@ export default function KBSaveBanner({ projectId, files, initialFolderId = null,
         token = getStoredToken();
         if (!token) {
           try { token = await requestDriveAccess(); } catch {
-            setSaveError('Drive 인증이 필요합니다. KB 탭에서 먼저 Drive를 연동해주세요.');
+            setSaveError('Drive 인증이 필요합니다. 저장소 탭에서 먼저 Drive를 연동해주세요.');
             return;
           }
         }
@@ -51,7 +51,7 @@ export default function KBSaveBanner({ projectId, files, initialFolderId = null,
     <div className="kb-savebar">
       <span className="kb-savebar-ico">📚</span>
       <div className="kb-savebar-i">
-        <b>{label}을 KB에 저장할까요?</b>
+        <b>{label}을 저장소에 저장할까요?</b>
         {saveError && <span style={{ fontSize: 11, color: 'var(--rose)' }}>{saveError}</span>}
         <div className="kb-savebar-folders">
           {folders.map((f) => (

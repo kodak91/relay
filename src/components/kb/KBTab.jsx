@@ -46,8 +46,28 @@ export default function KBTab({ projectId, members = [], onPostMeeting }) {
     setKbDeepLink(null);
   }, [kbDeepLink, files, setKbDeepLink]);
 
-  const activeFolder = folders.find((f) => f.id === activeFolderId) || folders[0] || null;
-  const effectiveFolderId = activeFolderId || folders[0]?.id || null;
+  // DFS-order: each parent is immediately followed by its children
+  const sortedFolders = useMemo(() => {
+    if (folders.length === 0) return folders;
+    const childrenOf = {};
+    folders.forEach((f) => {
+      const key = f.parentDriveFolderId || '__root__';
+      if (!childrenOf[key]) childrenOf[key] = [];
+      childrenOf[key].push(f);
+    });
+    const result = [];
+    const dfs = (parentDriveId) => {
+      const key = parentDriveId || '__root__';
+      (childrenOf[key] || [])
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .forEach((f) => { result.push(f); dfs(f.driveFolderId); });
+    };
+    dfs(null);
+    return result.length === folders.length ? result : folders;
+  }, [folders]);
+
+  const activeFolder = sortedFolders.find((f) => f.id === activeFolderId) || sortedFolders[0] || null;
+  const effectiveFolderId = activeFolderId || sortedFolders[0]?.id || null;
 
   const searchResults = useMemo(() => {
     if (!search.trim()) return null;
@@ -174,7 +194,7 @@ export default function KBTab({ projectId, members = [], onPostMeeting }) {
             <div>
               <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Drive 폴더 연동</div>
               <div style={{ fontSize: 13, color: 'var(--ink-3)', maxWidth: 300 }}>
-                Google Drive 폴더를 연결하면 하위 폴더 구조가 그대로 KB 트리로 표시됩니다.
+                Google Drive 폴더를 연결하면 하위 폴더 구조가 그대로 저장소 트리로 표시됩니다.
               </div>
             </div>
             <button className="btn-drive-connect" style={{ padding: '10px 20px', fontSize: 13 }}
@@ -248,7 +268,7 @@ export default function KBTab({ projectId, members = [], onPostMeeting }) {
             <span>Drive 폴더</span>
             <button className="kb-tree-disc" onClick={disconnectDrive} title="연동 해제">✕</button>
           </div>
-          {folders.map((f) => (
+          {sortedFolders.map((f) => (
             <KBTreeRow
               key={f.id}
               folder={f}
