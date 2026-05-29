@@ -1002,6 +1002,38 @@ function MeetingInviteMsg({ m, onRsvp }) {
   );
 }
 
+function FeedbackMsg({ m, onDelete, members, onAddTask }) {
+  return (
+    <div className="msg">
+      <MsgActions m={m} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
+      <Avatar name={m.senderName} />
+      <div style={{ flex: 1 }}>
+        <div className="msg-head">
+          <span className="name">{m.senderName}</span>
+          <span className="role">{m.senderRole}</span>
+          <span className="ts">{m.ts}</span>
+        </div>
+        <div className="feedback-card">
+          <div className="feedback-hd">📋 피드백</div>
+          {m.problem && (
+            <div className="feedback-section">
+              <div className="feedback-label">현재 문제</div>
+              <div className="feedback-text">{m.problem}</div>
+            </div>
+          )}
+          {m.feature && (
+            <div className="feedback-section">
+              <div className="feedback-label">원하는 기능</div>
+              <div className="feedback-text">{m.feature}</div>
+            </div>
+          )}
+        </div>
+        <Reactions list={m.reactions} />
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Message dispatcher ─────────────────────────────────────────────
 
 export default function Message({ m, isGrouped, isGroupStart, handlers }) {
@@ -1047,6 +1079,7 @@ export default function Message({ m, isGrouped, isGroupStart, handlers }) {
     case 'meeting_invite':content = <MeetingInviteMsg m={m} onRsvp={rsvpMeeting} />; break;
     case 'ticket':        content = <TicketMsg m={m} onDelete={deleteMsg} />; break;
     case 'assign':        content = <AssignMsg m={m} onDelete={deleteMsg} />; break;
+    case 'feedback':      content = <FeedbackMsg m={m} onDelete={deleteMsg} members={members} onAddTask={addTaskFromMessage} />; break;
     case 'image':         content = <ImageMsg m={m} />; break;
     case 'file':          content = <FileMsg m={m} />; break;
     case 'casual':        content = <CasualMsg {...props} />; break;

@@ -244,8 +244,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
     // Community permission guard
     if (isCommunity) {
-      const allowed = isCommunityAdmin ? 'announce' : 'text';
-      if (msgData.type !== allowed) return;
+      const allowed = isCommunityAdmin ? ['text', 'announce'] : ['text', 'feedback'];
+      if (!allowed.includes(msgData.type)) return;
     }
 
     // Ticket: create Firestore doc first to get ticketCode + ID for the chat message
