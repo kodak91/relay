@@ -364,6 +364,13 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     }
   };
 
+  const editMsgFields = async (mid, fields) => {
+    await updateDoc(doc(db, 'projects', activeProject, 'messages', mid), {
+      ...fields,
+      editedAt: new Date().toISOString(),
+    });
+  };
+
   const deleteMsg = async (mid) => {
     const m = messages.find((msg) => msg.id === mid);
     await deleteMessage(activeProject, mid);
@@ -458,7 +465,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     toggleThread, setReplyValue, sendReply,
     choose, vote, actApproval, confirmMsg, nudgeMsg,
     saveMeetingSummary, rsvpMeeting,
-    editMsg, deleteMsg, addReaction,
+    editMsg, editMsgFields, deleteMsg, addReaction,
     members: activeProjectData?.members || [],
     addTaskFromMessage,
   };

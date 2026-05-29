@@ -314,16 +314,23 @@ function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleT
   );
 }
 
-function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onChoose, onDelete, senderName, members, onAddTask }) {
+function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onChoose, onDelete, onEditFields, senderName, members, onAddTask }) {
   const { user } = useAppStore();
+  const isSender = user?.uid && m.senderUid === user.uid;
   const canDecide = m.targetUid
     ? user?.uid === m.targetUid
     : user?.role === 'lead';
   const waitingFor = m.targetName || '팀장';
+  const [editMode, setEditMode] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+
+  const canEdit = isSender && !m.chosen;
+  const startEdit = () => { setEditTitle(m.title || ''); setEditMode(true); };
+  const saveEdit = () => { if (editTitle.trim()) onEditFields?.(m.id, { title: editTitle.trim() }); setEditMode(false); };
 
   return (
     <div className="msg">
-      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={canEdit ? startEdit : undefined} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -338,7 +345,22 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
             {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
             {m.due && <span className="due">📅 {m.due}</span>}
           </div>
-          <div className="dc-header">{m.title}</div>
+          {editMode ? (
+            <div className="edit-mode">
+              <input
+                style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '7px 10px', fontSize: 13, background: 'var(--surface-2)', outline: 'none', boxSizing: 'border-box' }}
+                value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') setEditMode(false); }}
+                autoFocus
+              />
+              <div className="edit-btns">
+                <button className="btn sm ghost" onClick={() => setEditMode(false)}>취소</button>
+                <button className="btn sm accent" onClick={saveEdit}>저장</button>
+              </div>
+            </div>
+          ) : (
+            <div className="dc-header">{m.title}</div>
+          )}
           <div className="dc-options">
             {(m.options || []).map((opt) => (
               <div
@@ -364,17 +386,23 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
   );
 }
 
-function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onAct, onDelete, senderName, members, onAddTask }) {
+function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onAct, onDelete, onEdit, senderName, members, onAddTask }) {
   const { user } = useAppStore();
+  const isSender = user?.uid && m.senderUid === user.uid;
   // targetUid 지정 시 해당 유저만, 미지정 시 lead 역할만 액션 가능
   const canAct = m.targetUid ? user?.uid === m.targetUid : user?.role === 'lead';
   const waitingFor = m.targetName || '팀장';
   const [holdDate, setHoldDate] = useState('');
   const [showHoldPicker, setShowHoldPicker] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState('');
 
   const status = m.status || 'pending';
   const isPending = status === 'pending';
   const statusClass = status === 'approved' ? 'approved' : status === 'done' ? 'done' : status === 'held' ? 'held' : '';
+
+  const startEdit = () => { setEditText(m.text || ''); setEditMode(true); };
+  const saveEdit = () => { if (editText.trim()) onEdit?.(m.id, editText.trim()); setEditMode(false); };
 
   const handleHold = () => {
     if (showHoldPicker) {
@@ -387,7 +415,7 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
 
   return (
     <div className="msg">
-      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={isSender && isPending ? startEdit : undefined} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -401,9 +429,21 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
             {m.targetName && <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>→ {m.targetName}</span>}
             {m.importance > 0 && <span className="imp">{'⭐'.repeat(m.importance)}</span>}
           </div>
-          <div className="ac-desc md-content">
-            <ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.text || ''}</ReactMarkdown>
-          </div>
+          {editMode ? (
+            <div className="edit-mode">
+              <textarea className="edit-ta" value={editText} onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') setEditMode(false); }}
+                rows={Math.max(2, editText.split('\n').length)} autoFocus />
+              <div className="edit-btns">
+                <button className="btn sm ghost" onClick={() => setEditMode(false)}>취소</button>
+                <button className="btn sm accent" onClick={saveEdit}>저장</button>
+              </div>
+            </div>
+          ) : (
+            <div className="ac-desc md-content">
+              <ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.text || ''}</ReactMarkdown>
+            </div>
+          )}
           <div className="ac-actions">
             {isPending ? (
               canAct ? (
@@ -465,14 +505,21 @@ function ImageMsg({ m }) {
   );
 }
 
-function VoteMsg({ m, onVote, onDelete, members, onAddTask }) {
+function VoteMsg({ m, onVote, onDelete, onEditFields, members, onAddTask }) {
   const { user } = useAppStore();
+  const isSender = user?.uid && m.senderUid === user.uid;
   const totalVotes = (m.options || []).reduce((sum, o) => sum + (o.votes?.length || 0), 0);
   const myVote = (m.options || []).find((o) => (o.votes || []).some((v) => v.uid === user?.uid || v.name === user?.name));
+  const [editMode, setEditMode] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+
+  const canEdit = isSender && totalVotes === 0;
+  const startEdit = () => { setEditTitle(m.title || ''); setEditMode(true); };
+  const saveEdit = () => { if (editTitle.trim()) onEditFields?.(m.id, { title: editTitle.trim() }); setEditMode(false); };
 
   return (
     <div className="msg">
-      <MsgActions m={m} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
+      <MsgActions m={m} onEdit={canEdit ? startEdit : undefined} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -485,7 +532,22 @@ function VoteMsg({ m, onVote, onDelete, members, onAddTask }) {
             <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--ink-3)' }}>◉ 투표</span>
             {m.due && <span className="due">📅 {m.due}</span>}
           </div>
-          <div style={{ fontWeight: 700, marginBottom: 10 }}>{m.title}</div>
+          {editMode ? (
+            <div className="edit-mode" style={{ marginBottom: 10 }}>
+              <input
+                style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '7px 10px', fontSize: 13, background: 'var(--surface-2)', outline: 'none', boxSizing: 'border-box' }}
+                value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') setEditMode(false); }}
+                autoFocus
+              />
+              <div className="edit-btns">
+                <button className="btn sm ghost" onClick={() => setEditMode(false)}>취소</button>
+                <button className="btn sm accent" onClick={saveEdit}>저장</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>{m.title}</div>
+          )}
           <div className="vote-opts">
             {(m.options || []).map((opt) => {
               const count = opt.votes?.length || 0;
@@ -577,10 +639,18 @@ function UpdateMsg({ m, onDelete, onEdit, members, onAddTask }) {
   );
 }
 
-function AnnounceMsg({ m, onCollapse, onDelete, members, onAddTask }) {
+function AnnounceMsg({ m, onCollapse, onDelete, onEdit, members, onAddTask }) {
+  const { user } = useAppStore();
+  const isSender = user?.uid && m.senderUid === user.uid;
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState('');
+
+  const startEdit = () => { setEditText(m.text || ''); setEditMode(true); };
+  const saveEdit = () => { if (editText.trim()) onEdit?.(m.id, editText.trim()); setEditMode(false); };
+
   return (
     <div className="msg">
-      <MsgActions m={m} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
+      <MsgActions m={m} onEdit={isSender ? startEdit : undefined} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -593,9 +663,21 @@ function AnnounceMsg({ m, onCollapse, onDelete, members, onAddTask }) {
             <span className="an-icon">📢</span>
             <span className="an-label">공지사항</span>
           </div>
-          <div className="an-body md-content">
-            <ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.text || ''}</ReactMarkdown>
-          </div>
+          {editMode ? (
+            <div className="edit-mode" style={{ padding: '8px 12px' }}>
+              <textarea className="edit-ta" value={editText} onChange={(e) => setEditText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') setEditMode(false); }}
+                rows={Math.max(2, editText.split('\n').length)} autoFocus />
+              <div className="edit-btns">
+                <button className="btn sm ghost" onClick={() => setEditMode(false)}>취소</button>
+                <button className="btn sm accent" onClick={saveEdit}>저장</button>
+              </div>
+            </div>
+          ) : (
+            <div className="an-body md-content">
+              <ReactMarkdown components={MD_LINK} remarkPlugins={[remarkGfm]}>{m.text || ''}</ReactMarkdown>
+            </div>
+          )}
         </div>
         <Reactions list={m.reactions} />
       </div>
@@ -924,7 +1006,7 @@ function MeetingInviteMsg({ m, onRsvp }) {
 
 export default function Message({ m, isGrouped, isGroupStart, handlers }) {
   const { user } = useAppStore();
-  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, deleteMsg, rsvpMeeting, addReaction, members, addTaskFromMessage } = handlers;
+  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, editMsgFields, deleteMsg, rsvpMeeting, addReaction, members, addTaskFromMessage } = handlers;
   const threadOpen = openThreads.has(m.id);
   const replyValue = replyValues[m.id] || '';
 
@@ -946,6 +1028,7 @@ export default function Message({ m, isGrouped, isGroupStart, handlers }) {
     onSaveSummary: saveMeetingSummary,
     onCollapse: collapseAnnounce,
     onEdit: editMsg,
+    onEditFields: editMsgFields,
     onDelete: deleteMsg,
     members,
     onAddTask: addTaskFromMessage,

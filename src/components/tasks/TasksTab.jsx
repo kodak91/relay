@@ -1,4 +1,15 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+
+function fmtYearMonth(ym) {
+  const [y, m] = ym.split('-');
+  return `${y}년 ${parseInt(m)}월`;
+}
+
+function fmtDateLabel(date) {
+  const d = new Date(date + 'T00:00:00');
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  return `${d.getDate()}일 (${days[d.getDay()]})`;
+}
 import { useTeamTasks, taskDate } from '../../hooks/useTeamTasks';
 
 function getWeekDates() {
@@ -229,6 +240,14 @@ function TaskRow({ task, onToggle, tickets = [], onLinkTicket, onUpdateDetail })
 
 function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectId, today }) {
   const [showHistory, setShowHistory] = useState(false);
+  const [openDates, setOpenDates] = useState(new Set());
+  const toggleDate = useCallback((date) => {
+    setOpenDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date); else next.add(date);
+      return next;
+    });
+  }, []);
 
   const todayTasks = useMemo(() => tasks.filter((t) => taskDate(t) === today), [tasks, today]);
   const overdueTasks = useMemo(() => tasks.filter((t) => !t.done && taskDate(t) < today), [tasks, today]);
@@ -246,6 +265,16 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
     });
     return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a));
   }, [tasks]);
+
+  const historyByYearMonth = useMemo(() => {
+    const groups = {};
+    historyByDate.forEach(([date, items]) => {
+      const ym = date.slice(0, 7);
+      if (!groups[ym]) groups[ym] = [];
+      groups[ym].push([date, items]);
+    });
+    return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a));
+  }, [historyByDate]);
 
   return (
     <div className="tt-member-col">
@@ -311,15 +340,33 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
 
       {showHistory && (
         <div className="tt-history">
-          {historyByDate.length === 0
+          {historyByYearMonth.length === 0
             ? <div className="tt-empty">기록 없음</div>
-            : historyByDate.map(([date, items]) => (
-              <div key={date} className="tt-hist-group">
-                <div className="tt-hist-date">{date}</div>
-                {items.map((t) => (
-                  <div key={t.id} className={'tt-hist-item' + (t.done ? ' done' : '')}>
-                    <span className="tt-check-sm">{t.done ? '✓' : '○'}</span>
-                    <span>{t.title}</span>
+            : historyByYearMonth.map(([ym, dateGroups]) => (
+              <div key={ym} className="tt-hist-ym-group">
+                <div className="tt-hist-ym-label">{fmtYearMonth(ym)}</div>
+                {dateGroups.map(([date, items]) => (
+                  <div key={date} className="tt-hist-date-group">
+                    <div
+                      className={'tt-hist-date-toggle' + (openDates.has(date) ? ' open' : '')}
+                      onClick={() => toggleDate(date)}
+                    >
+                      <span>{fmtDateLabel(date)}</span>
+                      <span className="tt-hist-date-count">{items.filter((t) => t.done).length}/{items.length}</span>
+                    </div>
+                    {openDates.has(date) && (
+                      <div className="tt-hist-date-items">
+                        {items.map((t) => (
+                          <div key={t.id} className={'tt-hist-item' + (t.done ? ' done' : '')}>
+                            <span className="tt-check-sm">{t.done ? '✓' : '○'}</span>
+                            <div className="tt-hist-item-body">
+                              <span className="tt-hist-item-title">{t.title}</span>
+                              {t.detail && <div className="tt-hist-detail">{t.detail}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
