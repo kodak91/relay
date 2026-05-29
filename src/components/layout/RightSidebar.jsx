@@ -62,6 +62,34 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
   const myTasks = tasks.filter((t) => !t.done);
   const isLead = user?.role === 'lead';
 
+  // Dismissed state lifted here so badge reflects visible count
+  const confirmStorageKey = `confirm_dismissed_${user?.uid || 'anon'}`;
+  const [dismissed, setDismissed] = useState(new Set());
+  useEffect(() => {
+    try { setDismissed(new Set(JSON.parse(localStorage.getItem(confirmStorageKey) || '[]'))); }
+    catch { setDismissed(new Set()); }
+  }, [confirmStorageKey]);
+
+  const dismiss = useCallback((id) => {
+    setDismissed((prev) => {
+      const next = new Set(prev); next.add(id);
+      try { localStorage.setItem(confirmStorageKey, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }, [confirmStorageKey]);
+
+  const resetAllDismissed = useCallback(() => {
+    const allIds = [...pendingAll.map((i) => i.id), ...heldApprovals.map((i) => i.id)];
+    setDismissed((prev) => {
+      const next = new Set([...prev, ...allIds]);
+      try { localStorage.setItem(confirmStorageKey, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }, [confirmStorageKey, pendingAll, heldApprovals]);
+
+  const visiblePendingCount = pendingAll.filter((i) => !dismissed.has(i.id)).length;
+  const visibleHeldCount = heldApprovals.filter((i) => !dismissed.has(i.id)).length;
+
   // --- Notification logic (always active, tab-independent) ---
   const [notifPerm, setNotifPerm] = useState(() =>
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
@@ -146,7 +174,7 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
       <div className="right-tabs">
         <button className={'right-tab' + (tab === 'confirm' ? ' on' : '')} onClick={() => setTab('confirm')}>
           컨펌 대기
-          <span className="cnt">{pendingAll.length + heldApprovals.length}</span>
+          <span className="cnt">{visiblePendingCount + visibleHeldCount}</span>
         </button>
         <button className={'right-tab' + (tab === 'tasks' ? ' on' : '')} onClick={() => setTab('tasks')}>
           내 태스크
@@ -155,7 +183,7 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
       </div>
 
       {tab === 'confirm'
-        ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} catchup={catchupMessages} onJump={onJumpToMessage} isLead={isLead} uid={user?.uid} notifPerm={notifPerm} onRequestNotif={requestNotif} />
+        ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} catchup={catchupMessages} onJump={onJumpToMessage} isLead={isLead} uid={user?.uid} notifPerm={notifPerm} onRequestNotif={requestNotif} dismissed={dismissed} onDismiss={dismiss} onResetAll={resetAllDismissed} />
         : <TaskSidebar uid={user?.uid} activeProject={activeProject} taskState={taskState} />
       }
     </aside>
@@ -224,7 +252,7 @@ function CatchupSection({ messages, onJump, uid, notifPerm, onRequestNotif }) {
           {visible.map((m) => (
             <div key={m.id} className="catchup-item">
               <label className="catchup-check">
-                <input type="checkbox" onChange={() => dismiss(m.id)} />
+                <input type="checkbox" onChange={() => onDismiss(m.id)} />
               </label>
               <div className="catchup-body" onClick={() => onJump && onJump(m.id)}>
                 <span className="catchup-tag">{TYPE_LABELS[m.type] || m.type}</span>
@@ -239,38 +267,9 @@ function CatchupSection({ messages, onJump, uid, notifPerm, onRequestNotif }) {
   );
 }
 
-function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid, notifPerm, onRequestNotif }) {
-  const storageKey = `confirm_dismissed_${uid || 'anon'}`;
-  const [dismissed, setDismissed] = useState(new Set());
-
-  // Reload dismissed set whenever uid (and thus storageKey) becomes available
-  useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      setDismissed(new Set(stored));
-    } catch {
-      setDismissed(new Set());
-    }
-  }, [storageKey]);
-
-  const dismiss = useCallback((id) => {
-    setDismissed((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      try { localStorage.setItem(storageKey, JSON.stringify([...next])); } catch {}
-      return next;
-    });
-  }, [storageKey]);
-
+function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid, notifPerm, onRequestNotif, dismissed, onDismiss, onResetAll }) {
   const visiblePending = pending.filter((item) => !dismissed.has(item.id));
   const visibleHeld = held.filter((item) => !dismissed.has(item.id));
-
-  const resetAll = () => {
-    const allIds = [...pending.map((i) => i.id), ...held.map((i) => i.id)];
-    const next = new Set([...dismissed, ...allIds]);
-    setDismissed(next);
-    try { localStorage.setItem(storageKey, JSON.stringify([...next])); } catch {}
-  };
 
   return (
     <div className="right-body">
@@ -283,7 +282,7 @@ function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid, notifPerm
             <span className="cnt">{visiblePending.length}건</span>
             {(visiblePending.length > 0 || visibleHeld.length > 0) && (
               <button
-                onClick={resetAll}
+                onClick={onResetAll}
                 style={{ fontSize: 10, color: 'var(--ink-mute)', background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer' }}
                 title="모두 무시"
               >초기화</button>
@@ -298,7 +297,7 @@ function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid, notifPerm
         {visiblePending.map((item) => (
           <div key={item.id} className={'r-card ' + item.kind} style={{ position: 'relative' }}>
             <button
-              onClick={() => dismiss(item.id)}
+              onClick={() => onDismiss(item.id)}
               style={{ position: 'absolute', top: 4, right: 4, border: 0, background: 'none', color: 'var(--ink-mute)', fontSize: 13, cursor: 'pointer', lineHeight: 1, padding: '2px 4px', opacity: 0.5 }}
               title="무시"
             >×</button>
@@ -331,7 +330,7 @@ function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid, notifPerm
           {visibleHeld.map((item) => (
             <div key={item.id} className="r-card held" style={{ position: 'relative' }}>
               <button
-                onClick={() => dismiss(item.id)}
+                onClick={() => onDismiss(item.id)}
                 style={{ position: 'absolute', top: 4, right: 4, border: 0, background: 'none', color: 'var(--ink-mute)', fontSize: 13, cursor: 'pointer', lineHeight: 1, padding: '2px 4px', opacity: 0.5 }}
                 title="무시"
               >×</button>
