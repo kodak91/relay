@@ -597,9 +597,12 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
 
     if (!text.trim()) return;
     const tags = text.match(/#\S+/g) || [];
-    const cleanText = type === 'casual' && text.trimStart().startsWith('$')
-      ? text.trimStart().slice(1).trim()
-      : text.trim();
+    const rawForClean = type === 'casual' && text.trimStart().startsWith('$')
+      ? text.trimStart().slice(1)
+      : text;
+    // tiptap-markdown serializes HardBreak as backslash+newline; convert to
+    // CommonMark two-space hard break so line breaks render correctly in chat
+    const cleanText = rawForClean.replace(/\\\n/g, '  \n').trim();
     const msg = { type, text: cleanText, tags, importance };
     if (type === 'casual') msg.expiresAt = Date.now() + 60 * 60 * 1000;
     if (type === 'approval') {
