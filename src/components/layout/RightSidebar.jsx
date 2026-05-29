@@ -67,6 +67,7 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
   );
   const catchupSeenIds = useRef(null);
+  const sessionStart = useRef(Date.now());
 
   const requestNotif = async (e) => {
     e?.stopPropagation();
@@ -82,7 +83,9 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
       return;
     }
     catchupMessages.forEach((m) => {
-      if (!catchupSeenIds.current.has(m.id)) {
+      if (catchupSeenIds.current.has(m.id)) return;
+      const msgMs = m.createdAt?.toMillis?.() ?? (m.createdAt?.seconds ?? 0) * 1000;
+      if (msgMs > sessionStart.current) {
         new Notification('Relay — 따라잡기', {
           body: `${TYPE_LABELS[m.type] || m.type}: ${m.title || m.text?.slice(0, 60) || '(내용 없음)'}`,
           icon: '/favicon.ico',

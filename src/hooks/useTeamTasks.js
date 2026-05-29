@@ -46,22 +46,16 @@ export function useTeamTasks(members, projectId) {
         next[m.uid] = [...(personalByUid[m.uid] || [])];
       });
 
-      const projectBacklog = [];
       projectTasks.forEach((task) => {
         const assigneeUid = task.assigneeUid || task.ownerUid || task.uid;
         if (assigneeUid && memberUidSet.has(assigneeUid)) {
           next[assigneeUid] = [...(next[assigneeUid] || []), task];
-        } else {
-          projectBacklog.push(task);
         }
       });
 
       Object.keys(next).forEach((uid) => {
         next[uid] = sortTasks(next[uid]);
       });
-      if (projectBacklog.length > 0) {
-        next[PROJECT_TASK_UID] = sortTasks(projectBacklog);
-      }
       setMemberTasks(next);
     };
 

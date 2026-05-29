@@ -240,14 +240,14 @@ function TaskRow({ task, onToggle, tickets = [], onLinkTicket, onUpdateDetail })
 
 function TaskAddBar({ members, onAdd, today }) {
   const [title, setTitle] = useState('');
-  const [assigneeUid, setAssigneeUid] = useState(members[0]?.uid || PROJECT_TASK_UID);
+  const [assigneeUid, setAssigneeUid] = useState(members[0]?.uid || '');
   const [date, setDate] = useState(today);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const valid = new Set([PROJECT_TASK_UID, ...members.map((m) => m.uid)]);
-    if (!valid.has(assigneeUid)) setAssigneeUid(members[0]?.uid || PROJECT_TASK_UID);
+    const valid = new Set(members.map((m) => m.uid));
+    if (!valid.has(assigneeUid)) setAssigneeUid(members[0]?.uid || '');
   }, [members, assigneeUid]);
 
   const handleAdd = async () => {
@@ -289,7 +289,6 @@ function TaskAddBar({ members, onAdd, today }) {
         {members.map((m) => (
           <option key={m.uid} value={m.uid}>{m.name}</option>
         ))}
-        <option value={PROJECT_TASK_UID}>프로젝트</option>
       </select>
       <input
         className="tt-add-date"
@@ -458,13 +457,7 @@ export default function TasksTab({ projectId, project, tickets = [] }) {
   const members = useMemo(() => (project?.members || []).filter((m) => m.uid), [project]);
   const { memberTasks, toggleTask, updateTask, addTask } = useTeamTasks(members, projectId);
   const today = useMemo(() => formatTaskDate(), []);
-  const visibleMembers = useMemo(() => {
-    const list = [...members];
-    if ((memberTasks[PROJECT_TASK_UID] || []).length > 0) {
-      list.push({ uid: PROJECT_TASK_UID, name: '프로젝트', role: 'project' });
-    }
-    return list;
-  }, [members, memberTasks]);
+  const visibleMembers = useMemo(() => [...members], [members]);
 
   return (
     <div className="tt-root">
