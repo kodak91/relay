@@ -301,7 +301,7 @@ function KBSuggestions({ pendingFiles = [], text, folders, selectedId, onSelect 
   );
 }
 
-export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, members = [], kbFolders = [], recentMessages = [] }) {
+export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, members = [], kbFolders = [], recentMessages = [], communityMode = null }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
   const [importance, setImportance] = useState(0);
@@ -374,7 +374,11 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
   const isPMAI = /^\/ .+/.test(text) && type === 'text';
   const showAccentSend = type !== 'text' && type !== 'casual';
 
-  placeholderRef.current = isCasual
+  placeholderRef.current = communityMode === 'admin'
+    ? '커뮤니티에 공지를 입력하세요…'
+    : communityMode === 'member'
+    ? '커뮤니티에 메시지를 입력하세요…'
+    : isCasual
     ? '팀에게 가볍게 한마디… (1시간 뒤 사라짐)'
     : '메시지 입력…  // : 매너모드   $ : 잡담   /! /!! : 중요도   #태그';
 
@@ -434,6 +438,12 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
     if (editor) editor.setEditable(!polishing);
   }, [editor, polishing]);
 
+  // Lock type for community mode
+  useEffect(() => {
+    if (communityMode === 'admin') setType('announce');
+    else if (communityMode === 'member') setType('text');
+  }, [communityMode]);
+
   // Close dropdowns on outside click
   useEffect(() => {
     if (!showTypeMenu) return;
@@ -447,6 +457,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
   }, [showTypeMenu]);
 
   const checkSlashCommand = (md) => {
+    if (communityMode) return false; // No slash commands in community
     // 66: only fire after user presses space (prevents /! from blocking /!!)
     if (!md.endsWith(' ')) return false;
 
@@ -773,7 +784,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
         {!isDecision && !isVote && !isAssign && !isTicket && (
           <div className="ta-wrap">
             <EditorContent editor={editor} />
-            <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
+            {!communityMode && <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>}
             {showAI && (
               <div className="ai-fab-pop">
                 <div className="ai-fab-hd">
@@ -810,65 +821,79 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
 
         </div>
         <div className="actions" ref={actionsRef}>
-          {/* + 파일 버튼 */}
-          <div className="composer-btn-wrap">
-            <button
-              className={'composer-act-btn' + (pendingFiles.length > 0 ? ' has-type' : '')}
-              onClick={() => internalFileRef.current?.click()}
-              title="파일 첨부"
-            >
-              {pendingFiles.length > 0 ? `+${pendingFiles.length}` : '+'}
-            </button>
-          </div>
-          <input
-            ref={internalFileRef}
-            type="file"
-            multiple
-            style={{ display: 'none' }}
-            onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
-          />
-
-          {/* / 메시지 유형 버튼 */}
-          <div className="composer-btn-wrap">
-            <button
-              className={'composer-act-btn' + (showTypeMenu ? ' on' : '') + (type !== 'text' ? ' has-type' : '')}
-              onClick={() => setShowTypeMenu((v) => !v)}
-              title="메시지 유형"
-            >
-              {type !== 'text'
-                ? <><span style={{ opacity: 0.5 }}>/</span>{MESSAGE_TYPES.find((t) => t.id === type)?.label}</>
-                : '/'}
-            </button>
-            {showTypeMenu && (
-              <div className="composer-dropdown type-drop">
-                {MESSAGE_TYPES.map((tt) => (
-                  <button
-                    key={tt.id}
-                    className={tt.id === type ? 'active' : ''}
-                    onClick={() => { setTypeAndReset(tt.id); setShowTypeMenu(false); }}
-                  >
-                    <span className="ico">{tt.icon}</span> {tt.label}
-                  </button>
-                ))}
-                <div className="composer-dropdown-sep" />
+          {/* + 파일 버튼 — hidden in community */}
+          {!communityMode && (
+            <>
+              <div className="composer-btn-wrap">
                 <button
-                  style={{ color: importance ? 'var(--rose)' : undefined }}
-                  onClick={() => { setImportance((importance + 1) % 3); setShowTypeMenu(false); }}
+                  className={'composer-act-btn' + (pendingFiles.length > 0 ? ' has-type' : '')}
+                  onClick={() => internalFileRef.current?.click()}
+                  title="파일 첨부"
                 >
-                  <span className="ico">{importance === 0 ? '☆' : '⭐'.repeat(importance)}</span> 중요도
+                  {pendingFiles.length > 0 ? `+${pendingFiles.length}` : '+'}
                 </button>
               </div>
-            )}
-          </div>
+              <input
+                ref={internalFileRef}
+                type="file"
+                multiple
+                style={{ display: 'none' }}
+                onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+              />
+            </>
+          )}
+
+          {/* 커뮤니티 모드 레이블 */}
+          {communityMode === 'admin' && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'oklch(0.52 0.19 260)', padding: '0 6px', display: 'flex', alignItems: 'center', gap: 4 }}>
+              📢 공지
+            </span>
+          )}
+
+          {/* / 메시지 유형 버튼 — hidden in community */}
+          {!communityMode && (
+            <div className="composer-btn-wrap">
+              <button
+                className={'composer-act-btn' + (showTypeMenu ? ' on' : '') + (type !== 'text' ? ' has-type' : '')}
+                onClick={() => setShowTypeMenu((v) => !v)}
+                title="메시지 유형"
+              >
+                {type !== 'text'
+                  ? <><span style={{ opacity: 0.5 }}>/</span>{MESSAGE_TYPES.find((t) => t.id === type)?.label}</>
+                  : '/'}
+              </button>
+              {showTypeMenu && (
+                <div className="composer-dropdown type-drop">
+                  {MESSAGE_TYPES.map((tt) => (
+                    <button
+                      key={tt.id}
+                      className={tt.id === type ? 'active' : ''}
+                      onClick={() => { setTypeAndReset(tt.id); setShowTypeMenu(false); }}
+                    >
+                      <span className="ico">{tt.icon}</span> {tt.label}
+                    </button>
+                  ))}
+                  <div className="composer-dropdown-sep" />
+                  <button
+                    style={{ color: importance ? 'var(--rose)' : undefined }}
+                    onClick={() => { setImportance((importance + 1) % 3); setShowTypeMenu(false); }}
+                  >
+                    <span className="ico">{importance === 0 ? '☆' : '⭐'.repeat(importance)}</span> 중요도
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <span style={{ flex: 1 }} />
-          <span className="kbd-hint" style={{ marginRight: 6 }}><kbd>⇧</kbd><kbd>↵</kbd> 줄바꿈</span>
+          {!communityMode && <span className="kbd-hint" style={{ marginRight: 6 }}><kbd>⇧</kbd><kbd>↵</kbd> 줄바꿈</span>}
           <button
-            className={'send' + (showAccentSend ? ' accent' : '') + (isCasual ? ' casual' : '')}
+            className={'send' + (showAccentSend ? ' accent' : '') + (isCasual ? ' casual' : '') + (communityMode === 'admin' ? ' accent' : '')}
             onClick={handleSend}
             disabled={polishing || !canSend}
           >
-            {isCasual ? '가볍게 보내기' : '보내기'} <span style={{ opacity: 0.6, fontSize: 11, marginLeft: 2 }}>↵</span>
+            {communityMode === 'admin' ? '공지 전송' : isCasual ? '가볍게 보내기' : '보내기'}
+            {' '}<span style={{ opacity: 0.6, fontSize: 11, marginLeft: 2 }}>↵</span>
           </button>
         </div>
       </div>

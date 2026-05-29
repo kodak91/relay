@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import useAppStore from '../../store/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import { useUnreadCounts } from '../../hooks/useUnreadCounts';
+import { useCommunity, COMMUNITY_ID } from '../../hooks/useCommunity';
 import NewProjectModal from '../chat/NewProjectModal';
 import JoinWorkspaceModal from '../chat/JoinWorkspaceModal';
 import SlackModal from '../integrations/SlackModal';
@@ -18,8 +19,10 @@ const PROJECT_COLORS = [
 export default function LeftSidebar({ mobileOpen, onMobileClose }) {
   const { activeProject, setActiveProject, activeChannel, setActiveChannel, user } = useAppStore();
   const { projects, updateProject, deleteProject, joinByCode } = useProjects(user?.uid);
+  const { communityArchived, toggleArchive } = useCommunity(user);
   const active = projects.filter((p) => p.status !== '보관' && p.status !== '삭제됨');
-  const { counts: unreadCounts, markRead } = useUnreadCounts(active, user?.uid);
+  const unreadProjects = communityArchived ? active : [...active, { id: COMMUNITY_ID }];
+  const { counts: unreadCounts, markRead } = useUnreadCounts(unreadProjects, user?.uid);
   const [showNewProject, setShowNewProject] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -27,12 +30,17 @@ export default function LeftSidebar({ mobileOpen, onMobileClose }) {
   const [menuId, setMenuId] = useState(null);
   const menuRef = useRef(null);
   const [showSlackModal, setShowSlackModal] = useState(false);
+  const [communityMenuOpen, setCommunityMenuOpen] = useState(false);
+  const communityMenuRef = useRef(null);
 
   const activeProjectData = projects.find((p) => p.id === activeProject) || null;
   const archived = projects.filter((p) => p.status === '보관');
 
   useEffect(() => {
-    const close = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuId(null); };
+    const close = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuId(null);
+      if (communityMenuRef.current && !communityMenuRef.current.contains(e.target)) setCommunityMenuOpen(false);
+    };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
   }, []);
@@ -127,6 +135,43 @@ export default function LeftSidebar({ mobileOpen, onMobileClose }) {
               />
             ))}
           </>
+        )}
+      </div>
+
+      {/* Community */}
+      <div className="community-section">
+        <div className="proj-section community-label">커뮤니티</div>
+        <div
+          className={'proj community-proj' + (activeProject === COMMUNITY_ID && activeChannel === 'chat' ? ' on' : '') + (communityArchived ? ' muted' : '')}
+          onClick={() => {
+            if (!communityArchived) markRead(COMMUNITY_ID);
+            setActiveProject(COMMUNITY_ID);
+            setActiveChannel('chat');
+            onMobileClose?.();
+          }}
+        >
+          <div className="pf community-pf">커</div>
+          <div className="nm">커뮤니티</div>
+          <div className="meta" style={{ position: 'relative' }}>
+            {!communityArchived && (unreadCounts[COMMUNITY_ID] || 0) > 0 && (
+              <span className="unread-badge">{unreadCounts[COMMUNITY_ID] > 99 ? '99+' : unreadCounts[COMMUNITY_ID]}</span>
+            )}
+            <button
+              className="proj-menu-btn"
+              onClick={(e) => { e.stopPropagation(); setCommunityMenuOpen((v) => !v); }}
+              title="커뮤니티 설정"
+            >⋯</button>
+            {communityMenuOpen && (
+              <div className="proj-menu" ref={communityMenuRef}>
+                <button onClick={(e) => { e.stopPropagation(); toggleArchive(); setCommunityMenuOpen(false); }}>
+                  {communityArchived ? '알림 복원' : '보관 (알림 끄기)'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        {communityArchived && (
+          <div className="community-archived-hint">보관됨 · 알림 없음</div>
         )}
       </div>
 
