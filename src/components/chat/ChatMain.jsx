@@ -69,6 +69,14 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const [meetingInitialTitle, setMeetingInitialTitle] = useState('');
   const [floatingDate, setFloatingDate] = useState('');
   const floatTimerRef = useRef(null);
+  const [slackError, setSlackError] = useState('');
+  const slackErrTimer = useRef(null);
+
+  const showSlackError = (msg) => {
+    setSlackError(msg);
+    clearTimeout(slackErrTimer.current);
+    slackErrTimer.current = setTimeout(() => setSlackError(''), 7000);
+  };
 
   const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
 
@@ -259,7 +267,10 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
               updateDoc(msgRef, { slackTs: ts, slackChannel: activeProjectData.slackChannel }).catch(() => {});
             }
           })
-          .catch((e) => console.warn('Slack bot post:', e.message));
+          .catch((e) => {
+            console.warn('Slack bot post:', e.message);
+            showSlackError(`Slack 전송 실패: ${e.message}`);
+          });
       } else if (activeProjectData?.slackWebhook) {
         postToSlack(activeProjectData.slackWebhook, slackText).catch((e) => console.warn('Slack:', e.message));
       }
@@ -525,6 +536,17 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           </div>
         )}
       </div>
+
+      {slackError && (
+        <div style={{
+          background: 'oklch(0.95 0.04 25)', border: '1px solid oklch(0.85 0.10 25)',
+          color: 'oklch(0.40 0.15 25)', fontSize: 12, padding: '7px 14px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+        }}>
+          <span>⚠️ {slackError}</span>
+          <button onClick={() => setSlackError('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 14, padding: '0 2px' }}>✕</button>
+        </div>
+      )}
 
       {showMemberModal && activeProjectData && (
         <MemberManagementModal

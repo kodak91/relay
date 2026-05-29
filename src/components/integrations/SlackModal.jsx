@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { postToSlack } from '../../lib/slack';
+import { postToSlack, slackBotPost } from '../../lib/slack';
 import { useProjects } from '../../hooks/useProjects';
 
 export default function SlackModal({ project, onClose }) {
@@ -9,6 +9,8 @@ export default function SlackModal({ project, onClose }) {
   const [botChannel, setBotChannel] = useState(project?.slackChannel || '');
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState('');
+  const [botTesting, setBotTesting] = useState(false);
+  const [botTestMsg, setBotTestMsg] = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleTest = async () => {
@@ -22,6 +24,24 @@ export default function SlackModal({ project, onClose }) {
       setTestMsg('⚠️ ' + e.message);
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleTestBot = async () => {
+    if (!botToken.trim() || !botChannel.trim()) return;
+    setBotTesting(true);
+    setBotTestMsg('');
+    try {
+      await slackBotPost(
+        botToken.trim(),
+        botChannel.trim(),
+        `🔔 *Relay 봇 연동 테스트* — [${project?.name || '워크스페이스'}]\n/보고 메시지가 이 채널로 정상 전송됩니다.`
+      );
+      setBotTestMsg('✓ 전송 성공 — 채널에 메시지가 도착했는지 확인하세요');
+    } catch (e) {
+      setBotTestMsg('⚠️ ' + e.message);
+    } finally {
+      setBotTesting(false);
     }
   };
 
@@ -76,27 +96,46 @@ export default function SlackModal({ project, onClose }) {
           </div>
 
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Bot Token (편집·삭제 동기화)</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Bot Token (/보고 전송 + 편집·삭제 동기화)</div>
             <div style={{ fontSize: 12, color: 'var(--ink-3)', marginBottom: 8, lineHeight: 1.6 }}>
-              Slack Bot Token (<code>xoxb-…</code>)을 입력하면 Relay에서 편집·삭제 시 Slack 메시지도 자동으로 반영됩니다.
+              Slack Bot Token (<code>xoxb-…</code>)과 채널 ID를 입력하면 <b>/보고</b> 전송 및 편집·삭제가 Slack에 자동 반영됩니다.<br />
+              <b style={{ color: 'oklch(0.50 0.15 50)' }}>⚠ 봇을 채널에 먼저 초대해야 합니다</b> — Slack 채널에서 <code>/invite @봇이름</code> 실행 후 아래에서 테스트하세요.
             </div>
             <input
               style={{ ...inputStyle, marginBottom: 8 }}
               placeholder="xoxb-..."
               value={botToken}
-              onChange={(e) => setBotToken(e.target.value)}
+              onChange={(e) => { setBotToken(e.target.value); setBotTestMsg(''); }}
               type="password"
               autoComplete="off"
             />
             <input
-              style={inputStyle}
+              style={{ ...inputStyle, marginBottom: 6 }}
               placeholder="채널 ID (예: C1234567890)"
               value={botChannel}
-              onChange={(e) => setBotChannel(e.target.value)}
+              onChange={(e) => { setBotChannel(e.target.value); setBotTestMsg(''); }}
             />
-            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>
-              채널 ID는 Slack에서 채널 이름 우클릭 → 채널 세부정보에서 확인
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginBottom: 8 }}>
+              채널 ID: Slack에서 채널 이름 우클릭 → 채널 세부정보 → 맨 아래 복사
             </div>
+            <button
+              className="btn sm"
+              onClick={handleTestBot}
+              disabled={!botToken.trim() || !botChannel.trim() || botTesting}
+              style={{ marginBottom: botTestMsg ? 8 : 0 }}
+            >
+              {botTesting ? '전송 중…' : '봇 토큰 테스트'}
+            </button>
+            {botTestMsg && (
+              <div style={{
+                fontSize: 12, padding: '6px 10px', borderRadius: 'var(--r-2)',
+                background: botTestMsg.startsWith('✓') ? 'var(--emerald-bg)' : 'var(--rose-bg)',
+                color: botTestMsg.startsWith('✓') ? 'var(--emerald)' : 'var(--rose)',
+                border: `1px solid ${botTestMsg.startsWith('✓') ? 'var(--emerald-line)' : 'var(--rose-line)'}`,
+              }}>
+                {botTestMsg}
+              </div>
+            )}
           </div>
 
           {testMsg && (
