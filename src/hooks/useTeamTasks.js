@@ -4,12 +4,19 @@ import { db } from '../lib/firebase';
 
 export const PROJECT_TASK_UID = '__project__';
 
+export function formatTaskDate(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 export function taskDate(t) {
   if (t.date) return t.date;
   if (t.dueDate) return t.dueDate;
   if (t.due && /^\d{4}-\d{2}-\d{2}$/.test(t.due)) return t.due;
   const ts = t.createdAt?.toDate?.();
-  return ts ? ts.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+  return ts ? formatTaskDate(ts) : formatTaskDate();
 }
 
 function sortTasks(items) {
@@ -139,7 +146,7 @@ export function useTeamTasks(members, projectId) {
     const base = {
       title: cleanTitle,
       done: false,
-      date: date || new Date().toISOString().slice(0, 10),
+      date: date || formatTaskDate(),
       detail: detail || '',
       createdAt: serverTimestamp(),
     };

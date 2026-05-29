@@ -4,7 +4,7 @@ import { db } from '../../lib/firebase';
 import useAppStore from '../../store/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import { useGlobalMessages } from '../../hooks/useGlobalMessages';
-import { usePersonalTasks } from '../../hooks/usePersonalTasks';
+import { usePersonalTasks, taskDate, todayStr } from '../../hooks/usePersonalTasks';
 import { useTickets } from '../../hooks/useTickets';
 
 const TYPE_LABELS = {
@@ -24,7 +24,8 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
 
   const activeProjects = (projects || []).filter((p) => p.status !== '보관' && p.status !== '삭제됨');
   const { messages } = useGlobalMessages(activeProjects);
-  const { tasks } = usePersonalTasks(user?.uid);
+  const taskState = usePersonalTasks(user?.uid);
+  const { tasks } = taskState;
 
   // Ghost-safe filters: require minimum content so incomplete Firestore docs are excluded
   const pendingApprovals = messages.filter(
@@ -152,7 +153,7 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
 
       {tab === 'confirm'
         ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} catchup={catchupMessages} onJump={onJumpToMessage} isLead={isLead} uid={user?.uid} notifPerm={notifPerm} onRequestNotif={requestNotif} />
-        : <TaskSidebar uid={user?.uid} activeProject={activeProject} />
+        : <TaskSidebar uid={user?.uid} activeProject={activeProject} taskState={taskState} />
       }
     </aside>
   );
@@ -474,22 +475,34 @@ function PersonalTaskRow({ task, tickets, activeProjectId, onToggle, onUpdate, o
   );
 }
 
-function TaskSidebar({ uid, activeProject }) {
-  const { tasks, todayTasks, overdueTasks, weekStats, addTask, toggleTask, updateTask, deleteTask, deleteAllTasks } = usePersonalTasks(uid);
+function TaskSidebar({ uid, activeProject, taskState }) {
+  const { tasks, todayTasks, overdueTasks, weekStats, error, addTask, toggleTask, updateTask, deleteTask, deleteAllTasks } = taskState;
   const { tickets } = useTickets(activeProject);
   const [newTitle, setNewTitle] = useState('');
+  const [addError, setAddError] = useState('');
+  const [adding, setAdding] = useState(false);
 
   const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
+  const currentDay = todayStr();
   const todayLabel = today.toLocaleDateString('ko', { month: 'numeric', day: 'numeric', weekday: 'short' });
 
   const handleAdd = async () => {
-    if (!newTitle.trim() || !uid) return;
-    await addTask(newTitle.trim());
-    setNewTitle('');
+    if (!newTitle.trim() || !uid || adding) return;
+    setAdding(true);
+    setAddError('');
+    try {
+      await addTask(newTitle.trim());
+      setNewTitle('');
+    } catch (e) {
+      setAddError(e?.message || '태스크를 추가하지 못했습니다.');
+    } finally {
+      setAdding(false);
+    }
   };
 
-  const activeTasks = [...overdueTasks, ...todayTasks.filter((t) => !t.done)];
+  const todayOpenTasks = todayTasks.filter((t) => !t.done);
+  const upcomingTasks = tasks.filter((t) => !t.done && taskDate(t) > currentDay);
+  const activeTasks = [...overdueTasks, ...todayOpenTasks, ...upcomingTasks];
   const doneTodayTasks = todayTasks.filter((t) => t.done);
 
   return (
@@ -499,7 +512,7 @@ function TaskSidebar({ uid, activeProject }) {
         <div className="r-hd"><h4>📊 이번 주 현황</h4></div>
         <div className="week-grid">
           {weekStats.map((ws, i) => (
-            <div key={ws.date} className={'week-day' + (ws.date === todayStr ? ' today' : '')}>
+            <div key={ws.date} className={'week-day' + (ws.date === currentDay ? ' today' : '')}>
               <div className="wd-label">{WEEK_DAYS[i]}</div>
               <div className="wd-done">{ws.done}</div>
               <div className="wd-sep">/</div>
@@ -535,8 +548,13 @@ function TaskSidebar({ uid, activeProject }) {
             onChange={(e) => setNewTitle(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
           />
-          <button className="btn accent sm" onClick={handleAdd} disabled={!uid}>추가</button>
+          <button className="btn accent sm" onClick={handleAdd} disabled={!uid || !newTitle.trim() || adding}>추가</button>
         </div>
+        {(error || addError) && (
+          <div style={{ fontSize: 11, color: 'var(--rose)', margin: '-2px 0 8px', lineHeight: 1.4 }}>
+            {error || addError}
+          </div>
+        )}
 
         {activeTasks.length === 0 && doneTodayTasks.length === 0 && (
           <p style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center', padding: '10px 0' }}>
@@ -556,7 +574,17 @@ function TaskSidebar({ uid, activeProject }) {
         ))}
 
         {/* Today's incomplete */}
-        {todayTasks.filter((t) => !t.done).map((t) => (
+        {todayOpenTasks.map((t) => (
+          <PersonalTaskRow key={t.id} task={t} tickets={tickets} activeProjectId={activeProject}
+            onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} />
+        ))}
+
+        {upcomingTasks.length > 0 && (
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', margin: '8px 0 4px', letterSpacing: '0.03em' }}>
+            예정 {upcomingTasks.length}건
+          </div>
+        )}
+        {upcomingTasks.map((t) => (
           <PersonalTaskRow key={t.id} task={t} tickets={tickets} activeProjectId={activeProject}
             onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} />
         ))}

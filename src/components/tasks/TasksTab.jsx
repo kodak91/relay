@@ -10,7 +10,7 @@ function fmtDateLabel(date) {
   const days = ['일', '월', '화', '수', '목', '금', '토'];
   return `${d.getDate()}일 (${days[d.getDay()]})`;
 }
-import { useTeamTasks, taskDate, PROJECT_TASK_UID } from '../../hooks/useTeamTasks';
+import { useTeamTasks, taskDate, formatTaskDate, PROJECT_TASK_UID } from '../../hooks/useTeamTasks';
 
 function getWeekDates() {
   const now = new Date();
@@ -457,7 +457,7 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
 export default function TasksTab({ projectId, project, tickets = [] }) {
   const members = useMemo(() => (project?.members || []).filter((m) => m.uid), [project]);
   const { memberTasks, toggleTask, updateTask, addTask } = useTeamTasks(members, projectId);
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = useMemo(() => formatTaskDate(), []);
   const visibleMembers = useMemo(() => {
     const list = [...members];
     if ((memberTasks[PROJECT_TASK_UID] || []).length > 0) {

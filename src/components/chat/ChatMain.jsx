@@ -21,6 +21,7 @@ import { postToSlack, slackBotPost, slackBotUpdate, slackBotDelete } from '../..
 import { claudeComplete } from '../../lib/claude';
 import { addDoc, collection, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { formatTaskDate } from '../../hooks/usePersonalTasks';
 
 function nowHM() {
   const d = new Date();
@@ -281,7 +282,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       addDoc(collection(db, 'users', msgData.assigneeUid, 'tasks'), {
         title: msgData.text.trim(),
         done: false,
-        date: new Date().toISOString().slice(0, 10),
+        date: formatTaskDate(),
         assignedBy: user?.name || '팀원',
         assignedFrom: 'chat',
         createdAt: serverTimestamp(),
@@ -387,7 +388,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     await addDoc(collection(db, 'users', member.uid, 'tasks'), {
       title: taskTitle,
       done: false,
-      date: new Date().toISOString().slice(0, 10),
+      date: formatTaskDate(),
       assignedBy: user?.name || '팀원',
       assignedFrom: 'chat',
       fromMessageId: msg.id,
