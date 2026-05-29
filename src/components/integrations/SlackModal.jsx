@@ -70,7 +70,7 @@ export default function SlackModal({ project, onClose }) {
   };
 
   return (
-    <div className="drive-modal-wrap" onClick={onClose}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'grid', placeItems: 'center', zIndex: 500 }} onClick={onClose}>
       <div className="slack-modal" onClick={(e) => e.stopPropagation()}>
         <div className="drive-modal-hd">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
