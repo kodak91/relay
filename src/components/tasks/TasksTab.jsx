@@ -10,7 +10,7 @@ function fmtDateLabel(date) {
   const days = ['일', '월', '화', '수', '목', '금', '토'];
   return `${d.getDate()}일 (${days[d.getDay()]})`;
 }
-import { useTeamTasks, taskDate } from '../../hooks/useTeamTasks';
+import { useTeamTasks, taskDate, PROJECT_TASK_UID } from '../../hooks/useTeamTasks';
 
 function getWeekDates() {
   const now = new Date();
@@ -238,6 +238,74 @@ function TaskRow({ task, onToggle, tickets = [], onLinkTicket, onUpdateDetail })
   );
 }
 
+function TaskAddBar({ members, onAdd, today }) {
+  const [title, setTitle] = useState('');
+  const [assigneeUid, setAssigneeUid] = useState(members[0]?.uid || PROJECT_TASK_UID);
+  const [date, setDate] = useState(today);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const valid = new Set([PROJECT_TASK_UID, ...members.map((m) => m.uid)]);
+    if (!valid.has(assigneeUid)) setAssigneeUid(members[0]?.uid || PROJECT_TASK_UID);
+  }, [members, assigneeUid]);
+
+  const handleAdd = async () => {
+    const cleanTitle = title.trim();
+    if (!cleanTitle || saving) return;
+    const member = members.find((m) => m.uid === assigneeUid);
+    setSaving(true);
+    setError('');
+    try {
+      await onAdd({
+        title: cleanTitle,
+        assigneeUid,
+        assigneeName: member?.name || '',
+        date,
+      });
+      setTitle('');
+    } catch (e) {
+      setError(e?.message || '태스크를 추가하지 못했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="tt-addbar">
+      <input
+        className="tt-add-input"
+        placeholder="+ 할 일 추가"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+      />
+      <select
+        className="tt-add-select"
+        value={assigneeUid}
+        onChange={(e) => setAssigneeUid(e.target.value)}
+        title="담당자"
+      >
+        {members.map((m) => (
+          <option key={m.uid} value={m.uid}>{m.name}</option>
+        ))}
+        <option value={PROJECT_TASK_UID}>프로젝트</option>
+      </select>
+      <input
+        className="tt-add-date"
+        type="date"
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+        title="일자"
+      />
+      <button className="btn accent sm" onClick={handleAdd} disabled={!title.trim() || saving}>
+        추가
+      </button>
+      {error && <span className="tt-add-error">{error}</span>}
+    </div>
+  );
+}
+
 function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectId, today }) {
   const [showHistory, setShowHistory] = useState(false);
   const [openDates, setOpenDates] = useState(new Set());
@@ -282,7 +350,7 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
         <div className="tt-member-avatar">{(member.name || '?')[0].toUpperCase()}</div>
         <div className="tt-member-meta">
           <div className="tt-member-name">{member.name}</div>
-          <div className="tt-member-role">{member.role === 'lead' ? '팀장' : '팀원'}</div>
+          <div className="tt-member-role">{member.uid === PROJECT_TASK_UID ? '공용 태스크' : member.role === 'lead' ? '팀장' : '팀원'}</div>
         </div>
         <div className="tt-member-pct">{Math.round(pct * 100)}%</div>
       </div>
@@ -303,11 +371,15 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
               }}
               onLinkTicket={(taskId, ticketId) => {
                 const lk = tickets.find((tk) => tk.id === ticketId);
+                const task = tasks.find((tk) => tk.id === taskId);
                 onUpdateTask(taskId, ticketId
                   ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null, ticketProjectId: projectId }
-                  : { ticketId: null, ticketCode: null, ticketTitle: null, ticketProjectId: null });
+                  : { ticketId: null, ticketCode: null, ticketTitle: null, ticketProjectId: null }, task);
               }}
-              onUpdateDetail={(taskId, detail) => onUpdateTask(taskId, { detail })} />
+              onUpdateDetail={(taskId, detail) => {
+                const task = tasks.find((tk) => tk.id === taskId);
+                onUpdateTask(taskId, { detail }, task);
+              }} />
           ))
         }
       </div>
@@ -324,11 +396,15 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
                 }}
                 onLinkTicket={(taskId, ticketId) => {
                   const lk = tickets.find((tk) => tk.id === ticketId);
+                  const task = tasks.find((tk) => tk.id === taskId);
                   onUpdateTask(taskId, ticketId
                     ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null, ticketProjectId: projectId }
-                    : { ticketId: null, ticketCode: null, ticketTitle: null, ticketProjectId: null });
+                    : { ticketId: null, ticketCode: null, ticketTitle: null, ticketProjectId: null }, task);
                 }}
-                onUpdateDetail={(taskId, detail) => onUpdateTask(taskId, { detail })} />
+                onUpdateDetail={(taskId, detail) => {
+                  const task = tasks.find((tk) => tk.id === taskId);
+                  onUpdateTask(taskId, { detail }, task);
+                }} />
             ))}
           </div>
         </>
@@ -380,27 +456,35 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
 
 export default function TasksTab({ projectId, project, tickets = [] }) {
   const members = useMemo(() => (project?.members || []).filter((m) => m.uid), [project]);
-  const { memberTasks, toggleTask, updateTask } = useTeamTasks(members);
+  const { memberTasks, toggleTask, updateTask, addTask } = useTeamTasks(members, projectId);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const visibleMembers = useMemo(() => {
+    const list = [...members];
+    if ((memberTasks[PROJECT_TASK_UID] || []).length > 0) {
+      list.push({ uid: PROJECT_TASK_UID, name: '프로젝트', role: 'project' });
+    }
+    return list;
+  }, [members, memberTasks]);
 
   return (
     <div className="tt-root">
       <Dashboard memberTasks={memberTasks} members={members} today={today} />
+      <TaskAddBar members={members} onAdd={addTask} today={today} />
       <div className="tt-columns">
-        {members.length === 0 ? (
+        {visibleMembers.length === 0 ? (
           <div className="tt-no-members">
             <div style={{ fontSize: 32, marginBottom: 12 }}>👥</div>
             <div style={{ fontWeight: 600, marginBottom: 6 }}>멤버가 없습니다</div>
             <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>멤버관리에서 팀원을 추가하세요.</div>
           </div>
         ) : (
-          members.map((m) => (
+          visibleMembers.map((m) => (
             <MemberColumn
               key={m.uid}
               member={m}
               tasks={memberTasks[m.uid] || []}
               onToggle={toggleTask}
-              onUpdateTask={(taskId, fields) => updateTask(m.uid, taskId, fields)}
+              onUpdateTask={(taskId, fields, task) => updateTask(m.uid, taskId, fields, task)}
               tickets={tickets}
               projectId={projectId}
               today={today}

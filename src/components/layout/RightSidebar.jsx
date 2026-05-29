@@ -520,9 +520,9 @@ function TaskSidebar({ uid, activeProject }) {
             <span className="cnt">{activeTasks.length}건 남음</span>
             {tasks.length > 0 && (
               <button
-                onClick={() => { if (window.confirm('모든 태스크를 삭제할까요?')) deleteAllTasks(); }}
+                onClick={() => { if (window.confirm(`내 태스크 ${tasks.length}건을 Firebase에서 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) deleteAllTasks(); }}
                 style={{ fontSize: 10, color: 'var(--ink-mute)', background: 'none', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer' }}
-              >초기화</button>
+              >전체 삭제</button>
             )}
           </div>
         </div>

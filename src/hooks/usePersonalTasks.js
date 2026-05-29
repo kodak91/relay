@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
-  collection, query, orderBy, onSnapshot,
+  collection, onSnapshot,
   addDoc, updateDoc, deleteDoc, doc, serverTimestamp, arrayUnion,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -25,8 +25,21 @@ export function getWeekDates() {
 
 function taskDate(t) {
   if (t.date) return t.date;
+  if (t.dueDate) return t.dueDate;
+  if (t.due && /^\d{4}-\d{2}-\d{2}$/.test(t.due)) return t.due;
   const ts = t.createdAt?.toDate?.();
   return ts ? ts.toISOString().slice(0, 10) : todayStr();
+}
+
+function sortTasks(items) {
+  return [...items].sort((a, b) => {
+    const ad = taskDate(a);
+    const bd = taskDate(b);
+    if (ad !== bd) return ad.localeCompare(bd);
+    const at = a.createdAt?.toMillis?.() ?? 0;
+    const bt = b.createdAt?.toMillis?.() ?? 0;
+    return at - bt;
+  });
 }
 
 export function usePersonalTasks(uid) {
@@ -34,12 +47,8 @@ export function usePersonalTasks(uid) {
 
   useEffect(() => {
     if (!uid) { setTasks([]); return; }
-    const q = query(
-      collection(db, 'users', uid, 'tasks'),
-      orderBy('createdAt', 'asc')
-    );
-    return onSnapshot(q, (snap) => {
-      setTasks(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    return onSnapshot(collection(db, 'users', uid, 'tasks'), (snap) => {
+      setTasks(sortTasks(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
     });
   }, [uid]);
 

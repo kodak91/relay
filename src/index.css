@@ -2230,6 +2230,27 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 /* ── Tasks Tab (멤버별 대시보드) ──────────────────────────────────────── */
 .tt-root { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
 
+.tt-addbar {
+  display: flex; align-items: center; gap: 8px; padding: 10px 20px;
+  border-bottom: 1px solid var(--border); background: var(--surface);
+  flex-shrink: 0; flex-wrap: wrap;
+}
+.tt-add-input {
+  flex: 1; min-width: 220px; border: 1px solid var(--border);
+  border-radius: var(--r-2); padding: 7px 10px; font-size: 13px;
+  background: var(--surface); color: var(--ink); outline: none;
+}
+.tt-add-select,
+.tt-add-date {
+  border: 1px solid var(--border); border-radius: var(--r-2);
+  padding: 7px 9px; font-size: 12px; background: var(--surface);
+  color: var(--ink); outline: none; height: 32px;
+}
+.tt-add-select { max-width: 150px; }
+.tt-add-error {
+  font-size: 12px; color: var(--rose); flex-basis: 100%;
+}
+
 /* Dashboard */
 .tt-dashboard {
   display: flex; gap: 12px; padding: 16px 20px;
