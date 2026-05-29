@@ -5,6 +5,7 @@ import useAppStore from '../../store/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import { useGlobalMessages } from '../../hooks/useGlobalMessages';
 import { usePersonalTasks } from '../../hooks/usePersonalTasks';
+import { useTickets } from '../../hooks/useTickets';
 
 const TYPE_LABELS = {
   approval: '컨펌', decision: '결정', vote: '투표',
@@ -151,7 +152,7 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
 
       {tab === 'confirm'
         ? <ConfirmSidebar pending={pendingAll} held={heldApprovals} catchup={catchupMessages} onJump={onJumpToMessage} isLead={isLead} uid={user?.uid} notifPerm={notifPerm} onRequestNotif={requestNotif} />
-        : <TaskSidebar uid={user?.uid} />
+        : <TaskSidebar uid={user?.uid} activeProject={activeProject} />
       }
     </aside>
   );
@@ -350,8 +351,132 @@ function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid, notifPerm
 
 const WEEK_DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
-function TaskSidebar({ uid }) {
-  const { tasks, todayTasks, overdueTasks, weekStats, addTask, toggleTask, deleteTask, deleteAllTasks } = usePersonalTasks(uid);
+function SidebarTicketPicker({ tickets, onLink }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  const filtered = tickets.filter((t) =>
+    t.ticketCode?.toLowerCase().includes(q.toLowerCase()) ||
+    t.title?.toLowerCase().includes(q.toLowerCase())
+  ).slice(0, 8);
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button className="tt-link-btn" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }} title="티켓 연결">🔗</button>
+      {open && (
+        <div className="tt-ticket-picker" style={{ right: 0, left: 'auto' }} onClick={(e) => e.stopPropagation()}>
+          <input className="tt-picker-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="티켓 검색…" autoFocus />
+          {filtered.length === 0
+            ? <div className="tt-picker-empty">없음</div>
+            : filtered.map((t) => (
+              <button key={t.id} className="tt-picker-item" onClick={() => { onLink(t.id); setOpen(false); setQ(''); }}>
+                <span className="tt-picker-code">{t.ticketCode}</span>
+                <span className="tt-picker-name">{t.title}</span>
+              </button>
+            ))
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PersonalTaskRow({ task, tickets, activeProjectId, onToggle, onUpdate, onDelete }) {
+  const [expanded, setExpanded] = useState(false);
+  const [detail, setDetail] = useState(task.detail || '');
+  const detailRef = useRef(null);
+  const ticket = task.ticketCode
+    ? { ticketCode: task.ticketCode, title: task.ticketTitle || '' }
+    : null;
+
+  useEffect(() => {
+    if (!expanded || !detailRef.current) return;
+    detailRef.current.style.height = 'auto';
+    detailRef.current.style.height = `${detailRef.current.scrollHeight}px`;
+  }, [detail, expanded]);
+
+  const saveDetail = () => {
+    if (detail !== (task.detail || '')) onUpdate(task.id, { detail });
+  };
+
+  return (
+    <div>
+      <div className={'task-row' + (task.done ? ' done' : '')} style={{ cursor: 'default' }}>
+        <div
+          className={'task-check' + (task.done ? ' done-check' : '')}
+          onClick={() => onToggle(task.id, !task.done)}
+          style={{ cursor: 'pointer', flexShrink: 0 }}
+        />
+        <span
+          className="task-text"
+          style={{ flex: 1, cursor: 'pointer' }}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {task.title}
+        </span>
+        {ticket ? (
+          <span
+            className={'task-ticket-badge' + (task.done ? ' done' : '')}
+            title={ticket.title || ticket.ticketCode}
+            onClick={(e) => { e.stopPropagation(); onUpdate(task.id, { ticketId: null, ticketCode: null, ticketTitle: null, ticketProjectId: null }); }}
+            style={{ cursor: 'pointer' }}
+          >
+            {ticket.ticketCode} ✕
+          </span>
+        ) : tickets.length > 0 && (
+          <SidebarTicketPicker
+            tickets={tickets}
+            onLink={(ticketId) => {
+              const t = tickets.find((tk) => tk.id === ticketId);
+              onUpdate(task.id, {
+                ticketId,
+                ticketCode: t?.ticketCode || null,
+                ticketTitle: t?.title || null,
+                ticketProjectId: activeProjectId,
+              });
+            }}
+          />
+        )}
+        {task.date && !task.done && <span className="task-date">{task.date.slice(5)}</span>}
+        {task.assignedBy && <span className="task-assigned">by {task.assignedBy}</span>}
+        <button
+          style={{ border: 0, background: 'transparent', color: 'var(--ink-mute)', fontSize: 14, cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
+          onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
+        >×</button>
+      </div>
+      {expanded && (
+        <textarea
+          ref={detailRef}
+          value={detail}
+          onChange={(e) => {
+            setDetail(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = `${e.target.scrollHeight}px`;
+          }}
+          onBlur={saveDetail}
+          placeholder="세부 내용 입력…"
+          rows={1}
+          style={{
+            width: '100%', boxSizing: 'border-box', marginTop: 2, marginBottom: 4,
+            padding: '5px 8px', fontSize: 12, background: 'var(--surface-2)',
+            border: '1px solid var(--border)', borderRadius: 'var(--r-2)',
+            outline: 'none', resize: 'none', overflow: 'hidden', fontFamily: 'var(--font-sans)',
+            color: 'var(--ink-2)', lineHeight: 1.5,
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function TaskSidebar({ uid, activeProject }) {
+  const { tasks, todayTasks, overdueTasks, weekStats, addTask, toggleTask, updateTask, deleteTask, deleteAllTasks } = usePersonalTasks(uid);
+  const { tickets } = useTickets(activeProject);
   const [newTitle, setNewTitle] = useState('');
 
   const today = new Date();
@@ -426,27 +551,14 @@ function TaskSidebar({ uid }) {
           </div>
         )}
         {overdueTasks.map((t) => (
-          <div key={t.id} className="task-row overdue" onClick={() => toggleTask(t.id, true)}>
-            <div className="task-check" />
-            <span className="task-text" style={{ flex: 1 }}>{t.title}</span>
-            {t.ticketCode && <span className="task-ticket-badge" title={t.ticketTitle || t.ticketCode}>{t.ticketCode}</span>}
-            {t.date && <span className="task-date">{t.date.slice(5)}</span>}
-            {t.assignedBy && <span className="task-assigned">by {t.assignedBy}</span>}
-            <button style={{ border: 0, background: 'transparent', color: 'var(--ink-mute)', fontSize: 14, cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
-              onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>×</button>
-          </div>
+          <PersonalTaskRow key={t.id} task={t} tickets={tickets} activeProjectId={activeProject}
+            onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} />
         ))}
 
         {/* Today's incomplete */}
         {todayTasks.filter((t) => !t.done).map((t) => (
-          <div key={t.id} className="task-row" onClick={() => toggleTask(t.id, true)}>
-            <div className="task-check" />
-            <span className="task-text" style={{ flex: 1 }}>{t.title}</span>
-            {t.ticketCode && <span className="task-ticket-badge" title={t.ticketTitle || t.ticketCode}>{t.ticketCode}</span>}
-            {t.assignedBy && <span className="task-assigned">by {t.assignedBy}</span>}
-            <button style={{ border: 0, background: 'transparent', color: 'var(--ink-mute)', fontSize: 14, cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
-              onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>×</button>
-          </div>
+          <PersonalTaskRow key={t.id} task={t} tickets={tickets} activeProjectId={activeProject}
+            onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} />
         ))}
 
         {/* Completed today */}
@@ -456,13 +568,8 @@ function TaskSidebar({ uid }) {
               완료 {doneTodayTasks.length}건
             </div>
             {doneTodayTasks.map((t) => (
-              <div key={t.id} className="task-row done" onClick={() => toggleTask(t.id, false)}>
-                <div className="task-check done-check" />
-                <span className="task-text" style={{ flex: 1 }}>{t.title}</span>
-                {t.ticketCode && <span className="task-ticket-badge done" title={t.ticketTitle || t.ticketCode}>{t.ticketCode}</span>}
-                <button style={{ border: 0, background: 'transparent', color: 'var(--ink-mute)', fontSize: 14, cursor: 'pointer', padding: '0 2px', flexShrink: 0 }}
-                  onClick={(e) => { e.stopPropagation(); deleteTask(t.id); }}>×</button>
-              </div>
+              <PersonalTaskRow key={t.id} task={t} tickets={tickets} activeProjectId={activeProject}
+                onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} />
             ))}
           </>
         )}

@@ -155,6 +155,7 @@ function TicketPicker({ tickets, onLink }) {
 function TaskRow({ task, onToggle, tickets = [], onLinkTicket, onUpdateDetail }) {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState(task.detail || '');
+  const detailRef = useRef(null);
   const isOverdue = !task.done && taskDate(task) < new Date().toISOString().slice(0, 10);
   const ticket = tickets.find((t) => t.id === task.ticketId)
     || (task.ticketCode ? { id: task.ticketId, ticketCode: task.ticketCode, title: task.ticketTitle || '' } : null);
@@ -163,22 +164,29 @@ function TaskRow({ task, onToggle, tickets = [], onLinkTicket, onUpdateDetail })
     if (detail !== (task.detail || '')) onUpdateDetail?.(task.id, detail);
   };
 
+  useEffect(() => {
+    if (!expanded || !detailRef.current) return;
+    detailRef.current.style.height = 'auto';
+    detailRef.current.style.height = `${detailRef.current.scrollHeight}px`;
+  }, [detail, expanded]);
+
   return (
     <div>
-      <div
-        className={'tt-task-row' + (task.done ? ' done' : '') + (isOverdue ? ' overdue' : '')}
-        onClick={() => onToggle(task.id, !task.done)}
-      >
-        <button
-          className="tt-expand-btn"
-          onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
-          title="세부내용"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-3)', fontSize: 10, padding: '0 3px', flexShrink: 0 }}
+      <div className={'tt-task-row' + (task.done ? ' done' : '') + (isOverdue ? ' overdue' : '')} style={{ cursor: 'default' }}>
+        <span
+          className="tt-check"
+          style={{ cursor: 'pointer' }}
+          onClick={() => onToggle(task.id, !task.done)}
         >
-          {expanded ? '▼' : '►'}
-        </button>
-        <span className="tt-check">{task.done ? '✓' : ''}</span>
-        <span className="tt-task-title">{task.title}</span>
+          {task.done ? '✓' : ''}
+        </span>
+        <span
+          className="tt-task-title"
+          style={{ cursor: 'pointer' }}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {task.title}
+        </span>
         {isOverdue && <span className="tt-overdue-tag">지연</span>}
         {ticket ? (
           <span
@@ -194,20 +202,25 @@ function TaskRow({ task, onToggle, tickets = [], onLinkTicket, onUpdateDetail })
       </div>
       {expanded && (
         <textarea
+          ref={detailRef}
           className="tt-task-detail"
           value={detail}
-          onChange={(e) => setDetail(e.target.value)}
+          onChange={(e) => {
+            setDetail(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = `${e.target.scrollHeight}px`;
+          }}
           onBlur={saveDetail}
           placeholder="세부 내용 입력…"
           onClick={(e) => e.stopPropagation()}
+          rows={1}
           style={{
             width: '100%', boxSizing: 'border-box', marginTop: 2, marginBottom: 4,
             padding: '6px 10px', fontSize: 12, background: 'var(--surface-2)',
             border: '1px solid var(--border)', borderRadius: 'var(--r-2)',
-            outline: 'none', resize: 'vertical', fontFamily: 'var(--font-sans)',
-            color: 'var(--ink-2)', lineHeight: 1.5, minHeight: 56,
+            outline: 'none', resize: 'none', overflow: 'hidden', fontFamily: 'var(--font-sans)',
+            color: 'var(--ink-2)', lineHeight: 1.5,
           }}
-          rows={2}
         />
       )}
     </div>

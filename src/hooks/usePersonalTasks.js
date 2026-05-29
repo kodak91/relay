@@ -97,6 +97,10 @@ export function usePersonalTasks(uid) {
     }
   };
 
+  const updateTask = async (taskId, fields) => {
+    await updateDoc(doc(db, 'users', uid, 'tasks', taskId), fields);
+  };
+
   const deleteTask = async (taskId) => {
     await deleteDoc(doc(db, 'users', uid, 'tasks', taskId));
   };
@@ -106,5 +110,5 @@ export function usePersonalTasks(uid) {
     await Promise.all(tasks.map((t) => deleteDoc(doc(db, 'users', uid, 'tasks', t.id))));
   };
 
-  return { tasks, todayTasks, overdueTasks, weekStats, addTask, toggleTask, deleteTask, deleteAllTasks };
+  return { tasks, todayTasks, overdueTasks, weekStats, addTask, toggleTask, updateTask, deleteTask, deleteAllTasks };
 }
