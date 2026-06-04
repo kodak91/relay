@@ -18,7 +18,7 @@ export const EXT_COLORS = {
 };
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 
-export default function KBTab({ projectId, members = [], onPostMeeting }) {
+export default function KBTab({ projectId, members = [], onPostMeeting, onSendInvite }) {
   const { user, kbDeepLink, setKbDeepLink, activeLiveMeetingId } = useAppStore();
   const {
     folders, files, loading, syncing,
@@ -164,7 +164,7 @@ export default function KBTab({ projectId, members = [], onPostMeeting }) {
         </div>
         {kbSubTab === 'media' && <KBMediaTab projectId={projectId} />}
         {kbSubTab === 'meeting' && (
-          <KBMeetingTab projectId={projectId} members={members} user={user} onPostMeeting={onPostMeeting} />
+          <KBMeetingTab projectId={projectId} members={members} user={user} onPostMeeting={onPostMeeting} onSendInvite={onSendInvite} />
         )}
       </div>
     );

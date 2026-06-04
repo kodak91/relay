@@ -1041,12 +1041,18 @@ function MeetingInviteMsg({ m, onRsvp }) {
 
 // ─── Meeting alert card (sent automatically when meeting time approaches) ────
 
-function MeetingAlertMsg({ m }) {
+function MeetingAlertMsg({ m, onJoinMeeting }) {
   const { setChatTab, setActiveLiveMeetingId } = useAppStore();
 
   const handleJoin = () => {
-    setChatTab('kb');
-    setActiveLiveMeetingId(m.meetingId);
+    if (onJoinMeeting) {
+      // 채팅에서 직접 회의장 입장
+      onJoinMeeting(m.meetingId);
+    } else {
+      // fallback: KB탭 이동
+      setChatTab('kb');
+      setActiveLiveMeetingId(m.meetingId);
+    }
   };
 
   return (
@@ -1065,9 +1071,11 @@ function MeetingAlertMsg({ m }) {
               {m.agenda.filter(Boolean).map((a, i) => `${i + 1}. ${a}`).join(' · ')}
             </div>
           )}
-          <button className="btn accent sm" style={{ marginTop: 4 }} onClick={handleJoin}>
-            참가하기 →
-          </button>
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <button className="btn accent sm" onClick={handleJoin}>
+              ▶ 회의 시작
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1122,7 +1130,7 @@ export default function Message({ m, isGrouped, isGroupStart, handlers }) {
     case 'announce':      content = <AnnounceMsg {...props} />; break;
     case 'meeting':       content = <MeetingMsg {...props} />; break;
     case 'meeting_invite':content = <MeetingInviteMsg m={m} onRsvp={rsvpMeeting} />; break;
-    case 'meeting_alert': content = <MeetingAlertMsg m={m} />; break;
+    case 'meeting_alert': content = <MeetingAlertMsg m={m} onJoinMeeting={handlers.joinMeetingFromChat} />; break;
     case 'ticket':        content = <TicketMsg m={m} onDelete={deleteMsg} />; break;
     case 'assign':        content = <AssignMsg m={m} onDelete={deleteMsg} />; break;
     case 'image':         content = <ImageMsg m={m} />; break;

@@ -132,19 +132,21 @@ function ArchiveCard({ meeting, onDelete }) {
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────────────────────────
 
-export default function KBMeetingTab({ projectId, members = [], user, onPostMeeting }) {
+export default function KBMeetingTab({ projectId, members = [], user, onPostMeeting, onSendInvite }) {
   const { meetings, deleteMeeting } = useMeetings(projectId);
   const [showSchedule, setShowSchedule] = useState(false);
-  const [activeMeeting, setActiveMeeting] = useState(null);
+  // ID 기반 → meetings onSnapshot에서 항상 최신값 참조 (stale 방지)
+  const [activeMeetingId, setActiveMeetingId] = useState(null);
+  const activeMeeting = activeMeetingId ? meetings.find((m) => m.id === activeMeetingId) ?? null : null;
   const activeLiveMeetingId = useAppStore((s) => s.activeLiveMeetingId);
   const setActiveLiveMeetingId = useAppStore((s) => s.setActiveLiveMeetingId);
 
-  // Auto-open meeting when navigated here from a meeting_alert chat card
+  // Auto-open meeting when navigated here from a meeting_alert chat card (KB경로)
   useEffect(() => {
     if (!activeLiveMeetingId || !meetings.length) return;
     const target = meetings.find((m) => m.id === activeLiveMeetingId);
     if (target) {
-      setActiveMeeting(target);
+      setActiveMeetingId(target.id);
       setActiveLiveMeetingId(null);
     }
   }, [activeLiveMeetingId, meetings]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -176,7 +178,7 @@ export default function KBMeetingTab({ projectId, members = [], user, onPostMeet
               <UpcomingCard
                 key={m.id}
                 meeting={m}
-                onStart={() => setActiveMeeting(m)}
+                onStart={() => setActiveMeetingId(m.id)}
                 onDelete={() => deleteMeeting(m.id)}
               />
             ))
@@ -207,12 +209,13 @@ export default function KBMeetingTab({ projectId, members = [], user, onPostMeet
         members={members}
         projectId={projectId}
         user={user}
+        onPostToChat={onSendInvite}
       />
 
       {activeMeeting && (
         <MeetingLiveModal
           open={!!activeMeeting}
-          onClose={() => setActiveMeeting(null)}
+          onClose={() => setActiveMeetingId(null)}
           meeting={activeMeeting}
           members={members}
           user={user}

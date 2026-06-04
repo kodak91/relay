@@ -11,7 +11,7 @@ import TasksTab from '../tasks/TasksTab';
 import MemberManagementModal from './MemberManagementModal';
 import KBTab from '../kb/KBTab';
 import KBSaveBanner from '../kb/KBSaveBanner';
-import MeetingScheduleModal from './MeetingModal';
+import MeetingScheduleModal, { MeetingLiveModal } from './MeetingModal';
 import { useMeetings } from '../../hooks/useMeetings';
 import NotionTab from '../notion/NotionTab';
 import TicketTab from '../tickets/TicketTab';
@@ -81,14 +81,17 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const [pendingKBSave, setPendingKBSave] = useState(null); // { files, selectedFolderId }
   const [showMeeting, setShowMeeting] = useState(false);
   const [meetingInitialTitle, setMeetingInitialTitle] = useState('');
+  // ID 기반으로 유지 → meetings onSnapshot과 항상 최신 동기화
+  const [liveMeetingId, setLiveMeetingId] = useState(null);
+  const liveMeeting = liveMeetingId ? meetings.find((m) => m.id === liveMeetingId) ?? null : null;
   const [floatingDate, setFloatingDate] = useState('');
   const floatTimerRef = useRef(null);
   const [slackError, setSlackError] = useState('');
   const slackErrTimer = useRef(null);
   const meetingNotifRef = useRef(new Set());
 
-  // Clear KB save banner when switching workspace
-  useEffect(() => { setPendingKBSave(null); }, [activeProject]);
+  // Clear transient state when switching workspace
+  useEffect(() => { setPendingKBSave(null); setLiveMeetingId(null); }, [activeProject]);
 
   // Send a meeting_alert to chat when a scheduled meeting is ≤5 min away
   useEffect(() => {
@@ -549,6 +552,9 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     floatTimerRef.current = setTimeout(() => setFloatingDate(''), 1500);
   }, []);
 
+  // 채팅 alert에서 직접 회의장 입장
+  const joinMeetingFromChat = (meetingId) => { setLiveMeetingId(meetingId); };
+
   const handlers = {
     openThreads, replyValues,
     toggleThread, setReplyValue, sendReply,
@@ -558,6 +564,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     editReply, deleteReply,
     members: activeProjectData?.members || [],
     addTaskFromMessage,
+    joinMeetingFromChat,
   };
 
   if (!activeProject) {
@@ -690,8 +697,26 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         onPostToChat={handleSendMeetingInvite}
       />
 
+      {/* 채팅에서 meeting_alert "시작" 버튼으로 열리는 회의장 */}
+      {liveMeeting && (
+        <MeetingLiveModal
+          open={!!liveMeeting}
+          onClose={() => setLiveMeetingId(null)}
+          meeting={liveMeeting}
+          members={activeProjectData?.members || []}
+          user={user}
+          projectId={activeProject}
+          onPost={handlePostMeeting}
+        />
+      )}
+
       {chatTab === 'kb' ? (
-        <KBTab projectId={activeProject} members={activeProjectData?.members || []} onPostMeeting={handlePostMeeting} />
+        <KBTab
+          projectId={activeProject}
+          members={activeProjectData?.members || []}
+          onPostMeeting={handlePostMeeting}
+          onSendInvite={handleSendMeetingInvite}
+        />
       ) : chatTab === 'notion' ? (
         <NotionTab
           projectId={activeProject}
