@@ -42,7 +42,7 @@ function extractLive(lines) {
 
 // ─── Live phase ──────────────────────────────────────────────────────────────
 
-function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActiveSpeaker, members, agenda, elapsed, tsScrollRef, onAddLine, onEnd, generating }) {
+function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActiveSpeaker, members, agenda, elapsed, tsScrollRef, onAddLine, onEnd, generating, presence }) {
   const extracted = extractLive(transcript);
 
   const handleKeyDown = (e) => {
@@ -65,13 +65,26 @@ function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActi
         <div className="m-section compact">
           <h4>참석자</h4>
           <div className="m-att-list">
-            {members.map((m) => (
-              <div key={m.uid} className={'m-att' + (m.uid === activeSpeaker ? ' speaking' : '')}>
-                <Avatar name={m.name} size={26} />
-                <span className="nm">{m.name}</span>
-                {m.uid === activeSpeaker && <span className="m-active-dot" />}
-              </div>
-            ))}
+            {members.map((m) => {
+              const online = !!(presence && presence[m.uid]);
+              return (
+                <div key={m.uid} className={'m-att' + (m.uid === activeSpeaker ? ' speaking' : '')}>
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
+                    <Avatar name={m.name} size={26} />
+                    {online && (
+                      <span style={{
+                        position: 'absolute', bottom: 0, right: 0,
+                        width: 8, height: 8, borderRadius: '50%',
+                        background: 'oklch(0.55 0.22 145)',
+                        border: '1.5px solid var(--surface)',
+                      }} />
+                    )}
+                  </div>
+                  <span className="nm" style={{ opacity: online ? 1 : 0.5 }}>{m.name}</span>
+                  {m.uid === activeSpeaker && <span className="m-active-dot" />}
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="m-section compact">
@@ -274,39 +287,65 @@ function ReviewPhase({ meetingTitle, participants, transcript, minutes, generati
   );
 }
 
-// ─── Live meeting modal (used from KBMeetingTab) ─────────────────────────────
+// ─── Live meeting modal ───────────────────────────────────────────────────────
+// Transcript is shared via Firestore (meeting.liveTranscript).
+// Presence is tracked per user in meeting.livePresence map.
 
 export function MeetingLiveModal({ open, onClose, meeting, members = [], user, projectId, onPost }) {
-  const { updateMeeting } = useMeetings(projectId);
+  const { updateMeeting, startLiveMeeting, joinLiveMeeting, addLiveLine, removeLivePresence } = useMeetings(projectId);
   const [phase, setPhase] = useState('live');
-  const [transcript, setTranscript] = useState([]);
   const [inputText, setInputText] = useState('');
   const [activeSpeaker, setActiveSpeaker] = useState('');
   const [elapsed, setElapsed] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [minutes, setMinutes] = useState(null);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
   const tsScrollRef = useRef(null);
 
   const participantUids = meeting?.participants?.map((p) => p.uid) || [];
   const participantMembers = members.filter((m) => participantUids.includes(m.uid));
   const allMembers = participantMembers.length > 0 ? participantMembers : members.filter((m) => m.uid);
 
+  // Shared transcript and presence from Firestore
+  const transcript = meeting?.liveTranscript || [];
+  const presence = meeting?.livePresence || {};
+
+  // Join or start meeting on open; remove presence on close/unmount
   useEffect(() => {
-    if (!open) return;
+    if (!open || !meeting?.id || !user?.uid) return;
     setPhase('live');
-    setTranscript([]);
     setInputText('');
     setActiveSpeaker(user?.uid || allMembers[0]?.uid || '');
-    setElapsed(0);
     setGenerating(false);
     setMinutes(null);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+    setShowEndConfirm(false);
 
+    if (meeting.status !== 'live') {
+      startLiveMeeting(meeting.id, user).catch(console.error);
+    } else {
+      joinLiveMeeting(meeting.id, user).catch(console.error);
+    }
+
+    return () => {
+      if (meeting?.id && user?.uid) {
+        removeLivePresence(meeting.id, user.uid).catch(() => {});
+      }
+    };
+  }, [open, meeting?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Elapsed timer based on shared liveStartedAt
   useEffect(() => {
     if (phase !== 'live') return;
-    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    const getStartMs = () => {
+      const sat = meeting?.liveStartedAt;
+      if (!sat) return Date.now();
+      return sat.toDate ? sat.toDate().getTime() : new Date(sat).getTime();
+    };
+    const tick = () => setElapsed(Math.floor((Date.now() - getStartMs()) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [phase]);
+  }, [phase, meeting?.liveStartedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     tsScrollRef.current?.scrollTo({ top: 1e9, behavior: 'smooth' });
@@ -314,15 +353,16 @@ export function MeetingLiveModal({ open, onClose, meeting, members = [], user, p
 
   if (!open) return null;
 
-  const addLine = () => {
+  const addLine = async () => {
     const txt = inputText.trim();
-    if (!txt) return;
+    if (!txt || !meeting?.id) return;
     const speaker = allMembers.find((m) => m.uid === activeSpeaker) || { name: user?.name || '나', uid: user?.uid || 'me' };
-    setTranscript((prev) => [...prev, { uid: speaker.uid, name: speaker.name, text: txt, ts: fmtTime(elapsed) }]);
+    await addLiveLine(meeting.id, { uid: speaker.uid, name: speaker.name, text: txt, ts: fmtTime(elapsed) });
     setInputText('');
   };
 
   const endMeeting = async () => {
+    setShowEndConfirm(false);
     setGenerating(true);
     setPhase('review');
     try {
@@ -400,6 +440,28 @@ ${transcriptText || '(기록된 발화 없음)'}
           <button className="icon-btn" onClick={onClose} title="닫기">✕</button>
         </header>
 
+        {/* End confirmation overlay */}
+        {showEndConfirm && (
+          <div className="meeting-end-overlay">
+            <div className="meeting-end-dialog">
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>회의를 종료하시겠습니까?</div>
+              <p style={{ fontSize: 13, color: 'var(--ink-3)', margin: '0 0 20px' }}>
+                종료하면 모든 참석자의 화면이 닫히고 AI가 회의록을 자동 생성합니다.
+              </p>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button className="btn ghost" onClick={() => setShowEndConfirm(false)}>취소</button>
+                <button
+                  className="btn"
+                  style={{ background: 'var(--rose)', color: '#fff', borderColor: 'var(--rose)' }}
+                  onClick={endMeeting}
+                >
+                  종료하기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {phase === 'live' && (
           <LivePhase
             transcript={transcript}
@@ -410,8 +472,9 @@ ${transcriptText || '(기록된 발화 없음)'}
             elapsed={elapsed}
             tsScrollRef={tsScrollRef}
             onAddLine={addLine}
-            onEnd={endMeeting}
+            onEnd={() => setShowEndConfirm(true)}
             generating={generating}
+            presence={presence}
           />
         )}
         {phase === 'review' && (
@@ -431,7 +494,7 @@ ${transcriptText || '(기록된 발화 없음)'}
   );
 }
 
-// ─── Schedule creation modal (default export, used from Composer /회의) ───────
+// ─── Schedule creation modal ──────────────────────────────────────────────────
 
 export default function MeetingScheduleModal({ open, onClose, members = [], initialTitle = '', projectId, user, onPostToChat }) {
   const { addMeeting } = useMeetings(projectId);

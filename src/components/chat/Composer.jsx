@@ -301,7 +301,12 @@ function KBSuggestions({ pendingFiles = [], text, folders, selectedId, onSelect 
   );
 }
 
-export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, members = [], kbFolders = [], recentMessages = [] }) {
+function extractLeadingTags(text) {
+  const match = text.trimStart().match(/^(#\S+(?:\s+|$))+/);
+  return match ? (match[0].match(/#\S+/g) || []) : [];
+}
+
+export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, members = [], kbFolders = [], recentMessages = [], activeTag = 'all' }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
   const [importance, setImportance] = useState(0);
@@ -596,7 +601,8 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
     }
 
     if (!text.trim()) return;
-    const tags = text.match(/#\S+/g) || [];
+    const tags = extractLeadingTags(text);
+    if (activeTag && activeTag !== 'all' && !tags.includes(activeTag)) tags.push(activeTag);
     const rawForClean = type === 'casual' && text.trimStart().startsWith('$')
       ? text.trimStart().slice(1)
       : text;
@@ -669,7 +675,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
     checkSlashCommand(md);
   };
 
-  const tags = text.match(/#\S+/g) || [];
+  const tags = extractLeadingTags(text);
   const canSend = isMeeting || pendingFiles.length > 0 || (isTicket
     ? ticketTitle.trim()
     : isAssign
@@ -764,6 +770,12 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
         {polishing && (
           <div className="polish-banner">
             <span className="ai-typing"><span /><span /><span /></span> AI가 메시지를 다듬고 있어요…
+          </div>
+        )}
+        {activeTag && activeTag !== 'all' && (
+          <div className="tags-mini" style={{ borderBottom: '1px solid var(--border)', background: 'var(--accent-soft)' }}>
+            <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>태그 자동 입력:</span>
+            <span className="tag on" style={{ fontSize: 11 }}>{activeTag}</span>
           </div>
         )}
         {tags.length > 0 && !isDecision && !isVote && (

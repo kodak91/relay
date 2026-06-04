@@ -19,7 +19,7 @@ export const EXT_COLORS = {
 const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 
 export default function KBTab({ projectId, members = [], onPostMeeting }) {
-  const { user, kbDeepLink, setKbDeepLink } = useAppStore();
+  const { user, kbDeepLink, setKbDeepLink, activeLiveMeetingId } = useAppStore();
   const {
     folders, files, loading, syncing,
     connectDriveRoot, disconnectDrive, syncFromDrive,
@@ -45,6 +45,11 @@ export default function KBTab({ projectId, members = [], onPostMeeting }) {
     }
     setKbDeepLink(null);
   }, [kbDeepLink, files, setKbDeepLink]);
+
+  // Switch to meeting subtab when a meeting_alert "참가하기" is clicked
+  useEffect(() => {
+    if (activeLiveMeetingId) setKbSubTab('meeting');
+  }, [activeLiveMeetingId]);
 
   // DFS-order: each parent is immediately followed by its children
   const sortedFolders = useMemo(() => {

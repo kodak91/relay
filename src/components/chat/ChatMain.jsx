@@ -12,6 +12,7 @@ import MemberManagementModal from './MemberManagementModal';
 import KBTab from '../kb/KBTab';
 import KBSaveBanner from '../kb/KBSaveBanner';
 import MeetingScheduleModal from './MeetingModal';
+import { useMeetings } from '../../hooks/useMeetings';
 import NotionTab from '../notion/NotionTab';
 import TicketTab from '../tickets/TicketTab';
 import { useTickets } from '../../hooks/useTickets';
@@ -46,16 +47,22 @@ function formatDividerLabel(dateStr) {
 export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { activeProject, chatTab, setChatTab, activeTag, user } = useAppStore();
   const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
+  const { meetings, markNotified } = useMeetings(activeProject);
   const { projects, updateProject, approveMember, rejectMember, removeMember, delegateLead } = useProjects(user?.uid);
   const { tickets, createTicket, updateTicket, deleteTicket } = useTickets(activeProject);
   const { folders: kbFolders, saveFromChat: saveToKB } = useKB(activeProject);
   const { addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
+  const didInitScrollRef = useRef(false);
 
-  // column-reverse: scrollTop=0 = visual bottom, no JS scroll needed on mount
   const scrollElRef = useCallback((node) => {
     scrollRef.current = node;
   }, []);
+
+  // Reset scroll flag when switching projects
+  useEffect(() => {
+    didInitScrollRef.current = false;
+  }, [activeProject]);
 
   const [openThreads, setOpenThreads] = useState(new Set());
   const [replyValues, setReplyValues] = useState({});
@@ -78,6 +85,39 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const floatTimerRef = useRef(null);
   const [slackError, setSlackError] = useState('');
   const slackErrTimer = useRef(null);
+  const meetingNotifRef = useRef(new Set());
+
+  // Clear KB save banner when switching workspace
+  useEffect(() => { setPendingKBSave(null); }, [activeProject]);
+
+  // Send a meeting_alert to chat when a scheduled meeting is ≤5 min away
+  useEffect(() => {
+    if (!activeProject || !meetings.length) return;
+    const now = Date.now();
+    meetings.forEach((m) => {
+      if (m.status !== 'scheduled' || m.notified || meetingNotifRef.current.has(m.id)) return;
+      if (!m.scheduledAt) return;
+      const mt = m.scheduledAt.toDate ? m.scheduledAt.toDate().getTime() : new Date(m.scheduledAt).getTime();
+      const diff = mt - now;
+      if (diff >= -60 * 1000 && diff <= 5 * 60 * 1000) {
+        meetingNotifRef.current.add(m.id);
+        markNotified(m.id).catch(() => {});
+        sendMessage(activeProject, {
+          type: 'meeting_alert',
+          text: m.title,
+          meetingId: m.id,
+          agenda: m.agenda || [],
+          participants: m.participants || [],
+          senderName: 'Relay',
+          senderUid: 'system',
+          senderRole: '',
+          ts: nowHM(),
+          thread: [],
+          reactions: [],
+        }).catch(() => {});
+      }
+    });
+  }, [meetings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const showSlackError = (msg) => {
     setSlackError(msg);
@@ -87,11 +127,17 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
   const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
 
-  // With column-reverse, scrollTop=0 is visual bottom.
-  // If user is already near bottom, keep them there as new messages arrive.
+  // Scroll to bottom on initial load; on new messages, scroll only if near bottom.
   useEffect(() => {
     if (!scrollRef.current || loading) return;
-    if (scrollRef.current.scrollTop < 80) scrollRef.current.scrollTop = 0;
+    const el = scrollRef.current;
+    if (!didInitScrollRef.current) {
+      el.scrollTop = el.scrollHeight;
+      didInitScrollRef.current = true;
+      return;
+    }
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distFromBottom < 150) el.scrollTop = el.scrollHeight;
   }, [messages.length, loading]);
 
   const filteredMessages = useMemo(() => {
@@ -136,8 +182,24 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const sendReply = async (mid) => {
     const v = (replyValues[mid] || '').trim();
     if (!v) return;
-    await addReply(activeProject, mid, { senderName: user?.name, text: v, ts: nowHM() });
+    await addReply(activeProject, mid, { senderName: user?.name, senderUid: user?.uid, text: v, ts: nowHM() });
     setReplyValues((prev) => ({ ...prev, [mid]: '' }));
+  };
+
+  const editReply = async (mid, replyIdx, newText) => {
+    const m = messages.find((msg) => msg.id === mid);
+    if (!m || !newText.trim()) return;
+    const newThread = (m.thread || []).map((r, i) =>
+      i === replyIdx ? { ...r, text: newText.trim(), editedAt: new Date().toISOString() } : r
+    );
+    await updateMessageField(activeProject, mid, { thread: newThread });
+  };
+
+  const deleteReply = async (mid, replyIdx) => {
+    const m = messages.find((msg) => msg.id === mid);
+    if (!m) return;
+    const newThread = (m.thread || []).filter((_, i) => i !== replyIdx);
+    await updateMessageField(activeProject, mid, { thread: newThread });
   };
 
   const choose = async (mid, letter) => {
@@ -451,8 +513,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     const container = scrollRef.current;
     if (!container) return;
     const cTop = container.getBoundingClientRect().top;
-    // In column-reverse layout, find the divider whose rect.top is closest to
-    // (but not below) the container's top — that's the current visible section.
+    // Normal flow: find the divider whose top has scrolled nearest to (but not below) the container top.
     let label = '';
     let maxTop = -Infinity;
     container.querySelectorAll('[data-date]').forEach((div) => {
@@ -473,6 +534,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     choose, vote, actApproval, confirmMsg, nudgeMsg,
     saveMeetingSummary, rsvpMeeting,
     editMsg, editMsgFields, deleteMsg, addReaction,
+    editReply, deleteReply,
     members: activeProjectData?.members || [],
     addTaskFromMessage,
   };
@@ -673,7 +735,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
                       </div>
                     );
                   });
-                  return items.reverse();
+                  return items;
                 })()}
               </>
             )}
@@ -696,6 +758,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
             members={activeProjectData?.members || []}
             kbFolders={kbFolders}
             recentMessages={messages.slice(-8)}
+            activeTag={activeTag}
           />
         </>
       )}

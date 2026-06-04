@@ -12,7 +12,7 @@ const useAppStore = create((set, get) => ({
   setRole: (role) => set({ role }),
 
   activeProject: null,
-  setActiveProject: (id) => set({ activeProject: id, activeChannel: 'chat', chatTab: 'chat' }),
+  setActiveProject: (id) => set({ activeProject: id, activeChannel: 'chat', chatTab: 'chat', activeTag: 'all' }),
 
   activeChannel: 'chat', // chat | ai | pipeline
   setActiveChannel: (ch) => set({ activeChannel: ch }),
@@ -33,6 +33,10 @@ const useAppStore = create((set, get) => ({
   // KB deep-link navigation
   kbDeepLink: null,
   setKbDeepLink: (link) => set({ kbDeepLink: link }),
+
+  // Live meeting navigation (from meeting alert → KB > 회의 tab)
+  activeLiveMeetingId: null,
+  setActiveLiveMeetingId: (id) => set({ activeLiveMeetingId: id }),
 
   // Theme
   theme: 'light',

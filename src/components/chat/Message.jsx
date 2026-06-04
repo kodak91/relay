@@ -5,7 +5,7 @@ import useAppStore from '../../store/appStore';
 import { claudeComplete } from '../../lib/claude';
 
 const QUICK_EMOJIS = ['✅', '⭕', '❌', '👀', '😊', '😢'];
-const MsgContext = createContext({ uid: null, onReact: null });
+const MsgContext = createContext({ uid: null, onReact: null, onEditReply: null, onDeleteReply: null });
 
 // 58: all markdown links open in new tab; 60: relay-kb:// links navigate to KB tab
 const MD_LINK = {
@@ -170,21 +170,58 @@ function ThreadToggle({ count, hasNew, open, onClick }) {
 }
 
 function Thread({ items, replyValue, onReplyChange, onSend, senderName }) {
+  const { uid, onEditReply, onDeleteReply } = useContext(MsgContext);
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editText, setEditText] = useState('');
+
   return (
     <div className="thread">
-      {items.map((t, i) => (
-        <div className="msg" key={i}>
-          <Avatar name={t.senderName || t.from} size={28} />
-          <div>
-            <div className="msg-head">
-              <span className="name" style={{ fontSize: 13 }}>{t.senderName || t.from}</span>
-              <span className="ts">{t.ts}</span>
-              {t.isNew && <span className="thread-new">NEW</span>}
+      {items.map((t, i) => {
+        const isMine = uid && t.senderUid ? t.senderUid === uid : uid && (t.senderName === senderName);
+        const isEditing = editingIndex === i;
+        return (
+          <div className="thread-item" key={i}>
+            <Avatar name={t.senderName || t.from} size={28} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="msg-head" style={{ position: 'relative' }}>
+                <span className="name" style={{ fontSize: 13 }}>{t.senderName || t.from}</span>
+                <span className="ts">{t.ts}</span>
+                {t.isNew && <span className="thread-new">NEW</span>}
+                {isMine && !isEditing && (
+                  <div className="thread-item-actions">
+                    <button onClick={() => { setEditText(t.text); setEditingIndex(i); }} title="편집">✏️</button>
+                    <button className="danger" onClick={() => onDeleteReply?.(i)} title="삭제">🗑️</button>
+                  </div>
+                )}
+              </div>
+              {isEditing ? (
+                <div className="edit-mode" style={{ marginTop: 4 }}>
+                  <textarea
+                    className="edit-ta"
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (editText.trim()) { onEditReply?.(i, editText.trim()); setEditingIndex(null); } }
+                      if (e.key === 'Escape') setEditingIndex(null);
+                    }}
+                    rows={Math.max(2, editText.split('\n').length)}
+                    autoFocus
+                  />
+                  <div className="edit-btns">
+                    <button className="btn sm ghost" onClick={() => setEditingIndex(null)}>취소</button>
+                    <button className="btn sm accent" onClick={() => { if (editText.trim()) { onEditReply?.(i, editText.trim()); setEditingIndex(null); } }}>저장</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="msg-body" style={{ fontSize: 13 }}>
+                  {t.text}
+                  {t.editedAt && <span className="edited-badge">(편집됨)</span>}
+                </div>
+              )}
             </div>
-            <div className="msg-body" style={{ fontSize: 13 }}>{t.text}</div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       <div className="thread-reply">
         <Avatar name={senderName} size={28} />
         <input
@@ -1002,11 +1039,46 @@ function MeetingInviteMsg({ m, onRsvp }) {
   );
 }
 
+// ─── Meeting alert card (sent automatically when meeting time approaches) ────
+
+function MeetingAlertMsg({ m }) {
+  const { setChatTab, setActiveLiveMeetingId } = useAppStore();
+
+  const handleJoin = () => {
+    setChatTab('kb');
+    setActiveLiveMeetingId(m.meetingId);
+  };
+
+  return (
+    <div className="msg">
+      <Avatar name="Relay" />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="msg-head">
+          <span className="name" style={{ color: 'var(--accent)' }}>Relay</span>
+          <span className="ts">{m.ts}</span>
+        </div>
+        <div className="meeting-alert-card">
+          <div className="ma-badge">⏰ 회의 알림</div>
+          <div className="ma-title">{m.text}</div>
+          {(m.agenda || []).filter(Boolean).length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--ink-3)', margin: '4px 0 8px' }}>
+              {m.agenda.filter(Boolean).map((a, i) => `${i + 1}. ${a}`).join(' · ')}
+            </div>
+          )}
+          <button className="btn accent sm" style={{ marginTop: 4 }} onClick={handleJoin}>
+            참가하기 →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Message dispatcher ─────────────────────────────────────────────
 
 export default function Message({ m, isGrouped, isGroupStart, handlers }) {
   const { user } = useAppStore();
-  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, editMsgFields, deleteMsg, rsvpMeeting, addReaction, members, addTaskFromMessage } = handlers;
+  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, editMsgFields, deleteMsg, rsvpMeeting, addReaction, members, addTaskFromMessage, editReply, deleteReply } = handlers;
   const threadOpen = openThreads.has(m.id);
   const replyValue = replyValues[m.id] || '';
 
@@ -1034,7 +1106,12 @@ export default function Message({ m, isGrouped, isGroupStart, handlers }) {
     onAddTask: addTaskFromMessage,
   };
 
-  const ctxValue = { uid: user?.uid, onReact: (emoji) => addReaction?.(m.id, emoji) };
+  const ctxValue = {
+    uid: user?.uid,
+    onReact: (emoji) => addReaction?.(m.id, emoji),
+    onEditReply: (idx, text) => editReply?.(m.id, idx, text),
+    onDeleteReply: (idx) => deleteReply?.(m.id, idx),
+  };
 
   let content;
   switch (m.type) {
@@ -1045,6 +1122,7 @@ export default function Message({ m, isGrouped, isGroupStart, handlers }) {
     case 'announce':      content = <AnnounceMsg {...props} />; break;
     case 'meeting':       content = <MeetingMsg {...props} />; break;
     case 'meeting_invite':content = <MeetingInviteMsg m={m} onRsvp={rsvpMeeting} />; break;
+    case 'meeting_alert': content = <MeetingAlertMsg m={m} />; break;
     case 'ticket':        content = <TicketMsg m={m} onDelete={deleteMsg} />; break;
     case 'assign':        content = <AssignMsg m={m} onDelete={deleteMsg} />; break;
     case 'image':         content = <ImageMsg m={m} />; break;

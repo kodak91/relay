@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMeetings } from '../../hooks/useMeetings';
 import MeetingScheduleModal, { MeetingLiveModal, Avatar } from '../chat/MeetingModal';
+import useAppStore from '../../store/appStore';
 
 function fmtScheduledAt(ts) {
   if (!ts) return '일시 미정';
@@ -135,6 +136,18 @@ export default function KBMeetingTab({ projectId, members = [], user, onPostMeet
   const { meetings, deleteMeeting } = useMeetings(projectId);
   const [showSchedule, setShowSchedule] = useState(false);
   const [activeMeeting, setActiveMeeting] = useState(null);
+  const activeLiveMeetingId = useAppStore((s) => s.activeLiveMeetingId);
+  const setActiveLiveMeetingId = useAppStore((s) => s.setActiveLiveMeetingId);
+
+  // Auto-open meeting when navigated here from a meeting_alert chat card
+  useEffect(() => {
+    if (!activeLiveMeetingId || !meetings.length) return;
+    const target = meetings.find((m) => m.id === activeLiveMeetingId);
+    if (target) {
+      setActiveMeeting(target);
+      setActiveLiveMeetingId(null);
+    }
+  }, [activeLiveMeetingId, meetings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const upcoming = meetings.filter((m) => m.status === 'scheduled' || m.status === 'live');
   const done = meetings.filter((m) => m.status === 'done');

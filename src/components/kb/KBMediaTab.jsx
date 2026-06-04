@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useMessages } from '../../hooks/useMessages';
 import useAppStore from '../../store/appStore';
+import { useKB } from '../../hooks/useKB';
 
 const URL_REGEX = /https?:\/\/[^\s<>")\]]+/g;
 const KB_REGEX = /relay-kb:\/\/[^\s)<>"]+/g;
@@ -27,18 +28,59 @@ const FILTER_TABS = [
 ];
 
 export default function KBMediaTab({ projectId }) {
-  const { messages } = useMessages(projectId);
-  const { setKbDeepLink, setChatTab } = useAppStore();
+  const { messages, deleteMessage } = useMessages(projectId);
+  const { setKbDeepLink, setChatTab, user } = useAppStore();
+  const { folders, saveFromChat } = useKB(projectId);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [moveTarget, setMoveTarget] = useState(null); // item being moved
+  const [deleteTarget, setDeleteTarget] = useState(null); // item being deleted
+  const movePopRef = useRef(null);
+
+  useEffect(() => {
+    if (!moveTarget) return;
+    const handler = (e) => {
+      if (movePopRef.current && !movePopRef.current.contains(e.target)) setMoveTarget(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [moveTarget]);
+
+  const handleSaveToKB = async (item, folderId) => {
+    setMoveTarget(null);
+    try {
+      await saveFromChat({
+        name: item.name,
+        ext: item.name.split('.').pop().toLowerCase(),
+        fileUrl: item.url,
+        size: item.size || '',
+        blob: null,
+        folderId,
+        uploader: user?.name || '',
+        uploaderUid: user?.uid || '',
+        token: null,
+      });
+    } catch (e) {
+      console.warn('KB save:', e.message);
+    }
+  };
+
+  const handleDelete = async (item) => {
+    setDeleteTarget(null);
+    try {
+      await deleteMessage(projectId, item.msgId);
+    } catch (e) {
+      console.warn('Delete message:', e.message);
+    }
+  };
 
   const mediaItems = useMemo(() => {
     const items = [];
     for (const m of messages) {
       if (m.type === 'image') {
-        items.push({ kind: 'image', url: m.fileUrl, name: m.fileName || '이미지', sender: m.senderName, ts: m.ts, id: m.id + '_img' });
+        items.push({ kind: 'image', url: m.fileUrl, name: m.fileName || '이미지', sender: m.senderName, ts: m.ts, id: m.id + '_img', msgId: m.id });
       } else if (m.type === 'file') {
-        items.push({ kind: 'file', url: m.fileUrl, name: m.fileName || '파일', size: m.fileSize, fileType: m.fileType, sender: m.senderName, ts: m.ts, id: m.id + '_file' });
+        items.push({ kind: 'file', url: m.fileUrl, name: m.fileName || '파일', size: m.fileSize, fileType: m.fileType, sender: m.senderName, ts: m.ts, id: m.id + '_file', msgId: m.id });
       } else if (m.type === 'text' || m.type === 'casual' || m.type === 'update' || m.type === 'announce') {
         const links = extractLinks(m.text || '');
         for (const lk of links) {
@@ -120,10 +162,36 @@ export default function KBMediaTab({ projectId }) {
             {filter === 'all' && <div className="kb-media-sh">🖼 이미지</div>}
             <div className="kb-media-img-grid">
               {images.map((item) => (
-                <a key={item.id} href={item.url} target="_blank" rel="noreferrer" className="kb-media-img-card">
-                  <img src={item.url} alt={item.name} />
-                  <div className="kb-media-img-meta">{item.sender} · {item.ts}</div>
-                </a>
+                <div key={item.id} className="kb-media-img-card" style={{ position: 'relative' }}>
+                  <a href={item.url} target="_blank" rel="noreferrer" style={{ display: 'block' }}>
+                    <img src={item.url} alt={item.name} />
+                    <div className="kb-media-img-meta">{item.sender} · {item.ts}</div>
+                  </a>
+                  <div className="kb-media-item-acts">
+                    {folders.length > 0 && (
+                      <button title="저장소로 이동" onClick={() => setMoveTarget(item)}>💾</button>
+                    )}
+                    <button title="삭제" onClick={() => setDeleteTarget(item)}>🗑</button>
+                  </div>
+                  {moveTarget?.id === item.id && (
+                    <div className="kb-media-move-pop" ref={movePopRef}>
+                      <div className="kb-media-move-hd">저장소 폴더 선택</div>
+                      {folders.map((f) => (
+                        <button key={f.id} onClick={() => handleSaveToKB(item, f.id)}>
+                          {f.isRoot ? '🗂' : '📁'} {f.name}
+                        </button>
+                      ))}
+                      <button className="cancel" onClick={() => setMoveTarget(null)}>취소</button>
+                    </div>
+                  )}
+                  {deleteTarget?.id === item.id && (
+                    <div className="kb-media-move-pop" ref={null}>
+                      <div className="kb-media-move-hd">메시지에서 삭제할까요?</div>
+                      <button style={{ color: 'var(--rose)' }} onClick={() => handleDelete(item)}>삭제</button>
+                      <button className="cancel" onClick={() => setDeleteTarget(null)}>취소</button>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>
@@ -137,14 +205,40 @@ export default function KBMediaTab({ projectId }) {
               {files.map((item) => {
                 const ext = item.name.split('.').pop().toUpperCase();
                 return (
-                  <a key={item.id} href={item.url} target="_blank" rel="noreferrer" className="kb-media-file-row">
-                    <div className="kb-media-file-ext">{ext}</div>
-                    <div className="kb-media-file-info">
-                      <div className="kb-media-file-name">{item.name}</div>
-                      <div className="kb-media-file-meta">{item.size} · {item.sender} · {item.ts}</div>
+                  <div key={item.id} className="kb-media-file-row" style={{ position: 'relative' }}>
+                    <a href={item.url} target="_blank" rel="noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, textDecoration: 'none', color: 'inherit', minWidth: 0 }}>
+                      <div className="kb-media-file-ext">{ext}</div>
+                      <div className="kb-media-file-info">
+                        <div className="kb-media-file-name">{item.name}</div>
+                        <div className="kb-media-file-meta">{item.size} · {item.sender} · {item.ts}</div>
+                      </div>
+                      <span className="kb-media-file-dl">↗</span>
+                    </a>
+                    <div className="kb-media-item-acts">
+                      {folders.length > 0 && (
+                        <button title="저장소로 이동" onClick={() => setMoveTarget(item)}>💾</button>
+                      )}
+                      <button title="삭제" onClick={() => setDeleteTarget(item)}>🗑</button>
                     </div>
-                    <span className="kb-media-file-dl">↗</span>
-                  </a>
+                    {moveTarget?.id === item.id && (
+                      <div className="kb-media-move-pop" ref={movePopRef}>
+                        <div className="kb-media-move-hd">저장소 폴더 선택</div>
+                        {folders.map((f) => (
+                          <button key={f.id} onClick={() => handleSaveToKB(item, f.id)}>
+                            {f.isRoot ? '🗂' : '📁'} {f.name}
+                          </button>
+                        ))}
+                        <button className="cancel" onClick={() => setMoveTarget(null)}>취소</button>
+                      </div>
+                    )}
+                    {deleteTarget?.id === item.id && (
+                      <div className="kb-media-move-pop">
+                        <div className="kb-media-move-hd">메시지에서 삭제할까요?</div>
+                        <button style={{ color: 'var(--rose)' }} onClick={() => handleDelete(item)}>삭제</button>
+                        <button className="cancel" onClick={() => setDeleteTarget(null)}>취소</button>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
