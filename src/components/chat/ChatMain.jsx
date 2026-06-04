@@ -552,8 +552,24 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     floatTimerRef.current = setTimeout(() => setFloatingDate(''), 1500);
   }, []);
 
-  // 채팅 alert에서 직접 회의장 입장
-  const joinMeetingFromChat = (meetingId) => { setLiveMeetingId(meetingId); };
+  // 채팅 alert에서 직접 회의장 입장 (종료된 회의는 KB탭으로 이동)
+  const joinMeetingFromChat = (meetingId) => {
+    const m = meetings.find((mtg) => mtg.id === meetingId);
+    if (!m || m.status === 'done') {
+      setChatTab('kb');
+      return;
+    }
+    setLiveMeetingId(meetingId);
+  };
+
+  // 회의가 외부에서 종료되면 모달 닫고 KB탭으로 이동
+  useEffect(() => {
+    if (!liveMeetingId) return;
+    if (liveMeeting?.status === 'done') {
+      setLiveMeetingId(null);
+      setChatTab('kb');
+    }
+  }, [liveMeeting?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlers = {
     openThreads, replyValues,

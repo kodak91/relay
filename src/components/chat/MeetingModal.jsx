@@ -292,7 +292,8 @@ function ReviewPhase({ meetingTitle, participants, transcript, minutes, generati
 // Presence is tracked per user in meeting.livePresence map.
 
 export function MeetingLiveModal({ open, onClose, meeting, members = [], user, projectId, onPost }) {
-  const { updateMeeting, startLiveMeeting, joinLiveMeeting, addLiveLine, removeLivePresence } = useMeetings(projectId);
+  // 이 모달 자체의 Firestore 구독으로 transcript/presence 직접 수신 (stale prop 방지)
+  const { meetings: localMeetings, updateMeeting, startLiveMeeting, joinLiveMeeting, addLiveLine, removeLivePresence } = useMeetings(projectId);
   const [phase, setPhase] = useState('live');
   const [inputText, setInputText] = useState('');
   const [activeSpeaker, setActiveSpeaker] = useState('');
@@ -302,13 +303,15 @@ export function MeetingLiveModal({ open, onClose, meeting, members = [], user, p
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const tsScrollRef = useRef(null);
 
+  // 로컬 구독에서 항상 최신 meeting 데이터 사용
+  const liveMeetingData = meeting?.id ? localMeetings.find((m) => m.id === meeting.id) : null;
+  const transcript = liveMeetingData?.liveTranscript || meeting?.liveTranscript || [];
+  const presence = liveMeetingData?.livePresence || meeting?.livePresence || {};
+  const currentStatus = liveMeetingData?.status || meeting?.status;
+
   const participantUids = meeting?.participants?.map((p) => p.uid) || [];
   const participantMembers = members.filter((m) => participantUids.includes(m.uid));
   const allMembers = participantMembers.length > 0 ? participantMembers : members.filter((m) => m.uid);
-
-  // Shared transcript and presence from Firestore
-  const transcript = meeting?.liveTranscript || [];
-  const presence = meeting?.livePresence || {};
 
   // Join or start meeting on open; remove presence on close/unmount
   useEffect(() => {
@@ -332,6 +335,17 @@ export function MeetingLiveModal({ open, onClose, meeting, members = [], user, p
       }
     };
   }, [open, meeting?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 다른 사람이 회의를 종료한 경우 → 기존 minutes로 review 페이즈 전환
+  useEffect(() => {
+    if (!open || phase !== 'live' || currentStatus !== 'done') return;
+    const existingMinutes = liveMeetingData?.minutes || meeting?.minutes;
+    if (existingMinutes) {
+      setMinutes(existingMinutes);
+      setElapsed(liveMeetingData?.duration || meeting?.duration || elapsed);
+      setPhase('review');
+    }
+  }, [currentStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Elapsed timer based on shared liveStartedAt
   useEffect(() => {
@@ -362,6 +376,12 @@ export function MeetingLiveModal({ open, onClose, meeting, members = [], user, p
   };
 
   const endMeeting = async () => {
+    // 이미 다른 사람이 종료한 경우 덮어쓰기 방지
+    if (currentStatus === 'done') {
+      const existingMinutes = liveMeetingData?.minutes || meeting?.minutes;
+      if (existingMinutes) { setMinutes(existingMinutes); setPhase('review'); }
+      return;
+    }
     setShowEndConfirm(false);
     setGenerating(true);
     setPhase('review');

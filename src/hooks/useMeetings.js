@@ -30,13 +30,13 @@ export function useMeetings(projectId) {
   const deleteMeeting = (meetingId) =>
     deleteDoc(doc(db, 'projects', projectId, 'meetings', meetingId));
 
-  // Start live session — resets transcript, sets liveStartedAt, adds first presence entry
+  // Start live session — resets transcript & presence for fresh start
   const startLiveMeeting = (meetingId, user) =>
     updateDoc(doc(db, 'projects', projectId, 'meetings', meetingId), {
       status: 'live',
       liveTranscript: [],
+      livePresence: { [user.uid]: { name: user.name, joinedAt: new Date().toISOString() } },
       liveStartedAt: serverTimestamp(),
-      [`livePresence.${user.uid}`]: { name: user.name, joinedAt: new Date().toISOString() },
     });
 
   // Join an already-live session — only adds presence
