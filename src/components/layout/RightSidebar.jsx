@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import useAppStore from '../../store/appStore';
 import { useProjects } from '../../hooks/useProjects';
@@ -42,13 +42,22 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
     ...pendingDecisions.map((m) => ({ ...m, tag: '결정', kind: 'decision' })),
   ];
 
-  // Catchup: only show messages relevant to the current user
+  // Catchup: show (1) items needing MY action, (2) my requests that have been acted on
   const catchupMessages = useMemo(() => messages.filter((m) => {
+    const isDecider = m.targetUid === user?.uid || (!m.targetUid && user?.role === 'lead');
+    const isAuthor = m.senderUid === user?.uid;
+
     if (m.type === 'approval') {
-      return m.targetUid === user?.uid || (!m.targetUid && user?.role === 'lead');
+      if (isDecider && !isAuthor) return !m.status || m.status === 'pending';
+      if (isDecider && isAuthor) return !m.status || m.status === 'pending';
+      if (isAuthor) return m.status === 'approved' || m.status === 'done' || m.status === 'held';
+      return false;
     }
     if (m.type === 'decision') {
-      return m.targetUid === user?.uid || (!m.targetUid && user?.role === 'lead');
+      if (isDecider && !isAuthor) return !m.chosen;
+      if (isDecider && isAuthor) return !m.chosen;
+      if (isAuthor) return !!m.chosen;
+      return false;
     }
     if (m.type === 'vote') {
       const hasVoted = (m.options || []).some((o) =>
@@ -61,6 +70,38 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
 
   const myTasks = tasks.filter((t) => !t.done);
   const isLead = user?.role === 'lead';
+
+  // Held approval auto-reactivation: when heldUntil date passes, revert to pending
+  const reactivatedRef = useRef(new Set());
+  useEffect(() => {
+    if (!heldApprovals.length) return;
+    const today = new Date().toISOString().slice(0, 10);
+    heldApprovals.forEach(async (m) => {
+      if (!m.heldUntil || m.heldUntil > today) return;
+      if (reactivatedRef.current.has(m.id)) return;
+      reactivatedRef.current.add(m.id);
+      try {
+        await updateDoc(doc(db, 'projects', m.projectId, 'messages', m.id), {
+          status: 'pending', heldUntil: null,
+        });
+        const notify = async (uid, title) => {
+          if (!uid) return;
+          await addDoc(collection(db, 'notifications', uid, 'items'), {
+            type: 'approval_reactivated', title,
+            body: m.text?.slice(0, 60) || '',
+            fromName: 'Relay', read: false, createdAt: serverTimestamp(),
+          }).catch(() => {});
+        };
+        await notify(m.targetUid, '보류된 컨펌이 다시 승인 대기 중입니다');
+        if (m.senderUid && m.senderUid !== m.targetUid) {
+          await notify(m.senderUid, '보류된 컨펌이 다시 처리 대기 중입니다');
+        }
+      } catch (e) {
+        reactivatedRef.current.delete(m.id);
+        console.warn('Hold reactivate:', e.message);
+      }
+    });
+  }, [heldApprovals]);
 
   // Dismissed state lifted here so badge reflects visible count
   const confirmStorageKey = `confirm_dismissed_${user?.uid || 'anon'}`;
@@ -249,18 +290,31 @@ function CatchupSection({ messages, onJump, uid, notifPerm, onRequestNotif }) {
           {visible.length === 0 && (
             <p style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center', padding: '10px 0' }}>모두 확인했습니다 ✓</p>
           )}
-          {visible.map((m) => (
-            <div key={m.id} className="catchup-item">
-              <label className="catchup-check">
-                <input type="checkbox" onChange={() => onDismiss(m.id)} />
-              </label>
-              <div className="catchup-body" onClick={() => onJump && onJump(m.id)}>
-                <span className="catchup-tag">{TYPE_LABELS[m.type] || m.type}</span>
-                {m.projectName && <span style={{ fontSize: 10, color: 'var(--ink-mute)' }}>{m.projectName}</span>}
-                <span className="catchup-text">{m.title || m.text?.slice(0, 36) || '(내용 없음)'}</span>
+          {visible.map((m) => {
+            const isDecider = m.targetUid === uid || (!m.targetUid);
+            const isResolved =
+              (m.type === 'approval' && (m.status === 'approved' || m.status === 'done' || m.status === 'held')) ||
+              (m.type === 'decision' && !!m.chosen);
+            const tagLabel = isResolved
+              ? (m.type === 'approval'
+                  ? (m.status === 'approved' ? '컨펌 완료' : m.status === 'done' ? '반려됨' : '보류됨')
+                  : `${m.chosen}안 결정`)
+              : (TYPE_LABELS[m.type] || m.type);
+            return (
+              <div key={m.id} className="catchup-item">
+                <label className="catchup-check">
+                  <input type="checkbox" onChange={() => dismiss(m.id)} />
+                </label>
+                <div className="catchup-body" onClick={() => onJump && onJump(m.id)}>
+                  <span className="catchup-tag" style={isResolved ? { background: 'var(--emerald-bg)', color: 'var(--emerald)', borderColor: 'var(--emerald-line)' } : {}}>
+                    {tagLabel}
+                  </span>
+                  {m.projectName && <span style={{ fontSize: 10, color: 'var(--ink-mute)' }}>{m.projectName}</span>}
+                  <span className="catchup-text">{m.title || m.text?.slice(0, 36) || '(내용 없음)'}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

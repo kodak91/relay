@@ -202,8 +202,20 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     await updateMessageField(activeProject, mid, { thread: newThread });
   };
 
+  const sendNotif = async (uid, title, body) => {
+    if (!uid) return;
+    await addDoc(collection(db, 'notifications', uid, 'items'), {
+      type: 'action_result', title, body: body?.slice(0, 80) || '',
+      fromName: user?.name || '', read: false, createdAt: serverTimestamp(),
+    }).catch(() => {});
+  };
+
   const choose = async (mid, letter) => {
     await updateMessageField(activeProject, mid, { chosen: letter });
+    const m = messages.find((msg) => msg.id === mid);
+    if (m?.senderUid && m.senderUid !== user?.uid) {
+      await sendNotif(m.senderUid, `결정 요청이 처리되었습니다 — ${letter}안`, m.title || m.text);
+    }
   };
 
   const vote = async (mid, oid) => {
@@ -221,16 +233,25 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   };
 
   const actApproval = async (mid, action, heldUntil) => {
+    const m = messages.find((msg) => msg.id === mid);
     if (action === 'approve') {
       await updateMessageField(activeProject, mid, { status: 'approved' });
-      const m = messages.find((msg) => msg.id === mid);
       if (m) {
         await addTask(activeProject, { title: (m.text?.slice(0, 40) || '승인 건') + ' — 후속 처리', fromLead: true, done: true, from: 'approval:' + mid });
+        if (m.senderUid && m.senderUid !== user?.uid) {
+          await sendNotif(m.senderUid, '컨펌이 승인되었습니다 ✓', m.text);
+        }
       }
     } else if (action === 'complete') {
       await updateMessageField(activeProject, mid, { status: 'done' });
+      if (m?.senderUid && m.senderUid !== user?.uid) {
+        await sendNotif(m.senderUid, '컨펌이 반려되었습니다', m.text);
+      }
     } else if (action === 'hold') {
       await updateMessageField(activeProject, mid, { status: 'held', heldUntil: heldUntil || null });
+      if (m?.senderUid && m.senderUid !== user?.uid) {
+        await sendNotif(m.senderUid, '컨펌이 보류되었습니다 ⏸', heldUntil ? `${heldUntil}까지 · ${m.text}` : m.text);
+      }
     }
   };
 
