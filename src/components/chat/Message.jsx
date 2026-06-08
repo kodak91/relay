@@ -515,10 +515,19 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
   );
 }
 
-function ImageMsg({ m }) {
+function ImageMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onEdit, onDelete, senderName, members, onAddTask }) {
+  const { user } = useAppStore();
+  const isMine = user?.uid && m.senderUid === user.uid;
   const [expanded, setExpanded] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState('');
+
+  const startEdit = () => { setEditText(m.text || ''); setEditMode(true); };
+  const saveEdit = () => { onEdit?.(m.id, editText.trim()); setEditMode(false); };
+
   return (
     <div className="msg">
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={isMine ? startEdit : undefined} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -526,7 +535,30 @@ function ImageMsg({ m }) {
           <span className="role">{m.senderRole}</span>
           <span className="ts">{m.ts}</span>
         </div>
-        {m.text && <div className="msg-body" style={{ marginBottom: 4 }}><p>{m.text}</p></div>}
+        {editMode ? (
+          <div className="edit-mode" style={{ marginBottom: 4 }}>
+            <textarea
+              className="edit-ta"
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') setEditMode(false); }}
+              rows={Math.max(2, editText.split('\n').length)}
+              placeholder="설명(캡션)을 입력하세요…"
+              autoFocus
+            />
+            <div className="edit-btns">
+              <button className="btn sm ghost" onClick={() => setEditMode(false)}>취소</button>
+              <button className="btn sm accent" onClick={saveEdit}>저장</button>
+            </div>
+          </div>
+        ) : (
+          m.text && (
+            <div className="msg-body" style={{ marginBottom: 4 }}>
+              <p>{m.text}</p>
+              {m.editedAt && <span className="edited-badge">(편집됨)</span>}
+            </div>
+          )
+        )}
         <div className="image-preview" onClick={() => setExpanded(true)}>
           <img src={m.fileUrl} alt={m.fileName} loading="lazy" />
           <div className="image-name">{m.fileName}</div>
@@ -537,6 +569,8 @@ function ImageMsg({ m }) {
           </div>
         )}
         <Reactions list={m.reactions} />
+        <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
+        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} />}
       </div>
     </div>
   );
@@ -827,13 +861,22 @@ function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, 
   );
 }
 
-function FileMsg({ m }) {
+function FileMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onEdit, onDelete, senderName, members, onAddTask }) {
+  const { user } = useAppStore();
+  const isMine = user?.uid && m.senderUid === user.uid;
   const extMap = { pdf: '📄', ai: '🎨', png: '🖼️', jpg: '🖼️', docx: '📝', xlsx: '📊', txt: '📄', md: '📄' };
   const name = m.fileName || m.file?.name || '파일';
   const size = m.fileSize || m.file?.size || '';
   const ext = name.split('.').pop().toLowerCase();
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState('');
+
+  const startEdit = () => { setEditText(m.text || ''); setEditMode(true); };
+  const saveEdit = () => { onEdit?.(m.id, editText.trim()); setEditMode(false); };
+
   return (
     <div className="msg">
+      <MsgActions m={m} onReply={() => onToggleThread(m.id)} onEdit={isMine ? startEdit : undefined} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
       <Avatar name={m.senderName} />
       <div style={{ flex: 1 }}>
         <div className="msg-head">
@@ -841,7 +884,30 @@ function FileMsg({ m }) {
           <span className="role">{m.senderRole}</span>
           <span className="ts">{m.ts}</span>
         </div>
-        {m.text && <div className="msg-body"><p>{m.text}</p></div>}
+        {editMode ? (
+          <div className="edit-mode" style={{ marginBottom: 4 }}>
+            <textarea
+              className="edit-ta"
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveEdit(); } if (e.key === 'Escape') setEditMode(false); }}
+              rows={Math.max(2, editText.split('\n').length)}
+              placeholder="설명(캡션)을 입력하세요…"
+              autoFocus
+            />
+            <div className="edit-btns">
+              <button className="btn sm ghost" onClick={() => setEditMode(false)}>취소</button>
+              <button className="btn sm accent" onClick={saveEdit}>저장</button>
+            </div>
+          </div>
+        ) : (
+          m.text && (
+            <div className="msg-body">
+              <p>{m.text}</p>
+              {m.editedAt && <span className="edited-badge">(편집됨)</span>}
+            </div>
+          )
+        )}
         <div className="file-card">
           <div className="file-icon">{extMap[ext] || '📎'}<br /><span style={{ fontSize: 9 }}>{ext.toUpperCase()}</span></div>
           <div>
@@ -854,6 +920,8 @@ function FileMsg({ m }) {
           }
         </div>
         <Reactions list={m.reactions} />
+        <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
+        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} />}
       </div>
     </div>
   );
@@ -1133,8 +1201,8 @@ export default function Message({ m, isGrouped, isGroupStart, handlers }) {
     case 'meeting_alert': content = <MeetingAlertMsg m={m} onJoinMeeting={handlers.joinMeetingFromChat} />; break;
     case 'ticket':        content = <TicketMsg m={m} onDelete={deleteMsg} />; break;
     case 'assign':        content = <AssignMsg m={m} onDelete={deleteMsg} />; break;
-    case 'image':         content = <ImageMsg m={m} />; break;
-    case 'file':          content = <FileMsg m={m} />; break;
+    case 'image':         content = <ImageMsg {...props} />; break;
+    case 'file':          content = <FileMsg {...props} />; break;
     case 'casual':        content = <CasualMsg {...props} />; break;
     case 'ai':            content = <AIMsg m={m} />; break;
     default:              content = <TextMsg {...props} />; break;

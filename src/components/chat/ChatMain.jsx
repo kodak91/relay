@@ -18,6 +18,7 @@ import TicketTab from '../tickets/TicketTab';
 import { useTickets } from '../../hooks/useTickets';
 import { useKB } from '../../hooks/useKB';
 import { uploadFile, IMAGE_TYPES, formatFileSize } from '../../lib/uploadFile';
+import { getStoredToken } from '../../lib/driveApi';
 import { postToSlack, slackBotPost, slackBotUpdate, slackBotDelete } from '../../lib/slack';
 import { claudeComplete } from '../../lib/claude';
 import { addDoc, collection, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
@@ -50,8 +51,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const { meetings, markNotified } = useMeetings(activeProject);
   const { projects, updateProject, approveMember, rejectMember, removeMember, delegateLead } = useProjects(user?.uid);
   const { tickets, createTicket, updateTicket, deleteTicket } = useTickets(activeProject);
-  const { folders: kbFolders, saveFromChat: saveToKB } = useKB(activeProject);
-  const { addTask } = useTasks(activeProject);
+  const { folders: kbFolders, files: kbFiles, saveFromChat: saveToKB } = useKB(activeProject);
+  const { tasks, addTask } = useTasks(activeProject);
   const scrollRef = useRef(null);
   const didInitScrollRef = useRef(false);
 
@@ -383,20 +384,22 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   };
 
   // File upload: called from Composer on send. kbFolderId='__manual__' → show banner; folder ID → auto-save; null → no save.
-  const handleFiles = async (files, kbFolderId = null, caption = '') => {
+  const handleFiles = async (files, kbFolderId = null, caption = '', tags = []) => {
     if (!activeProject || !files?.length) return;
     setUploading(true);
     setUploadProgress(0);
     setUploadError('');
     const kbPending = [];
     const autoSave = kbFolderId && kbFolderId !== '__manual__';
+    // 자동 저장 시 이미 보유한 Drive 토큰을 재사용 (없으면 Firebase URL로 폴백)
+    const driveToken = autoSave ? getStoredToken() : null;
     try {
       const fileArr = Array.from(files);
       for (let i = 0; i < fileArr.length; i++) {
         const file = fileArr[i];
         const isImage = IMAGE_TYPES.includes(file.type);
         const url = await uploadFile(file, setUploadProgress);
-        // First file carries the caption text; subsequent files are clean
+        // First file carries the caption text + tags; subsequent files are clean
         await handleSend({
           type: isImage ? 'image' : 'file',
           fileUrl: url,
@@ -404,7 +407,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
           fileSize: formatFileSize(file.size),
           fileType: file.type,
           text: i === 0 ? caption : '',
-          tags: i === 0 ? (caption.match(/#\S+/g) || []) : [],
+          tags: i === 0 ? (tags.length ? tags : (caption.match(/#\S+/g) || [])) : [],
         });
         kbPending.push({
           name: file.name,
@@ -423,7 +426,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
               folderId: kbFolderId,
               uploader: user?.name || '',
               uploaderUid: user?.uid || '',
-              token: null,
+              token: driveToken,
             });
           } catch (e) {
             console.warn('Auto KB save:', e.message);
@@ -497,12 +500,56 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     }).catch(() => {});
   };
 
-  // Task 8: PM AI command handler
-  const PM_SYSTEM = '당신은 이 워크스페이스의 PM AI입니다. 회의/티켓/태스크/요약 등 팀 운영 전반을 처리합니다. 한국어로 간결하고 실용적으로 답변하세요.';
+  // Task 8: PM AI command handler — 채팅방에서 "/ " 로 호출되는 AI
+  const PM_SYSTEM = '당신은 이 워크스페이스의 PM AI입니다. 아래 컨텍스트에는 이 채팅방의 메시지, 태스크, 티켓, 회의, 파일, 멤버 등 프로젝트 전체 데이터가 포함됩니다. 이 데이터를 근거로 회의/티켓/태스크/요약 등 팀 운영 전반을 처리합니다. 한국어로 간결하고 실용적으로 답변하세요.';
+
+  // AIChannel 과 동일하게 채팅방 전체 데이터를 컨텍스트로 묶어 AI 에게 전달
+  const buildChatAIContext = () => {
+    const members = activeProjectData?.members || [];
+    const today = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' });
+    const membersList = members.filter((m) => m.uid).map((m) => `${m.name}(${m.role || '멤버'}, uid:${m.uid})`).join(', ');
+
+    const typeLabel = { text: '일반', approval: '컨펌', decision: '결정', vote: '투표', update: '보고', announce: '공지', meeting: '회의', assign: '할당', ticket: '티켓', image: '이미지', file: '파일' };
+    const msgLines = messages.slice(-100).map((m) => {
+      const status = m.status ? `·${m.status}` : '';
+      const chosen = m.chosen ? `·선택:${m.chosen}` : '';
+      const content = (m.text || m.title || m.fileName || '').slice(0, 120);
+      return `[${typeLabel[m.type] || m.type}${status}${chosen}] ${m.ts || ''} ${m.senderName}: ${content}`;
+    }).join('\n');
+
+    const taskLines = (tasks || []).map((t) => `[${t.done ? '✓' : '○'}] ${t.title}${t.assigneeName ? ` | ${t.assigneeName}` : ''}${t.due ? ` | 마감:${t.due}` : ''}`).join('\n');
+    const ticketLines = (tickets || []).map((t) => `[${t.status || '열림'}] ${t.ticketCode || ''} ${t.title}${t.assigneeName ? ` | ${t.assigneeName}` : ''}${t.priority ? ` | ${t.priority}` : ''}${t.dueDate ? ` | 마감:${t.dueDate}` : ''}`).join('\n');
+    const mtgLines = (meetings || []).slice(-10).map((m) => {
+      const d = m.scheduledAt?.toDate ? m.scheduledAt.toDate().toLocaleString('ko-KR') : '';
+      return `[${m.status || ''}] ${d}: ${m.title}`;
+    }).join('\n');
+    const fileLines = (kbFiles || []).slice(0, 50).map((f) => `${f.name} | ${f.uploader || ''} | ${f.date || ''}`).join('\n');
+
+    return `=== ${activeProjectData?.name || activeProject} 채팅방 컨텍스트 ===
+오늘: ${today}
+팀 멤버: ${membersList || '(없음)'}
+
+=== 채팅 메시지 (최근 100개) ===
+${msgLines || '(없음)'}
+
+=== 태스크 (${(tasks || []).length}개) ===
+${taskLines || '(없음)'}
+
+=== 티켓 (${(tickets || []).length}개) ===
+${ticketLines || '(없음)'}
+
+=== 회의 ===
+${mtgLines || '(없음)'}
+
+=== 파일 (${(kbFiles || []).length}개) ===
+${fileLines || '(없음)'}`;
+  };
+
   const handlePMAI = async (query) => {
     if (!query.trim() || !activeProject) return;
     try {
-      const response = await claudeComplete(query, PM_SYSTEM);
+      const prompt = `${buildChatAIContext()}\n\n=== 사용자 질문 ===\n${query}`;
+      const response = await claudeComplete(prompt, PM_SYSTEM);
       await handleSend({
         type: 'ai',
         title: `PM AI — ${query.slice(0, 40)}`,

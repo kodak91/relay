@@ -8,10 +8,13 @@ const TOKEN_EXP_KEY = 'relay_drive_token_exp';
 const TOKEN_SCOPE_KEY = 'relay_drive_token_scope';
 
 // ── OAuth ──────────────────────────────────────────────────────────────────
+// Token persists in localStorage (survives reloads / multiple tabs) for its full
+// ~1h lifetime, so users don't have to re-login on every save.
 export async function requestDriveAccess() {
   const provider = new GoogleAuthProvider();
   provider.addScope(DRIVE_SCOPE);
-  provider.setCustomParameters({ prompt: 'consent' });
+  // No forced 'consent' prompt: once the user has granted Drive access, Google
+  // returns a fresh token silently instead of showing the login/consent screen again.
 
   let result;
   if (auth.currentUser) {
@@ -24,16 +27,16 @@ export async function requestDriveAccess() {
   const token = credential?.accessToken;
   if (!token) throw new Error('Drive 접근 토큰을 받지 못했습니다.');
 
-  sessionStorage.setItem(TOKEN_KEY, token);
-  sessionStorage.setItem(TOKEN_EXP_KEY, (Date.now() + 55 * 60 * 1000).toString());
-  sessionStorage.setItem(TOKEN_SCOPE_KEY, DRIVE_SCOPE);
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(TOKEN_EXP_KEY, (Date.now() + 55 * 60 * 1000).toString());
+  localStorage.setItem(TOKEN_SCOPE_KEY, DRIVE_SCOPE);
   return token;
 }
 
 export function getStoredToken() {
-  const token = sessionStorage.getItem(TOKEN_KEY);
-  const exp = parseInt(sessionStorage.getItem(TOKEN_EXP_KEY) || '0', 10);
-  const scope = sessionStorage.getItem(TOKEN_SCOPE_KEY);
+  const token = localStorage.getItem(TOKEN_KEY);
+  const exp = parseInt(localStorage.getItem(TOKEN_EXP_KEY) || '0', 10);
+  const scope = localStorage.getItem(TOKEN_SCOPE_KEY);
   // Invalidate token if expired or obtained with a different (narrower) scope
   if (!token || Date.now() > exp || scope !== DRIVE_SCOPE) {
     clearToken();
@@ -43,6 +46,10 @@ export function getStoredToken() {
 }
 
 export function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(TOKEN_EXP_KEY);
+  localStorage.removeItem(TOKEN_SCOPE_KEY);
+  // Clean up any token left in sessionStorage by older builds
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(TOKEN_EXP_KEY);
   sessionStorage.removeItem(TOKEN_SCOPE_KEY);

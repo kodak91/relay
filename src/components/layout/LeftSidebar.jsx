@@ -37,6 +37,14 @@ export default function LeftSidebar({ mobileOpen, onMobileClose }) {
     return () => document.removeEventListener('mousedown', close);
   }, []);
 
+  // 작업표시줄/홈화면 앱 아이콘에 안읽은 메시지 수를 빨간 뱃지로 표시 (PWA Badging API)
+  useEffect(() => {
+    if (!('setAppBadge' in navigator)) return;
+    const total = Object.values(unreadCounts).reduce((sum, n) => sum + (n || 0), 0);
+    if (total > 0) navigator.setAppBadge(total).catch(() => {});
+    else navigator.clearAppBadge?.().catch(() => {});
+  }, [unreadCounts]);
+
   const startEdit = (p, e) => {
     e.stopPropagation();
     setMenuId(null);

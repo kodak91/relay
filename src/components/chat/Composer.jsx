@@ -414,7 +414,10 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
       handleDrop: (_view, event) => {
         if (event.dataTransfer?.files?.length) {
           event.preventDefault();
-          addFiles(event.dataTransfer.files);
+          // stopPropagation 으로 ChatMain 의 onDrop(즉시 업로드)까지 같이 실행돼
+          // 파일이 두 번 첨부되는 문제 방지 — 컴포저에 드롭하면 대기열에만 추가
+          event.stopPropagation();
+          addFilesRef.current?.(event.dataTransfer.files);
           return true;
         }
         return false;
@@ -521,10 +524,13 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
       return;
     }
 
-    // Files: upload + send combined with caption text
+    // Files: upload + send combined with caption text + tags
     if (pendingFiles.length > 0) {
       const caption = text.trim();
-      onFileUpload?.(pendingFiles.map((f) => f.file), selectedKBFolderId, caption);
+      // 캡션 선두 태그 + 현재 태그 탭(activeTag)을 첨부 메시지에도 부여
+      const fileTags = extractLeadingTags(caption);
+      if (activeTag && activeTag !== 'all' && !fileTags.includes(activeTag)) fileTags.push(activeTag);
+      onFileUpload?.(pendingFiles.map((f) => f.file), selectedKBFolderId, caption, fileTags);
       pendingFiles.forEach((f) => { if (f.preview) URL.revokeObjectURL(f.preview); });
       setPendingFiles([]);
       setSelectedKBFolderId(null);
