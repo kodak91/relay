@@ -38,12 +38,17 @@ export default function LeftSidebar({ mobileOpen, onMobileClose }) {
   }, []);
 
   // 작업표시줄/홈화면 앱 아이콘에 안읽은 메시지 수를 빨간 뱃지로 표시 (PWA Badging API)
+  // 현재 보고 있는 채팅 워크스페이스는 합산에서 제외 (사이드바가 빨간 숫자를 숨기는 것과 동일)
   useEffect(() => {
     if (!('setAppBadge' in navigator)) return;
-    const total = Object.values(unreadCounts).reduce((sum, n) => sum + (n || 0), 0);
+    const openChatPid = activeChannel === 'chat' ? activeProject : null;
+    const total = Object.entries(unreadCounts).reduce(
+      (sum, [pid, n]) => sum + (pid === openChatPid ? 0 : (n || 0)),
+      0
+    );
     if (total > 0) navigator.setAppBadge(total).catch(() => {});
     else navigator.clearAppBadge?.().catch(() => {});
-  }, [unreadCounts]);
+  }, [unreadCounts, activeProject, activeChannel]);
 
   const startEdit = (p, e) => {
     e.stopPropagation();

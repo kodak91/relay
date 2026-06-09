@@ -29,12 +29,17 @@ export function useUnreadCounts(projects, uid) {
   }, [projectKey]);
 
   const counts = useMemo(() => {
+    const now = Date.now();
     const result = {};
     for (const [pid, msgs] of Object.entries(allMessages)) {
       const lr = lastRead[pid] ? new Date(lastRead[pid]).getTime() : 0;
       result[pid] = (msgs || []).filter((m) => {
         const t = m.createdAt?.toDate?.()?.getTime() || 0;
-        return t > lr && m.senderUid !== uid;
+        if (t <= lr || m.senderUid === uid) return false;
+        // 사라지는 메시지(잡담 등)는 만료되면 제외 — 화면엔 안 보이는데 뱃지만 영구히 뜨는 문제 방지.
+        // 만료 전 잡담과 시스템/AI 메시지는 그대로 카운트(알림 유지).
+        if (m.expiresAt && m.expiresAt <= now) return false;
+        return true;
       }).length;
     }
     return result;
