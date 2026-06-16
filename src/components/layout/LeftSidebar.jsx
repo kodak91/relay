@@ -172,6 +172,22 @@ export default function LeftSidebar({ mobileOpen, onMobileClose }) {
         <p>슬래시 명령어로 호출 ·<br />/오늘요약  /스케줄</p>
       </div>
 
+      {/* Echo — 역할 캡슐 (팀장 전용 진입) */}
+      {user?.role === 'lead' && (
+        <div
+          className={'ai-channel' + (activeChannel === 'echo' ? ' on' : '')}
+          onClick={() => setActiveChannel('echo')}
+          style={{ marginTop: 8 }}
+        >
+          <div className="hd2">
+            <span>🧬</span>
+            <span>Echo</span>
+            <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.7 }}>역할 캡슐</span>
+          </div>
+          <p>팀원 역할을 인수인계용<br />캡슐로 캡처</p>
+        </div>
+      )}
+
       {showSlackModal && (
         <SlackModal
           project={activeProjectData}
