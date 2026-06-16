@@ -53,6 +53,23 @@ export function useEcho(projectId) {
     return res.json();
   };
 
+  // Phase 3 — 캡슐 기반 에이전트 / 인수인계 문서 실행 (lead 전용, side-effect 없음)
+  const runAgent = async ({ memberId: mId, memberName, mode = 'agent', task }) => {
+    if (!isLead) throw new Error('팀장만 Echo 에이전트를 실행할 수 있습니다.');
+    const idToken = await auth.currentUser?.getIdToken();
+    if (!idToken) throw new Error('인증 토큰을 가져올 수 없습니다. 다시 로그인해주세요.');
+    const res = await fetch('/api/echo-agent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, memberId: mId, memberName, mode, task, idToken, requesterUid: user?.uid }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.error || `에이전트 실행 실패 (${res.status})`);
+    }
+    return res.json();
+  };
+
   // 캡슐 버전 이력 조회 (덮어쓰기 방지 — 스냅샷 목록)
   const getVersions = async (memberId) => {
     const q = query(
@@ -67,5 +84,5 @@ export function useEcho(projectId) {
   const setEchoEnabled = (enabled) =>
     updateDoc(doc(db, 'projects', projectId), { echoEnabled: enabled });
 
-  return { capsules: visibleCapsules, allCapsules: capsules, loading, isLead, runCapture, getCapsule, getVersions, setEchoEnabled };
+  return { capsules: visibleCapsules, allCapsules: capsules, loading, isLead, runCapture, runAgent, getCapsule, getVersions, setEchoEnabled };
 }

@@ -4,6 +4,8 @@ import remarkGfm from 'remark-gfm';
 import useAppStore from '../../store/appStore';
 import { useProjects } from '../../hooks/useProjects';
 import { useEcho } from '../../hooks/useEcho';
+import EchoQuestions from './EchoQuestions';
+import EchoAgent from './EchoAgent';
 
 // Echo Phase 1 — 역할 캡슐 열람 패널
 // 팀장: 전체 멤버 캡슐 열람/실행/다운로드 + Echo on/off
@@ -16,7 +18,7 @@ export default function EchoPanel() {
     [projects, activeProject]
   );
 
-  const { capsules, isLead, runCapture, getCapsule, setEchoEnabled } = useEcho(activeProject);
+  const { capsules, isLead, runCapture, runAgent, getCapsule, setEchoEnabled } = useEcho(activeProject);
 
   const echoEnabled = currentProject?.echoEnabled !== false; // 기본 on
   const allMembers = (currentProject?.members || []).filter((m) => m.uid);
@@ -24,13 +26,18 @@ export default function EchoPanel() {
   const members = isLead ? allMembers : allMembers.filter((m) => m.uid === user?.uid);
 
   const [selectedId, setSelectedId] = useState(null);
+  const [view, setView] = useState('capsule');   // 'capsule' | 'agent' (agent = lead 전용)
   const [running, setRunning] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
   // 최초/멤버 변경 시 첫 멤버 자동 선택
   useEffect(() => {
     if (!selectedId && members.length > 0) setSelectedId(members[0].uid);
   }, [members, selectedId]);
+
+  // 멤버 전환 시 안내/에러/뷰 초기화
+  useEffect(() => { setNotice(''); setError(''); setView('capsule'); }, [selectedId]);
 
   const selectedMember = members.find((m) => m.uid === selectedId) || null;
   const capsule = selectedId ? getCapsule(selectedId) : null;
@@ -39,9 +46,18 @@ export default function EchoPanel() {
     if (!selectedMember) return;
     setRunning(true);
     setError('');
+    setNotice('');
     try {
-      await runCapture(selectedMember);
+      const result = await runCapture(selectedMember);
       // 캡슐은 onSnapshot 으로 자동 갱신됨
+      if (result?.skipped) {
+        setNotice('신규 메시지가 없어 업데이트를 건너뛰었습니다.');
+      } else if (result?.mode === 'merge') {
+        const s = result.stats || {};
+        setNotice(`업데이트 완료 — 신규 메시지 ${s.newMessages ?? 0}건, 반영된 답변 ${s.mergedAnswers ?? 0}건.`);
+      } else {
+        setNotice('캡슐을 생성했습니다.');
+      }
     } catch (e) {
       setError(e.message || 'Echo 실행 중 오류가 발생했습니다.');
     } finally {
@@ -133,6 +149,15 @@ export default function EchoPanel() {
             <div style={{ color: 'var(--ink-mute)', fontSize: 14 }}>멤버를 선택하세요.</div>
           ) : (
             <>
+              {/* 뷰 전환 (에이전트/인수인계는 팀장 전용) */}
+              {isLead && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+                  <button className={'btn sm' + (view === 'capsule' ? ' accent' : ' ghost')} onClick={() => setView('capsule')}>🧬 캡슐</button>
+                  <button className={'btn sm' + (view === 'agent' ? ' accent' : ' ghost')} onClick={() => setView('agent')}>⚡ 에이전트 / 인수인계</button>
+                </div>
+              )}
+
+              {view === 'capsule' && (<>
               {/* 액션 바 */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -167,6 +192,28 @@ export default function EchoPanel() {
                 </button>
               </div>
 
+              {/* 재현 가능도 게이지 */}
+              {capsule?.reproducibility != null && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+                    <span style={{ color: 'var(--ink-3)' }}>재현 가능도</span>
+                    <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{capsule.reproducibility}%</span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 999, background: 'var(--surface-2)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${capsule.reproducibility}%`, background: 'var(--accent)', transition: 'width 0.4s' }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginTop: 4 }}>
+                    나머지 {100 - capsule.reproducibility}%는 인수인계 시 직접 확인이 필요합니다.
+                  </div>
+                </div>
+              )}
+
+              {notice && (
+                <div style={{ padding: '10px 14px', marginBottom: 14, borderRadius: 'var(--r-2)', background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 13 }}>
+                  {notice}
+                </div>
+              )}
+
               {error && (
                 <div style={{ padding: '10px 14px', marginBottom: 14, borderRadius: 'var(--r-2)', background: 'oklch(0.95 0.05 25)', color: 'oklch(0.45 0.18 25)', fontSize: 13 }}>
                   ⚠ {error}
@@ -184,6 +231,17 @@ export default function EchoPanel() {
                     ? '아직 캡슐이 없습니다. "지금 캡처"를 눌러 이 멤버의 역할 캡슐을 생성하세요.'
                     : '아직 캡슐이 생성되지 않았습니다. 팀장이 캡처하면 여기에 표시됩니다.'}
                 </div>
+              )}
+
+              {/* 미캡처 보완 질문 — 본인 캡슐일 때만 노출 */}
+              {selectedMember.uid === user?.uid && (
+                <EchoQuestions projectId={activeProject} memberId={selectedMember.uid} />
+              )}
+              </>)}
+
+              {/* 에이전트 / 인수인계 (팀장 전용) */}
+              {view === 'agent' && isLead && (
+                <EchoAgent projectId={activeProject} member={selectedMember} capsule={capsule} runAgent={runAgent} />
               )}
             </>
           )}
