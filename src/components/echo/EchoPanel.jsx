@@ -20,7 +20,7 @@ export default function EchoPanel() {
 
   const { capsules, isLead, runCapture, runAgent, getCapsule, setEchoEnabled } = useEcho(activeProject);
 
-  const echoEnabled = currentProject?.echoEnabled !== false; // 기본 on
+  const echoEnabled = currentProject?.echoEnabled === true; // opt-in: 명시적으로 켠 워크스페이스만
   const allMembers = (currentProject?.members || []).filter((m) => m.uid);
   // 팀장은 전체 멤버, 팀원은 본인만
   const members = isLead ? allMembers : allMembers.filter((m) => m.uid === user?.uid);
@@ -98,13 +98,16 @@ export default function EchoPanel() {
           <span style={{ fontSize: 11, color: 'var(--ink-mute)' }}>역할 캡슐 · 인수인계/재현용</span>
         </div>
         {isLead && (
-          <label style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-3)', cursor: 'pointer' }}>
+          <label
+            style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ink-3)', cursor: 'pointer' }}
+            title="켠 워크스페이스만 캡처·3일 자동 수집 대상이 됩니다 (기본 꺼짐)"
+          >
             <input
               type="checkbox"
               checked={echoEnabled}
               onChange={(e) => setEchoEnabled(e.target.checked)}
             />
-            Echo 기능 {echoEnabled ? '켜짐' : '꺼짐'}
+            이 워크스페이스 Echo {echoEnabled ? '켜짐' : '꺼짐'}
           </label>
         )}
       </div>
@@ -182,7 +185,7 @@ export default function EchoPanel() {
                     className="btn accent sm"
                     onClick={handleCapture}
                     disabled={running || !echoEnabled}
-                    title={!echoEnabled ? 'Echo 기능이 꺼져 있습니다.' : ''}
+                    title={!echoEnabled ? '이 워크스페이스의 Echo를 먼저 켜세요 (헤더 우측 체크박스).' : ''}
                   >
                     {running ? '캡처 중…' : capsule ? '🔄 업데이트' : '⚡ 지금 캡처'}
                   </button>

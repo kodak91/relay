@@ -209,10 +209,10 @@ exports.echoScheduler = onSchedule(
   async () => {
     const apiKey = ANTHROPIC_API_KEY.value();
     const projectsSnap = await db.collection('projects').get();
-    // Echo 기능이 켜진(미설정=기본 on) + 삭제되지 않은 워크스페이스만
+    // 옵트인: echoEnabled === true 로 명시적으로 켠 + 삭제되지 않은 워크스페이스만
     const projects = projectsSnap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((p) => p.echoEnabled !== false && p.status !== '삭제됨');
+      .filter((p) => p.echoEnabled === true && p.status !== '삭제됨');
 
     let members = 0, captured = 0, skipped = 0, errors = 0;
     for (const proj of projects) {

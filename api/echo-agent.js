@@ -132,7 +132,7 @@ export default async function handler(req, res) {
     const proj = decodeDoc(projDocRaw);
     const leadUids = (proj.members || []).filter((m) => m.role === 'lead').map((m) => m.uid);
     if (!requesterUid || !leadUids.includes(requesterUid)) return res.status(403).json({ error: '팀장만 Echo 에이전트를 실행할 수 있습니다.' });
-    if (proj.echoEnabled === false) return res.status(403).json({ error: 'Echo 기능이 꺼져 있습니다.' });
+    if (proj.echoEnabled !== true) return res.status(403).json({ error: '이 워크스페이스에서 Echo가 켜져 있지 않습니다.' });
 
     // 캡슐 로드
     const capsulePath = `projects/${projectId}/echoCapsules/${memberId}`;

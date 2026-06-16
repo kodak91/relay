@@ -192,8 +192,8 @@ export default async function handler(req, res) {
     if (!requesterUid || !leadUids.includes(requesterUid)) {
       return res.status(403).json({ error: '팀장만 Echo를 실행할 수 있습니다.' });
     }
-    if (proj.echoEnabled === false) {
-      return res.status(403).json({ error: '이 워크스페이스에서 Echo 기능이 꺼져 있습니다.' });
+    if (proj.echoEnabled !== true) {
+      return res.status(403).json({ error: '이 워크스페이스에서 Echo가 켜져 있지 않습니다. EchoPanel에서 먼저 켜주세요.' });
     }
 
     // 2. 기존 캡슐 로드 (델타/머지 기준)
