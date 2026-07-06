@@ -172,7 +172,7 @@ export default function LeftSidebar({ mobileOpen, onMobileClose }) {
         <p>슬래시 명령어로 호출 ·<br />/오늘요약  /스케줄</p>
       </div>
 
-      {/* Echo — 역할 캡슐 (팀장 전용 진입) */}
+      {/* Relay Scope — 조직원 캡처 + 성과 평가 (팀장 전용 진입) */}
       {user?.role === 'lead' && (
         <div
           className={'ai-channel' + (activeChannel === 'echo' ? ' on' : '')}
@@ -180,11 +180,11 @@ export default function LeftSidebar({ mobileOpen, onMobileClose }) {
           style={{ marginTop: 8 }}
         >
           <div className="hd2">
-            <span>🧬</span>
-            <span>Echo</span>
-            <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.7 }}>역할 캡슐</span>
+            <span>🔭</span>
+            <span>Relay Scope</span>
+            <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.7 }}>Capsule·PR</span>
           </div>
-          <p>팀원 역할을 인수인계용<br />캡슐로 캡처</p>
+          <p>역할 캡슐 + 분기 성과 평가</p>
         </div>
       )}
 
