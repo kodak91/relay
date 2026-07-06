@@ -1,10 +1,29 @@
 // Vercel Cron: every Tuesday 09:00 KST (Monday 00:00 UTC)
-// Reads /보고 messages from the past week, summarizes via Claude, stores in weeklyReports/{yyyyWW}
+// Reads 'update' type messages from the past week, summarizes via Claude, stores in weeklyReports/{yyyyWW}
+//
+// ⚠️ 서버 전용 배치 작업이라 사용자 idToken 이 없다. Firebase Admin SDK(서비스 계정)로 접근해
+//    보안 규칙을 우회(권한 있는 서버 접근)한다. — 기존 REST+API키 방식은 규칙에 막혀 동작 불가였음.
+//
+// 필요한 환경변수(Vercel):
+//   FIREBASE_SERVICE_ACCOUNT — 서비스 계정 키 JSON 전문(문자열). Firebase 콘솔 > 프로젝트 설정 >
+//     서비스 계정 > 새 비공개 키 생성 으로 받은 JSON 을 그대로 붙여넣기.
+//   ANTHROPIC_API_KEY, (선택) CRON_SECRET
+
+import admin from 'firebase-admin';
 
 const CRON_SECRET = process.env.CRON_SECRET;
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
-const FIREBASE_PROJECT_ID = process.env.VITE_FIREBASE_PROJECT_ID;
-const FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY;
+
+// Admin SDK 초기화 — 서버리스 재호출 간 중복 초기화 방지
+function getDb() {
+  if (!admin.apps.length) {
+    const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (!raw) throw new Error('FIREBASE_SERVICE_ACCOUNT 환경변수가 설정되지 않았습니다.');
+    const serviceAccount = JSON.parse(raw);
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+  }
+  return admin.firestore();
+}
 
 function getWeekLabel(date) {
   const d = new Date(date);
@@ -14,56 +33,12 @@ function getWeekLabel(date) {
   return `${year}W${String(week).padStart(2, '0')}`;
 }
 
-async function firestoreGet(path) {
-  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${path}?key=${FIREBASE_API_KEY}`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`Firestore GET ${path}: ${r.status}`);
-  return r.json();
-}
-
-async function firestoreQuery(collectionPath, filters = []) {
-  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery?key=${FIREBASE_API_KEY}`;
-  const body = {
-    structuredQuery: {
-      from: [{ collectionId: collectionPath.split('/').pop(), allDescendants: false }],
-      where: filters.length === 1 ? filters[0] : (filters.length > 1 ? {
-        compositeFilter: { op: 'AND', filters },
-      } : undefined),
-    },
-  };
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`Firestore query ${collectionPath}: ${r.status}`);
-  return r.json();
-}
-
-async function firestoreSet(path, data) {
-  const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${path}?key=${FIREBASE_API_KEY}`;
-  // Convert JS object to Firestore document fields
-  const fields = {};
-  for (const [k, v] of Object.entries(data)) {
-    if (typeof v === 'string') fields[k] = { stringValue: v };
-    else if (typeof v === 'number') fields[k] = { integerValue: String(v) };
-    else if (typeof v === 'boolean') fields[k] = { booleanValue: v };
-    else if (Array.isArray(v)) {
-      fields[k] = { arrayValue: { values: v.map((s) => ({ stringValue: String(s) })) } };
-    }
-  }
-  const r = await fetch(url, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields }),
-  });
-  if (!r.ok) throw new Error(`Firestore set ${path}: ${r.status}`);
-  return r.json();
-}
-
-function extractString(fieldVal) {
-  if (!fieldVal) return '';
-  return fieldVal.stringValue || fieldVal.integerValue || '';
+// createdAt 이 Firestore Timestamp 이든 ISO 문자열이든 ISO 문자열로 정규화
+function toIso(v) {
+  if (!v) return '';
+  if (typeof v === 'string') return v;
+  if (typeof v.toDate === 'function') return v.toDate().toISOString(); // Timestamp
+  return '';
 }
 
 export default async function handler(req, res) {
@@ -79,62 +54,49 @@ export default async function handler(req, res) {
     }
   }
 
-  if (!FIREBASE_PROJECT_ID || !FIREBASE_API_KEY) {
-    return res.status(500).json({ error: 'Firebase config missing (VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_API_KEY)' });
-  }
   if (!ANTHROPIC_KEY) {
     return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
   }
 
   const now = new Date();
   const weekLabel = getWeekLabel(now);
-
-  // Date range: past 7 days
   const endDate = now.toISOString();
   const startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   try {
-    // 1. List all projects
-    const projectsDoc = await firestoreGet('projects');
-    const projects = projectsDoc.documents || [];
+    const db = getDb();
 
-    // 2. Collect all 'update' type messages from the past week
+    // 1. 전체 워크스페이스
+    const projectsSnap = await db.collection('projects').get();
+
+    // 2. 지난 한 주간 'update' 타입 메시지 수집
     const updates = [];
-    for (const p of projects) {
-      const projectId = p.name?.split('/').pop();
-      const projectName = extractString(p.fields?.name);
-      if (!projectId) continue;
+    for (const p of projectsSnap.docs) {
+      const projectName = p.get('name') || '';
       try {
-        const msgs = await firestoreQuery(`projects/${projectId}/messages`, [
-          {
-            fieldFilter: {
-              field: { fieldPath: 'type' },
-              op: 'EQUAL',
-              value: { stringValue: 'update' },
-            },
-          },
-        ]);
-        for (const doc of msgs) {
-          if (!doc.document) continue;
-          const fields = doc.document.fields || {};
-          const createdAt = extractString(fields.createdAt);
-          if (createdAt >= startDate && createdAt <= endDate) {
+        const msgsSnap = await db
+          .collection(`projects/${p.id}/messages`)
+          .where('type', '==', 'update')
+          .get();
+        for (const m of msgsSnap.docs) {
+          const createdAt = toIso(m.get('createdAt'));
+          if (createdAt && createdAt >= startDate && createdAt <= endDate) {
             updates.push({
               project: projectName,
-              sender: extractString(fields.senderName),
-              text: extractString(fields.text),
-              ts: extractString(fields.ts),
+              sender: m.get('senderName') || '',
+              text: m.get('text') || '',
+              ts: m.get('ts') || '',
             });
           }
         }
-      } catch { /* skip project if query fails */ }
+      } catch { /* 개별 워크스페이스 쿼리 실패는 건너뜀 */ }
     }
 
     if (updates.length === 0) {
       return res.status(200).json({ ok: true, weekLabel, message: '이번 주 중간보고 없음' });
     }
 
-    // 3. Summarize with Claude
+    // 3. Claude 요약
     const context = updates
       .map((u) => `[${u.project}] ${u.sender} (${u.ts}): ${u.text}`)
       .join('\n\n');
@@ -163,8 +125,8 @@ export default async function handler(req, res) {
     const claudeData = await claudeRes.json();
     const summary = claudeData.content?.[0]?.text || '';
 
-    // 4. Store result in weeklyReports/{yyyyWW}
-    await firestoreSet(`weeklyReports/${weekLabel}`, {
+    // 4. 결과 저장 — weeklyReports/{yyyyWW}
+    await db.collection('weeklyReports').doc(weekLabel).set({
       weekLabel,
       summary,
       updateCount: updates.length,
