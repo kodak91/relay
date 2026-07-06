@@ -5,14 +5,32 @@ const MAX_INPUT_CHARS = 60000;
 const MAX_OUTPUT_TOKENS = 4096;
 const ALLOWED_MODELS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'];
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
+const FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY;
+
+// idToken 검증 → 로그인 사용자만 프록시 사용 (비용/남용 방지). 유효하면 uid, 아니면 null.
+async function verifyUid(idToken) {
+  if (!idToken || !FIREBASE_API_KEY) return null;
+  try {
+    const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.users?.[0]?.localId || null;
+  } catch { return null; }
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { prompt, systemPrompt, model } = req.body;
+  const { prompt, systemPrompt, model, idToken } = req.body;
   if (!prompt) return res.status(400).json({ error: 'prompt required' });
+
+  // 인증 필수 — 로그인한 사용자만 (열린 Claude 프록시 남용 차단)
+  const uid = await verifyUid(idToken);
+  if (!uid) return res.status(401).json({ error: '로그인이 필요합니다. 다시 로그인해주세요.' });
 
   if (prompt.length > MAX_INPUT_CHARS) {
     return res.status(413).json({

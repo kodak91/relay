@@ -59,6 +59,18 @@ function fsHeaders(idToken) {
   if (idToken) h['Authorization'] = `Bearer ${idToken}`;
   return h;
 }
+// idToken을 서버에서 검증해 실제 uid 반환(위조 방지). 실패 시 null.
+// ⚠️ requesterUid(클라이언트 제공)는 신뢰 금지 — 반드시 이 값으로 권한 판정.
+async function verifyUid(idToken) {
+  try {
+    const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${FIREBASE_API_KEY}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.users?.[0]?.localId || null;
+  } catch { return null; }
+}
 async function fsGetDoc(path, idToken) {
   const r = await fetch(`${FS_BASE}/${path}?key=${FIREBASE_API_KEY}`, { headers: fsHeaders(idToken) });
   if (r.status === 404) return null;
@@ -179,13 +191,17 @@ export default async function handler(req, res) {
   if (!ANTHROPIC_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not configured' });
 
   try {
+    // idToken 검증 → 실제 uid (requesterUid 위조 방지)
+    const uid = await verifyUid(idToken);
+    if (!uid) return res.status(401).json({ error: '유효하지 않은 인증 토큰입니다. 다시 로그인해주세요.' });
+
     // 권한 — lead 만
     const projRaw = await fsGetDoc(`projects/${projectId}`, idToken);
     if (!projRaw) return res.status(404).json({ error: '워크스페이스를 찾을 수 없습니다.' });
     const proj = decodeDoc(projRaw);
     const members = proj.members || [];
     const leadUids = members.filter((m) => m.role === 'lead').map((m) => m.uid);
-    if (!requesterUid || !leadUids.includes(requesterUid)) {
+    if (!leadUids.includes(uid)) {
       return res.status(403).json({ error: '팀장/대표만 성과 평가를 실행할 수 있습니다.' });
     }
     const leadNames = new Set(members.filter((m) => m.role === 'lead').map((m) => m.name));

@@ -1,11 +1,13 @@
 // Claude Haiku API — called via Vercel serverless function (/api/claude)
 // In local dev, run with `vercel dev` or set VITE_ANTHROPIC_API_KEY for direct calls
+import { auth } from './firebase';
 
 export async function claudeComplete(prompt, systemPrompt = '', model = null) {
+  const idToken = await auth.currentUser?.getIdToken();   // 서버 인증용 (열린 프록시 방지)
   const res = await fetch('/api/claude', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, systemPrompt, ...(model && { model }) }),
+    body: JSON.stringify({ prompt, systemPrompt, idToken, ...(model && { model }) }),
   });
   if (!res.ok) throw new Error('Claude API error: ' + res.status);
   const data = await res.json();
