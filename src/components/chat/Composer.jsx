@@ -306,6 +306,16 @@ function extractLeadingTags(text) {
   return match ? (match[0].match(/#\S+/g) || []) : [];
 }
 
+// Tiptap 마크다운 직렬화 정리 — 하드브레이크 정상화 + 직렬화가 넣는 백슬래시 이스케이프 제거.
+// (\#, \*, 1\. 등이 저장/표시/슬랙에 그대로 남는 문제 방지)
+function cleanMarkdown(md) {
+  if (!md) return '';
+  return md
+    .replace(/\\\n/g, '  \n')                          // 하드브레이크 → CommonMark 하드브레이크
+    .replace(/\\([\\`*_{}[\]()#+\-.!>~|])/g, '$1')      // 직렬화 이스케이프 제거
+    .trim();
+}
+
 export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, members = [], kbFolders = [], recentMessages = [], activeTag = 'all' }) {
   const [text, setText] = useState('');
   const [type, setType] = useState('text');
@@ -394,7 +404,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
   const editor = useEditor({
     extensions: [
       StarterKit,
-      MarkdownExtension.configure({ html: false }),
+      MarkdownExtension.configure({ html: false, transformPastedText: true, transformCopiedText: true }),
       Placeholder.configure({ placeholder: () => placeholderRef.current }),
     ],
     content: '',
@@ -542,7 +552,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
 
     // Files: upload + send combined with caption text + tags
     if (pendingFiles.length > 0) {
-      const caption = text.trim();
+      const caption = cleanMarkdown(text);
       // 캡션 선두 태그 + 현재 태그 탭(activeTag)을 첨부 메시지에도 부여
       const fileTags = extractLeadingTags(caption);
       if (activeTag && activeTag !== 'all' && !fileTags.includes(activeTag)) fileTags.push(activeTag);
@@ -623,14 +633,13 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
     }
 
     if (!text.trim()) return;
-    const tags = extractLeadingTags(text);
-    if (activeTag && activeTag !== 'all' && !tags.includes(activeTag)) tags.push(activeTag);
     const rawForClean = type === 'casual' && text.trimStart().startsWith('$')
       ? text.trimStart().slice(1)
       : text;
-    // tiptap-markdown serializes HardBreak as backslash+newline; convert to
-    // CommonMark two-space hard break so line breaks render correctly in chat
-    const cleanText = rawForClean.replace(/\\\n/g, '  \n').trim();
+    // 하드브레이크 정상화 + tiptap 직렬화 이스케이프(\#, \*, 1\. 등) 제거
+    const cleanText = cleanMarkdown(rawForClean);
+    const tags = extractLeadingTags(cleanText);
+    if (activeTag && activeTag !== 'all' && !tags.includes(activeTag)) tags.push(activeTag);
     const msg = { type, text: cleanText, tags, importance };
     // @멘션 대상 추출 → 해당 멤버에게 알림 (본인 제외는 수신측에서 처리)
     const mentionUids = members

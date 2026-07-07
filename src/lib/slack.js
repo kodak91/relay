@@ -1,8 +1,24 @@
-// Normalize text before sending to Slack — handles Tiptap markdown hard breaks and literal \n sequences
+// Tiptap/CommonMark 마크다운 → Slack mrkdwn 변환.
+// Slack 은 #헤딩 / **볼드** / [링크](url) 를 지원하지 않으므로 mrkdwn 문법으로 바꾼다.
+// 또한 Tiptap 직렬화가 넣는 백슬래시 이스케이프(\#, \*, 1\. 등)를 제거한다.
+const BOLD_MARK = String.fromCharCode(1); // **볼드** → *볼드* 변환용 임시 마커(사용자 입력에 없는 제어문자)
+
 function normalizeSlackText(text) {
-  return (text || '')
-    .replace(/\\\n/g, '\n')  // markdown hard break (backslash + newline) → plain newline
-    .replace(/\\n/g, '\n');  // literal two-char sequence \n → actual newline
+  let t = (text || '')
+    .replace(/\\\n/g, '\n')   // 마크다운 하드브레이크(백슬래시+개행) → 개행
+    .replace(/\\n/g, '\n')    // 리터럴 "\n" 2글자 → 개행
+    .replace(/\\([\\`*_{}[\]()#+\-.!>~|])/g, '$1'); // 직렬화 이스케이프 제거
+
+  t = t
+    .replace(/^\s{0,3}#{1,6}\s+(.*)$/gm, BOLD_MARK + '$1' + BOLD_MARK) // #헤딩 → 굵게(임시 마커)
+    .replace(/~~(.+?)~~/g, '~$1~')                                // ~~취소선~~ → ~취소선~
+    .replace(/\*\*(.+?)\*\*/g, BOLD_MARK + '$1' + BOLD_MARK)      // **굵게** → 임시 마커
+    .replace(/__(.+?)__/g, BOLD_MARK + '$1' + BOLD_MARK)          // __굵게__ → 임시 마커
+    .replace(/\*([^*\n]+?)\*/g, '_$1_')                           // *기울임* → _기울임_
+    .replace(new RegExp(BOLD_MARK, 'g'), '*')                     // 임시 마커 → *굵게*(mrkdwn)
+    .replace(/^(\s*)[-*+]\s+/gm, '$1• ')                          // 불릿 → •
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<$2|$1>');              // [텍스트](url) → <url|텍스트>
+  return t;
 }
 
 export async function postToSlack(webhookUrl, text) {
