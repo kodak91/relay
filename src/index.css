@@ -2684,6 +2684,14 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 }
 .tk-detail-row span:first-child { color: var(--ink-3); }
 .tk-detail-row span:last-child { color: var(--ink); font-weight: 600; }
+/* 인라인 편집 컨트롤 — 편집 버튼 없이 바로 변경 */
+.tk-inline-edit {
+  border: 1px solid transparent; background: transparent; color: var(--ink);
+  font-size: 12px; padding: 2px 6px; border-radius: var(--r-1); cursor: pointer;
+  text-align: right; max-width: 62%; transition: border-color 0.12s, background 0.12s;
+}
+.tk-inline-edit:hover { border-color: var(--border); background: var(--surface-2); }
+.tk-inline-edit:focus { outline: none; border-color: var(--accent); background: var(--surface-1); }
 .tk-detail-section { margin-top: 8px; }
 .tk-detail-sec-label { font-size: 11px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
 .tk-detail-child {

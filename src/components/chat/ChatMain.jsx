@@ -188,6 +188,20 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     if (!v) return;
     await addReply(activeProject, mid, { senderName: user?.name, senderUid: user?.uid, text: v, ts: nowHM() });
     setReplyValues((prev) => ({ ...prev, [mid]: '' }));
+
+    // 스레드 알림 — 글 작성자(myThread) + 기존 참여자(allThread)에게. 본인 제외.
+    const m = messages.find((msg) => msg.id === mid);
+    if (m) {
+      const authorUid = m.senderUid;
+      const body = m.text || m.title || '';
+      if (authorUid && authorUid !== user?.uid) {
+        sendNotif(authorUid, '내 글에 새 댓글', `${user?.name || '팀원'}: ${v}`, 'myThread');
+      }
+      const participants = new Set(
+        (m.thread || []).map((r) => r.senderUid).filter((u) => u && u !== user?.uid && u !== authorUid)
+      );
+      participants.forEach((u) => sendNotif(u, '참여한 스레드에 새 댓글', `${user?.name || '팀원'}: ${v}`, 'allThread'));
+    }
   };
 
   const editReply = async (mid, replyIdx, newText) => {
@@ -206,10 +220,10 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     await updateMessageField(activeProject, mid, { thread: newThread });
   };
 
-  const sendNotif = async (uid, title, body) => {
+  const sendNotif = async (uid, title, body, category = 'general') => {
     if (!uid) return;
     await addDoc(collection(db, 'notifications', uid, 'items'), {
-      type: 'action_result', title, body: body?.slice(0, 80) || '',
+      type: 'action_result', category, title, body: body?.slice(0, 80) || '',
       fromName: user?.name || '', read: false, createdAt: serverTimestamp(),
     }).catch(() => {});
   };
@@ -351,6 +365,12 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       ts: nowHM(),
     });
 
+    // 기능(/) 메시지 — 대상자가 지정된 결정/승인/투표는 대상자에게 알림 (featureChat)
+    const FEATURE_TYPES = { decision: '결정 요청', approval: '컨펌 요청', vote: '투표 요청' };
+    if (FEATURE_TYPES[msgData.type] && msgData.targetUid && msgData.targetUid !== user?.uid) {
+      sendNotif(msgData.targetUid, `${FEATURE_TYPES[msgData.type]}이 도착했습니다`, msgData.title || msgData.text, 'featureChat');
+    }
+
     // Slack: /보고 messages (bot token preferred for edit/delete tracking; fallback to webhook)
     if (msgData.type === 'update') {
       const slackText = `📊 *[${activeProjectData?.name}] 중간 보고* — ${user?.name || '팀원'}\n${msgData.text || ''}`;
@@ -380,6 +400,9 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         assignedFrom: 'chat',
         createdAt: serverTimestamp(),
       }).catch((e) => console.warn('Assign task write:', e.message));
+      if (msgData.assigneeUid !== user?.uid) {
+        sendNotif(msgData.assigneeUid, '새 업무가 배정되었습니다', msgData.text, 'general');
+      }
     }
   };
 

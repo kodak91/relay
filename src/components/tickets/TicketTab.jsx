@@ -92,11 +92,12 @@ function TicketNode({ ticket, pos, selected, onSelect, onDragStart, onCopy, copi
   const priorityInfo = PRIORITY_INFO[ticket.priority || '보통'] || PRIORITY_INFO['보통'];
   const isConnectSource = connectFrom === ticket.id;
   const inConnectMode = connectFrom !== null;
+  const isDone = ticket.status === '완료' || ticket.status === '닫힘';
 
   return (
     <div
-      className={'tk-node' + (selected ? ' selected' : '') + (isConnectSource ? ' connect-source' : '') + (inConnectMode && !isConnectSource ? ' connectable' : '')}
-      style={{ left: pos.x, top: pos.y, width: NODE_W }}
+      className={'tk-node' + (selected ? ' selected' : '') + (isDone ? ' tk-node-done' : '') + (isConnectSource ? ' connect-source' : '') + (inConnectMode && !isConnectSource ? ' connectable' : '')}
+      style={{ left: pos.x, top: pos.y, width: NODE_W, ...(isDone && !selected ? { opacity: 0.55, filter: 'grayscale(0.7)' } : {}) }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onMouseDown={(e) => {
@@ -276,10 +277,52 @@ function TicketDetail({ ticket, tickets, members, projectId, user, onUpdate, onD
         <div className="tk-detail-view">
           <div className="tk-detail-title">{ticket.title}</div>
           {ticket.description && <div className="tk-detail-desc">{ticket.description}</div>}
-          <div className="tk-detail-row"><span>상태</span><span style={{ color: statusInfo.color }}>● {ticket.status}</span></div>
-          <div className="tk-detail-row"><span>우선순위</span><span style={{ color: priorityInfo.color }}>{ticket.priority || '보통'}</span></div>
-          {ticket.assigneeName && <div className="tk-detail-row"><span>담당자</span><span>@{ticket.assigneeName}</span></div>}
-          {ticket.dueDate && <div className="tk-detail-row"><span>기한</span><span>{ticket.dueDate}</span></div>}
+          {/* 인라인 편집 — 편집 버튼 없이 바로 변경, 선택 즉시 확정 */}
+          <div className="tk-detail-row">
+            <span>상태</span>
+            <select
+              className="tk-inline-edit"
+              value={ticket.status}
+              onChange={(e) => onUpdate({ status: e.target.value })}
+              style={{ color: statusInfo.color, fontWeight: 600 }}
+            >
+              {['열림', '진행중', '완료', '닫힘'].map((s) => <option key={s} value={s}>● {s}</option>)}
+            </select>
+          </div>
+          <div className="tk-detail-row">
+            <span>우선순위</span>
+            <select
+              className="tk-inline-edit"
+              value={ticket.priority || '보통'}
+              onChange={(e) => onUpdate({ priority: e.target.value })}
+              style={{ color: priorityInfo.color, fontWeight: 600 }}
+            >
+              {['낮음', '보통', '높음', '긴급'].map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="tk-detail-row">
+            <span>담당자</span>
+            <select
+              className="tk-inline-edit"
+              value={ticket.assigneeUid || ''}
+              onChange={(e) => {
+                const m = members.find((mm) => mm.uid === e.target.value);
+                onUpdate({ assigneeUid: e.target.value || null, assigneeName: m?.name || null });
+              }}
+            >
+              <option value="">없음</option>
+              {members.filter((m) => m.uid).map((m) => <option key={m.uid} value={m.uid}>{m.name}</option>)}
+            </select>
+          </div>
+          <div className="tk-detail-row">
+            <span>기한</span>
+            <input
+              className="tk-inline-edit"
+              type="date"
+              value={ticket.dueDate || ''}
+              onChange={(e) => onUpdate({ dueDate: e.target.value || null })}
+            />
+          </div>
           {ticket.parentId && (
             <div className="tk-detail-row">
               <span>상위 티켓</span>
@@ -301,14 +344,27 @@ function TicketDetail({ ticket, tickets, members, projectId, user, onUpdate, onD
           {(ticket.history || []).length > 0 && (
             <div className="tk-detail-section">
               <div className="tk-detail-sec-label">✓ 완료된 태스크 ({ticket.history.length})</div>
-              {[...ticket.history].reverse().map((h, i) => (
-                <div key={i} className="tk-detail-history">
-                  <span className="tk-hist-check">✓</span>
-                  <span className="tk-hist-title">{h.taskTitle}</span>
-                  {h.memberName && <span className="tk-hist-who">@{h.memberName}</span>}
-                  <span className="tk-hist-date">{h.completedAt?.slice(0, 10)}</span>
-                </div>
-              ))}
+              {[...ticket.history].reverse().map((h, i) => {
+                const origIdx = ticket.history.length - 1 - i;
+                return (
+                  <div key={origIdx} className="tk-detail-history">
+                    <span className="tk-hist-check">✓</span>
+                    <span className="tk-hist-title">{h.taskTitle}</span>
+                    {h.memberName && <span className="tk-hist-who">@{h.memberName}</span>}
+                    <span className="tk-hist-date">{h.completedAt?.slice(0, 10)}</span>
+                    <button
+                      className="tk-hist-del"
+                      title="이 기록 삭제"
+                      onClick={() => {
+                        if (!window.confirm('이 완료 기록을 삭제하시겠습니까?')) return;
+                        const next = ticket.history.filter((_, idx) => idx !== origIdx);
+                        onUpdate({ history: next });
+                      }}
+                      style={{ marginLeft: 6, border: 0, background: 'transparent', color: 'var(--ink-mute)', cursor: 'pointer', fontSize: 12 }}
+                    >✕</button>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -414,11 +470,19 @@ export default function TicketTab({ projectId, project, tickets, createTicket, u
   const [drag, setDrag] = useState(null);
   const [panStart, setPanStart] = useState(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
   const [selected, setSelected] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [copied, setCopied] = useState(null);
   const [connectFrom, setConnectFrom] = useState(null);
   const canvasRef = useRef(null);
+  const contentRef = useRef(null);
+  const livePan = useRef(pan);
+
+  // 팬/줌 중에는 setState 없이 transform 을 직접 갱신 → 리렌더 제거 (딜레이 해소)
+  const applyTransform = (px, py, z) => {
+    if (contentRef.current) contentRef.current.style.transform = `translate(${px}px, ${py}px) scale(${z})`;
+  };
 
   // Initialize node positions (from Firestore x/y, or tree layout for new)
   useEffect(() => {
@@ -451,15 +515,15 @@ export default function TicketTab({ projectId, project, tickets, createTicket, u
       setPositions((prev) => ({
         ...prev,
         [drag.ticketId]: {
-          x: drag.origX + e.clientX - drag.startX,
-          y: drag.origY + e.clientY - drag.startY,
+          x: drag.origX + (e.clientX - drag.startX) / zoom,
+          y: drag.origY + (e.clientY - drag.startY) / zoom,
         },
       }));
     };
     const onUp = (e) => {
       const newPos = {
-        x: drag.origX + e.clientX - drag.startX,
-        y: drag.origY + e.clientY - drag.startY,
+        x: drag.origX + (e.clientX - drag.startX) / zoom,
+        y: drag.origY + (e.clientY - drag.startY) / zoom,
       };
       updateTicket(drag.ticketId, newPos);
       setDrag(null);
@@ -472,20 +536,48 @@ export default function TicketTab({ projectId, project, tickets, createTicket, u
     };
   }, [drag]); // eslint-disable-line
 
-  // Global pan handler
+  // Global pan handler — transform 직접 갱신(리렌더 없음), 종료 시 1회 커밋
   useEffect(() => {
     if (!panStart) return;
     const onMove = (e) => {
-      setPan({ x: panStart.panX + e.clientX - panStart.x, y: panStart.panY + e.clientY - panStart.y });
+      const nx = panStart.panX + e.clientX - panStart.x;
+      const ny = panStart.panY + e.clientY - panStart.y;
+      livePan.current = { x: nx, y: ny };
+      applyTransform(nx, ny, zoom);
     };
-    const onUp = () => setPanStart(null);
+    const onUp = () => { setPan(livePan.current); setPanStart(null); };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [panStart]);
+  }, [panStart, zoom]);
+
+  // Ctrl/⌘ + 휠 → 커서 기준 확대/축소 (native 리스너로 passive:false 지정)
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return; // 일반 스크롤은 그대로
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const newZoom = Math.min(2.5, Math.max(0.3, zoom * factor));
+      // 커서 아래 월드 좌표가 고정되도록 pan 보정
+      const wx = (mx - pan.x) / zoom;
+      const wy = (my - pan.y) / zoom;
+      const npx = mx - wx * newZoom;
+      const npy = my - wy * newZoom;
+      livePan.current = { x: npx, y: npy };
+      setZoom(newZoom);
+      setPan({ x: npx, y: npy });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [pan, zoom]);
 
   const handleDragStart = useCallback((e, ticketId) => {
     const pos = positions[ticketId] || { x: 0, y: 0 };
@@ -495,6 +587,7 @@ export default function TicketTab({ projectId, project, tickets, createTicket, u
   const handleCanvasDown = (e) => {
     if (e.target === canvasRef.current || e.currentTarget === e.target) {
       if (connectFrom) { setConnectFrom(null); return; }
+      livePan.current = { x: pan.x, y: pan.y };
       setPanStart({ x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y });
       setSelected(null);
     }
@@ -523,12 +616,18 @@ export default function TicketTab({ projectId, project, tickets, createTicket, u
 
   const handleCreate = async (data) => {
     const ticketCode = `${project?.pf || 'T'}-${String(tickets.length + 1).padStart(3, '0')}`;
+    // 현재 보고 있는 화면 중앙(월드 좌표)에 생성
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const cx = rect ? rect.width / 2 : 300;
+    const cy = rect ? rect.height / 2 : 200;
+    const x = (cx - pan.x) / zoom - NODE_W / 2;
+    const y = (cy - pan.y) / zoom - NODE_H / 2;
     await createTicket({
       ...data,
       ticketCode,
       status: '열림',
-      x: 80 + Math.random() * 500,
-      y: 80 + Math.random() * 200,
+      x,
+      y,
     });
     setShowCreate(false);
   };
@@ -555,7 +654,7 @@ export default function TicketTab({ projectId, project, tickets, createTicket, u
           className={'tk-canvas' + (panStart ? ' panning' : '')}
           onMouseDown={handleCanvasDown}
         >
-          <div style={{ transform: `translate(${pan.x}px, ${pan.y}px)`, position: 'relative', width: 0, height: 0 }}>
+          <div ref={contentRef} style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: '0 0', position: 'relative', width: 0, height: 0 }}>
             <Edges tickets={tickets} positions={positions} />
             {tickets.map((t) => (
               <TicketNode

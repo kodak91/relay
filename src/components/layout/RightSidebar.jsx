@@ -233,7 +233,6 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
 
 function CatchupSection({ messages, onJump, uid, notifPerm, onRequestNotif }) {
   const storageKey = `catchup_dismissed_${uid || 'anon'}`;
-  const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(new Set());
 
   // Reload dismissed set whenever uid (and thus storageKey) becomes available
@@ -269,7 +268,7 @@ function CatchupSection({ messages, onJump, uid, notifPerm, onRequestNotif }) {
 
   return (
     <div className="r-section">
-      <div className="r-hd" style={{ cursor: 'pointer' }} onClick={() => setOpen((v) => !v)}>
+      <div className="r-hd">
         <h4>⚡ 따라잡기</h4>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {notifPerm !== 'granted' && typeof Notification !== 'undefined' && (
@@ -282,10 +281,9 @@ function CatchupSection({ messages, onJump, uid, notifPerm, onRequestNotif }) {
             >전체 무시</button>
           )}
           <span className="cnt">{visible.length}건</span>
-          <span style={{ fontSize: 10, color: 'var(--ink-mute)' }}>{open ? '▲' : '▼'}</span>
         </div>
       </div>
-      {open && (
+      {(
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {visible.length === 0 && (
             <p style={{ fontSize: 12, color: 'var(--ink-mute)', textAlign: 'center', padding: '10px 0' }}>모두 확인했습니다 ✓</p>
