@@ -327,6 +327,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
   const [selectedKBFolderId, setSelectedKBFolderId] = useState(null);
   const internalFileRef = useRef(null);
   const actionsRef = useRef(null);
+  const taWrapRef = useRef(null);
 
   // @멘션 — 입력 시 멤버 목록 팝업, 선택 시 멤버에게 알림
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -851,10 +852,15 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
         )}
 
         {!isDecision && !isVote && !isAssign && !isTicket && (
-          <div className="ta-wrap">
+          <div className="ta-wrap" ref={taWrapRef}>
             <EditorContent editor={editor} />
-            {mentionOpen && (
-              <div className="mention-pop">
+            {mentionOpen && (() => {
+              const r = taWrapRef.current?.getBoundingClientRect();
+              const popStyle = r
+                ? { left: Math.round(r.left + 8), bottom: Math.round(window.innerHeight - r.top + 4) }
+                : {};
+              return (
+              <div className="mention-pop" style={popStyle}>
                 <div className="mention-pop-hd">멤버 멘션 — 클릭 또는 Enter</div>
                 {mentionItems.map((m, i) => (
                   <button
@@ -869,7 +875,8 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
                   </button>
                 ))}
               </div>
-            )}
+              );
+            })()}
             <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
             {showAI && (
               <div className="ai-fab-pop">

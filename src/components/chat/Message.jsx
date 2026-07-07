@@ -169,10 +169,39 @@ function ThreadToggle({ count, hasNew, open, onClick }) {
   );
 }
 
-function Thread({ items, replyValue, onReplyChange, onSend, senderName }) {
+function Thread({ items, replyValue, onReplyChange, onSend, senderName, members = [] }) {
   const { uid, onEditReply, onDeleteReply } = useContext(MsgContext);
   const [editingIndex, setEditingIndex] = useState(null);
   const [editText, setEditText] = useState('');
+
+  // @멘션 — 스레드 답글에서도 멤버 언급
+  const replyRef = useRef(null);
+  const [mOpen, setMOpen] = useState(false);
+  const [mItems, setMItems] = useState([]);
+  const [mIndex, setMIndex] = useState(0);
+
+  const updateMention = (val, caret) => {
+    const before = val.slice(0, caret ?? val.length);
+    const mt = before.match(/@([^\s@]*)$/);
+    if (!mt) { setMOpen(false); return; }
+    const q = mt[1].toLowerCase();
+    const list = (members || []).filter((m) => m.uid && (!q || (m.name || '').toLowerCase().includes(q))).slice(0, 8);
+    setMItems(list); setMIndex(0); setMOpen(list.length > 0);
+  };
+  const pickMention = (m) => {
+    const el = replyRef.current;
+    const caret = el?.selectionStart ?? replyValue.length;
+    const before = replyValue.slice(0, caret);
+    const after = replyValue.slice(caret);
+    const mt = before.match(/@([^\s@]*)$/);
+    if (!mt) { setMOpen(false); return; }
+    const start = caret - mt[0].length;
+    const insert = `@${m.name} `;
+    onReplyChange(replyValue.slice(0, start) + insert + after);
+    setMOpen(false);
+    const pos = start + insert.length;
+    setTimeout(() => { const e = replyRef.current; if (e) { e.focus(); e.setSelectionRange(pos, pos); } }, 0);
+  };
 
   return (
     <div className="thread">
@@ -225,11 +254,41 @@ function Thread({ items, replyValue, onReplyChange, onSend, senderName }) {
       <div className="thread-reply">
         <Avatar name={senderName} size={28} />
         <input
-          placeholder="스레드에 답글…"
+          ref={replyRef}
+          placeholder="스레드에 답글… (@로 멘션)"
           value={replyValue}
-          onChange={(e) => onReplyChange(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && replyValue.trim()) onSend(); }}
+          onChange={(e) => { onReplyChange(e.target.value); updateMention(e.target.value, e.target.selectionStart); }}
+          onKeyDown={(e) => {
+            if (mOpen && mItems.length) {
+              if (e.key === 'ArrowDown') { e.preventDefault(); setMIndex((i) => (i + 1) % mItems.length); return; }
+              if (e.key === 'ArrowUp') { e.preventDefault(); setMIndex((i) => (i - 1 + mItems.length) % mItems.length); return; }
+              if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mItems[mIndex]); return; }
+              if (e.key === 'Escape') { setMOpen(false); return; }
+            }
+            if (e.key === 'Enter' && replyValue.trim()) onSend();
+          }}
         />
+        {mOpen && (() => {
+          const r = replyRef.current?.getBoundingClientRect();
+          const st = r ? { left: Math.round(r.left), bottom: Math.round(window.innerHeight - r.top + 4) } : {};
+          return (
+            <div className="mention-pop" style={st}>
+              <div className="mention-pop-hd">멤버 멘션 — 클릭 또는 Enter</div>
+              {mItems.map((m, i) => (
+                <button
+                  key={m.uid}
+                  className={'mention-item' + (i === mIndex ? ' on' : '')}
+                  onMouseEnter={() => setMIndex(i)}
+                  onMouseDown={(e) => { e.preventDefault(); pickMention(m); }}
+                >
+                  <span className="mention-ava">{(m.name || '?').slice(0, 1)}</span>
+                  <span className="mention-nm">{m.name}</span>
+                  {m.role === 'lead' && <span className="mention-role">팀장</span>}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
         <button className="btn sm accent" onClick={() => replyValue.trim() && onSend()}>전송</button>
       </div>
     </div>
@@ -319,7 +378,7 @@ function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleT
       )}
       <Reactions list={m.reactions} />
       <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-      {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} />}
+      {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
     </>
   );
 
@@ -417,7 +476,7 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
         </div>
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} />}
+        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
       </div>
     </div>
   );
@@ -509,7 +568,7 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
         </div>
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} />}
+        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
       </div>
     </div>
   );
@@ -570,7 +629,7 @@ function ImageMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, on
         )}
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} />}
+        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
       </div>
     </div>
   );
@@ -854,7 +913,7 @@ function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, 
           )}
         </div>
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} />}
+        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
         <Reactions list={m.reactions} />
       </div>
     </div>
@@ -921,7 +980,7 @@ function FileMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onS
         </div>
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} />}
+        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
       </div>
     </div>
   );
@@ -943,7 +1002,7 @@ function CasualMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, o
         </div>
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} />}
+        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
       </div>
     </div>
   );

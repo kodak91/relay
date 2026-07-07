@@ -999,12 +999,12 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 .tags-mini .tag { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); font-size: 11px; padding: 2px 8px; }
 .ta-wrap { position: relative; padding: 8px 12px; }
 .ta { width: 100%; border: 0; background: transparent; outline: none; resize: none; font-size: 14px; color: var(--ink); line-height: 1.5; }
-/* @멘션 팝업 */
+/* @멘션 팝업 — position:fixed 로 조상 overflow/stacking 을 벗어남(좌표는 인라인 지정) */
 .mention-pop {
-  position: absolute; left: 12px; bottom: calc(100% - 2px); z-index: 40;
+  position: fixed; z-index: 3000;
   min-width: 200px; max-width: 280px; max-height: 240px; overflow-y: auto;
   background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--r-2);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.14); padding: 4px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18); padding: 4px;
 }
 .mention-pop-hd { font-size: 10px; color: var(--ink-mute); padding: 4px 8px 6px; font-weight: 700; }
 .mention-item {

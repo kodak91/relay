@@ -190,18 +190,25 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     await addReply(activeProject, mid, { senderName: user?.name, senderUid: user?.uid, text: v, ts: nowHM() });
     setReplyValues((prev) => ({ ...prev, [mid]: '' }));
 
-    // 스레드 알림 — 글 작성자(myThread) + 기존 참여자(allThread)에게. 본인 제외.
+    // 스레드 알림 — @멘션(우선) + 글 작성자(myThread) + 기존 참여자(allThread). 본인·중복 제외.
     const m = messages.find((msg) => msg.id === mid);
     if (m) {
       const authorUid = m.senderUid;
-      const body = m.text || m.title || '';
-      if (authorUid && authorUid !== user?.uid) {
+      const notified = new Set([user?.uid]);
+
+      // @멘션 — 답글에서 언급된 멤버
+      (activeProjectData?.members || [])
+        .filter((mem) => mem.uid && mem.name && v.includes(`@${mem.name}`) && !notified.has(mem.uid))
+        .forEach((mem) => { notified.add(mem.uid); sendNotif(mem.uid, `${user?.name || '팀원'}님이 회원님을 언급했습니다`, v, 'mention'); });
+
+      if (authorUid && !notified.has(authorUid)) {
+        notified.add(authorUid);
         sendNotif(authorUid, '내 글에 새 댓글', `${user?.name || '팀원'}: ${v}`, 'myThread');
       }
-      const participants = new Set(
-        (m.thread || []).map((r) => r.senderUid).filter((u) => u && u !== user?.uid && u !== authorUid)
-      );
-      participants.forEach((u) => sendNotif(u, '참여한 스레드에 새 댓글', `${user?.name || '팀원'}: ${v}`, 'allThread'));
+      (m.thread || [])
+        .map((r) => r.senderUid)
+        .filter((u) => u && !notified.has(u))
+        .forEach((u) => { notified.add(u); sendNotif(u, '참여한 스레드에 새 댓글', `${user?.name || '팀원'}: ${v}`, 'allThread'); });
     }
   };
 
