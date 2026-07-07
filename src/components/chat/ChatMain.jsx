@@ -372,6 +372,13 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       sendNotif(msgData.targetUid, `${FEATURE_TYPES[msgData.type]}이 도착했습니다`, msgData.title || msgData.text, 'featureChat');
     }
 
+    // @멘션 — 언급된 멤버에게 알림 (본인 제외)
+    if (Array.isArray(msgData.mentions)) {
+      msgData.mentions
+        .filter((uid) => uid && uid !== user?.uid)
+        .forEach((uid) => sendNotif(uid, `${user?.name || '팀원'}님이 회원님을 언급했습니다`, msgData.text, 'mention'));
+    }
+
     // Slack: /보고 messages (bot token preferred for edit/delete tracking; fallback to webhook)
     if (msgData.type === 'update') {
       const slackText = `📊 *[${activeProjectData?.name}] 중간 보고* — ${user?.name || '팀원'}\n${msgData.text || ''}`;

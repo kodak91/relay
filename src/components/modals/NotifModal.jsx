@@ -5,6 +5,7 @@ import { useNotifications } from '../../hooks/useNotifications';
 // 알림 카테고리 토글 정의
 const CATEGORY_TOGGLES = [
   { key: 'general', label: '일반 알림', sub: '태스크 배정·승인/결정 결과' },
+  { key: 'mention', label: '@멘션 알림', sub: '채팅에서 나를 @로 언급했을 때' },
   { key: 'featureChat', label: '기능 채팅 알림', sub: '나에게 온 결정·컨펌·투표 요청' },
   { key: 'myThread', label: '내 글 스레드', sub: '내가 쓴 글에 달린 댓글' },
   { key: 'allThread', label: '모든 스레드', sub: '내가 참여한 스레드의 새 댓글' },

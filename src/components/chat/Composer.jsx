@@ -318,6 +318,14 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
   const internalFileRef = useRef(null);
   const actionsRef = useRef(null);
 
+  // @멘션 — 입력 시 멤버 목록 팝업, 선택 시 멤버에게 알림
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionItems, setMentionItems] = useState([]);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const mentionRef = useRef({ open: false, items: [], index: 0 });
+  const selectMentionRef = useRef(null);
+  const closeMentionRef = useRef(null);
+
   const [decisionTitle, setDecisionTitle] = useState('');
   const [decisionOptions, setDecisionOptions] = useState(['', '']);
   const [voteTitle, setVoteTitle] = useState('');
@@ -393,6 +401,14 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
     editorProps: {
       attributes: { class: 'tiptap-ta' },
       handleKeyDown: (_view, event) => {
+        // @멘션 팝업이 열려 있으면 방향키/Enter/Tab/Esc 를 팝업 조작에 사용
+        const ms = mentionRef.current;
+        if (ms.open && ms.items.length > 0) {
+          if (event.key === 'ArrowDown') { event.preventDefault(); setMentionIndex((i) => (i + 1) % ms.items.length); return true; }
+          if (event.key === 'ArrowUp') { event.preventDefault(); setMentionIndex((i) => (i - 1 + ms.items.length) % ms.items.length); return true; }
+          if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); selectMentionRef.current?.(ms.items[ms.index]); return true; }
+          if (event.key === 'Escape') { event.preventDefault(); closeMentionRef.current?.(); return true; }
+        }
         if (event.key === 'Enter' && !event.shiftKey) {
           // Ctrl/Cmd+Enter always sends (even inside a list)
           if (event.ctrlKey || event.metaKey) {
@@ -616,6 +632,11 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
     // CommonMark two-space hard break so line breaks render correctly in chat
     const cleanText = rawForClean.replace(/\\\n/g, '  \n').trim();
     const msg = { type, text: cleanText, tags, importance };
+    // @멘션 대상 추출 → 해당 멤버에게 알림 (본인 제외는 수신측에서 처리)
+    const mentionUids = members
+      .filter((m) => m.uid && m.name && cleanText.includes(`@${m.name}`))
+      .map((m) => m.uid);
+    if (mentionUids.length) msg.mentions = [...new Set(mentionUids)];
     if (type === 'casual') msg.expiresAt = Date.now() + 60 * 60 * 1000;
     if (type === 'approval') {
       msg.status = 'pending';
@@ -669,6 +690,37 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
     if (t !== 'ticket') { setTicketTitle(''); setTicketDesc(''); setTicketAssigneeUid(''); setTicketDue(''); setTicketPriority('보통'); }
   };
 
+  // @멘션 — 커서 앞의 "@질의" 를 감지해 멤버 후보 팝업 갱신
+  const updateMentionState = (ed) => {
+    const { from } = ed.state.selection;
+    const before = ed.state.doc.textBetween(Math.max(0, from - 40), from, '\n', ' ');
+    const m = before.match(/@([^\s@]*)$/);
+    if (!m) { setMentionOpen(false); return; }
+    const q = m[1].toLowerCase();
+    const items = members
+      .filter((mm) => mm.uid && (!q || (mm.name || '').toLowerCase().includes(q)))
+      .slice(0, 8);
+    setMentionItems(items);
+    setMentionIndex(0);
+    setMentionOpen(items.length > 0);
+  };
+
+  // 후보 선택 → 에디터의 "@질의" 를 "@이름 " 으로 치환
+  const selectMention = (member) => {
+    if (!editor || !member) return;
+    const { from } = editor.state.selection;
+    const before = editor.state.doc.textBetween(Math.max(0, from - 40), from, '\n', ' ');
+    const m = before.match(/@([^\s@]*)$/);
+    if (!m) { setMentionOpen(false); return; }
+    const start = from - m[0].length;
+    editor.chain().focus().insertContentAt({ from: start, to: from }, `@${member.name} `).run();
+    setMentionOpen(false);
+  };
+
+  mentionRef.current = { open: mentionOpen, items: mentionItems, index: mentionIndex };
+  selectMentionRef.current = selectMention;
+  closeMentionRef.current = () => setMentionOpen(false);
+
   // Update refs every render so editor callbacks always see fresh state
   onEnterRef.current = () => {
     if (isPMAI) handleSend();
@@ -679,6 +731,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
     const md = ed.storage.markdown.getMarkdown();
     setText(md);
     checkSlashCommand(md);
+    updateMentionState(ed);
   };
 
   const tags = extractLeadingTags(text);
@@ -791,6 +844,23 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
         {!isDecision && !isVote && !isAssign && !isTicket && (
           <div className="ta-wrap">
             <EditorContent editor={editor} />
+            {mentionOpen && (
+              <div className="mention-pop">
+                <div className="mention-pop-hd">멤버 멘션 — 클릭 또는 Enter</div>
+                {mentionItems.map((m, i) => (
+                  <button
+                    key={m.uid}
+                    className={'mention-item' + (i === mentionIndex ? ' on' : '')}
+                    onMouseEnter={() => setMentionIndex(i)}
+                    onMouseDown={(e) => { e.preventDefault(); selectMention(m); }}
+                  >
+                    <span className="mention-ava">{(m.name || '?').slice(0, 1)}</span>
+                    <span className="mention-nm">{m.name}</span>
+                    {m.role === 'lead' && <span className="mention-role">팀장</span>}
+                  </button>
+                ))}
+              </div>
+            )}
             <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
             {showAI && (
               <div className="ai-fab-pop">

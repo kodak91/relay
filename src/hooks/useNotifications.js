@@ -7,10 +7,11 @@ import { db } from '../lib/firebase';
 // - featureChat: 내가 대상인 기능(/) 메시지 (결정/승인/투표 요청)
 // - myThread   : 내 글에 달린 스레드(댓글)
 // - allThread  : 내가 참여한 스레드의 새 댓글
-export const DEFAULT_NOTIF_PREFS = { general: true, featureChat: true, myThread: true, allThread: false };
+export const DEFAULT_NOTIF_PREFS = { general: true, featureChat: true, mention: true, myThread: true, allThread: false };
 
 // 알림 문서의 category → prefs 키 매핑 (누락 시 general 취급)
 function prefKeyFor(category) {
+  if (category === 'mention') return 'mention';
   if (category === 'myThread') return 'myThread';
   if (category === 'allThread') return 'allThread';
   if (category === 'featureChat') return 'featureChat';
