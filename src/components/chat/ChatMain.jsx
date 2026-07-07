@@ -68,6 +68,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const [openThreads, setOpenThreads] = useState(new Set());
   const [replyValues, setReplyValues] = useState({});
   const [dragging, setDragging] = useState(false);
+  const dragCounter = useRef(0);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
@@ -469,9 +470,24 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     }
   };
 
-  const onDragOver = (e) => { e.preventDefault(); setDragging(true); };
-  const onDragLeave = (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); };
-  const onDrop = (e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); };
+  // 드래그 오버레이 — enter/leave 카운터로 관리(창 밖 이탈·중첩요소로 멈추는 버그 방지)
+  const isFileDrag = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+  const onDragEnter = (e) => { if (!isFileDrag(e)) return; e.preventDefault(); dragCounter.current += 1; setDragging(true); };
+  const onDragOver = (e) => { if (!isFileDrag(e)) return; e.preventDefault(); };
+  const onDragLeave = (e) => {
+    if (!isFileDrag(e)) return;
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) setDragging(false);
+  };
+  const onDrop = (e) => { e.preventDefault(); dragCounter.current = 0; setDragging(false); if (e.dataTransfer?.files?.length) handleFiles(e.dataTransfer.files); };
+
+  // 파일 드롭 실패/창 밖 이탈 등으로 오버레이가 남는 경우 강제 해제
+  useEffect(() => {
+    const reset = () => { dragCounter.current = 0; setDragging(false); };
+    window.addEventListener('dragend', reset);
+    window.addEventListener('drop', reset);
+    return () => { window.removeEventListener('dragend', reset); window.removeEventListener('drop', reset); };
+  }, []);
 
   const editMsg = async (mid, newText) => {
     await editMessage(activeProject, mid, newText);
@@ -666,9 +682,9 @@ ${fileLines || '(없음)'}`;
   }
 
   return (
-    <main className="col-mid" onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+    <main className="col-mid" onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
       {dragging && (
-        <div className="drop-overlay">
+        <div className="drop-overlay" style={{ pointerEvents: 'none' }}>
           <div className="drop-inner">
             <div style={{ fontSize: 40 }}>📎</div>
             <div>여기에 파일을 놓으세요</div>

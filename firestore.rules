@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ───── helpers ─────
+    function signedIn() { return request.auth != null; }
+    function isUser(uid) { return signedIn() && request.auth.uid == uid; }
+    function projectData(pid) {
+      return get(/databases/$(database)/documents/projects/$(pid)).data;
+    }
+    function memberUids(pid) { return projectData(pid).memberUids; }
+    function isMember(pid) {
+      return signedIn() && request.auth.uid in memberUids(pid);
+    }
+    // 팀장(lead) = 워크스페이스 ownerId. delegateLead 가 members[].role 과 ownerId 를
+    // 항상 동시에 갱신하므로 lead 는 언제나 1명이며 ownerId 와 일치.
+    function isLead(pid) {
+      return signedIn() && projectData(pid).ownerId == request.auth.uid;
+    }
+    // 변경된 필드가 명시한 것들뿐인지 검사
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // ───── 사용자 프로필 ─────
+    match /users/{uid} {
+      allow read: if signedIn();          // 팀원 이름/직책을 곳곳에서 조회
+      allow create, update: if isUser(uid);
+      allow delete: if false;
+
+      // 개인 업무 — 배정 때문에 타인 쓰기 허용 (내부 직원 전제)
+      match /tasks/{taskId} {
+        allow read, write: if signedIn();
+      }
+    }
+
+    // ───── 알림 ─────
+    match /notifications/{uid}/items/{itemId} {
+      allow read, update, delete: if isUser(uid);  // 본인만 읽고 읽음처리
+      allow create: if signedIn();                 // 타인에게 알림 전송
+    }
+
+    // ───── 워크스페이스 ─────
+    match /projects/{pid} {
+      // 초대코드 검색·가입을 위해 로그인 사용자는 문서 조회 허용
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.auth.uid in request.resource.data.memberUids;
+
+      allow update: if isMember(pid)
+        // 비멤버 가입신청: pendingMembers 외에는 못 건드림
+        || (signedIn()
+            && request.resource.data.memberUids == resource.data.memberUids
+            && onlyChanges(['pendingMembers']));
+
+      allow delete: if false;             // 앱은 soft-delete(status 변경)만 사용
+
+      // ── 민감 데이터 1: 성과평가(HR) — 팀장만 열람/실행 ──
+      // 서버(api/pr-evaluate)도 팀장 idToken 으로 쓰므로 isLead 로 허용됨.
+      match /evaluations/{document=**} {
+        allow read, write: if isLead(pid);
+      }
+
+      // ── 민감 데이터 2: 역할 캡슐(Echo) — 팀장 전체 / 팀원은 본인 것만 ──
+      match /echoCapsules/{memberId} {
+        allow read: if isLead(pid) || isUser(memberId);
+        allow write: if isLead(pid);               // 캡슐 본문은 서버(팀장 토큰)만 갱신
+
+        // 본인 미캡처 질문 답변은 팀원이 직접 작성
+        match /questions/{qId} {
+          allow read, write: if isLead(pid) || isUser(memberId);
+        }
+        // versions / reviewFlags / agentLogs 등 — 열람은 팀장+본인, 쓰기는 팀장(서버)만
+        match /{sub=**} {
+          allow read: if isLead(pid) || isUser(memberId);
+          allow write: if isLead(pid);
+        }
+      }
+
+      // ── 그 외 모든 하위 컬렉션 — 해당 워크스페이스 멤버 ──
+      // (messages·tasks·tickets·meetings·kbFiles·kbFolders·bookmarkGroups·notionPages 등)
+      // evaluations/echoCapsules 는 위 전용 규칙이 전담하므로 여기서 제외.
+      match /{collection}/{document=**} {
+        allow read, write: if isMember(pid)
+          && collection != 'evaluations'
+          && collection != 'echoCapsules';
+      }
+    }
+  }
+}

@@ -1,12 +1,18 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { claudeComplete } from '../../lib/claude';
 import { useMeetings } from '../../hooks/useMeetings';
+import { useMeetingRecorder } from '../../hooks/useMeetingRecorder';
+import { uploadFile } from '../../lib/uploadFile';
 import { serverTimestamp } from 'firebase/firestore';
 
 function fmtTime(totalSeconds) {
   const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
   const s = (totalSeconds % 60).toString().padStart(2, '0');
   return `${m}:${s}`;
+}
+
+function activeSpeakerName(members, uid) {
+  return members.find((m) => m.uid === uid)?.name || '나';
 }
 
 export function Avatar({ name, size = 30 }) {
@@ -42,7 +48,7 @@ function extractLive(lines) {
 
 // ─── Live phase ──────────────────────────────────────────────────────────────
 
-function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActiveSpeaker, members, agenda, elapsed, tsScrollRef, onAddLine, onEnd, generating, presence }) {
+function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActiveSpeaker, members, agenda, elapsed, tsScrollRef, onAddLine, onEnd, generating, presence, recording, interim, recError, speechSupported, uploadingRec, onToggleRecording }) {
   const extracted = extractLive(transcript);
 
   const handleKeyDown = (e) => {
@@ -131,6 +137,15 @@ function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActi
             </div>
           ))}
         </div>
+        {(recording || interim || recError) && (
+          <div className="m-rec-strip" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', fontSize: 12, color: recError ? 'var(--rose)' : 'var(--ink-3)', background: recording ? 'oklch(0.96 0.04 25)' : 'var(--surface-2)', borderRadius: 'var(--r-2)', margin: '0 0 6px' }}>
+            {recording && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--rose)', flexShrink: 0, animation: 'pulse 1.2s infinite' }} />}
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {recError || (interim ? `“${interim}”` : (recording ? `녹음 중 · ${activeSpeakerName(members, activeSpeaker)} 발화로 기록` : ''))}
+            </span>
+            {uploadingRec && <span style={{ flexShrink: 0 }}>저장 중…</span>}
+          </div>
+        )}
         <div className="m-input-row">
           <select className="m-speaker-select" value={activeSpeaker} onChange={(e) => setActiveSpeaker(e.target.value)}>
             {members.map((m) => <option key={m.uid} value={m.uid}>{m.name}</option>)}
@@ -143,6 +158,14 @@ function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActi
             onKeyDown={handleKeyDown}
             rows={2}
           />
+          <button
+            className={'btn sm' + (recording ? '' : ' ghost')}
+            style={recording ? { background: 'var(--rose)', borderColor: 'var(--rose)', color: '#fff' } : {}}
+            onClick={onToggleRecording}
+            title={speechSupported ? '녹음 + 자동 받아쓰기' : '녹음 (이 브라우저는 자동 받아쓰기 미지원)'}
+          >
+            {recording ? '■ 녹음 중지' : '🎙 녹음'}
+          </button>
           <button className="btn sm accent" onClick={onAddLine} disabled={!inputText.trim()}>추가</button>
         </div>
         <div className="m-foot">
@@ -165,7 +188,7 @@ function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActi
 
 // ─── Review phase ────────────────────────────────────────────────────────────
 
-function ReviewPhase({ meetingTitle, participants, transcript, minutes, generating, elapsed, onPost, onClose }) {
+function ReviewPhase({ meetingTitle, participants, transcript, minutes, generating, elapsed, onPost, onClose, recordingUrl, uploadingRec }) {
   const [copied, setCopied] = useState(false);
 
   const buildText = () => {
@@ -216,6 +239,16 @@ function ReviewPhase({ meetingTitle, participants, transcript, minutes, generati
         </div>
       ) : (
         <div className="m-review-grid">
+          {(recordingUrl || uploadingRec) && (
+            <section className="rv-section rv-full">
+              <h4>🎙 회의 녹음</h4>
+              {uploadingRec ? (
+                <p style={{ fontSize: 13, color: 'var(--ink-3)', margin: 0 }}>녹음 파일 저장 중…</p>
+              ) : (
+                <audio controls src={recordingUrl} style={{ width: '100%' }} />
+              )}
+            </section>
+          )}
           {minutes?.summary && (
             <section className="rv-section rv-full">
               <h4>📝 요약</h4>
@@ -375,6 +408,39 @@ export function MeetingLiveModal({ open, onClose, meeting, members = [], user, p
     setInputText('');
   };
 
+  // 실시간 받아쓰기 → 현재 발화자 이름으로 발화 기록 추가 (음성 → 회의록 파이프라인)
+  const elapsedRef = useRef(elapsed);
+  useEffect(() => { elapsedRef.current = elapsed; }, [elapsed]);
+  const activeSpeakerRef = useRef(activeSpeaker);
+  useEffect(() => { activeSpeakerRef.current = activeSpeaker; }, [activeSpeaker]);
+  const handleDictated = useCallback((text) => {
+    if (!meeting?.id || !text) return;
+    const sp = allMembers.find((m) => m.uid === activeSpeakerRef.current) || { name: user?.name || '나', uid: user?.uid || 'me' };
+    addLiveLine(meeting.id, { uid: sp.uid, name: sp.name, text, ts: fmtTime(elapsedRef.current), voice: true }).catch(() => {});
+  }, [meeting?.id, allMembers, user, addLiveLine]);
+
+  const recorder = useMeetingRecorder({ onFinalText: handleDictated });
+  const [uploadingRec, setUploadingRec] = useState(false);
+
+  const persistRecording = useCallback(async (blob) => {
+    if (!blob || blob.size === 0 || !meeting?.id) return;
+    try {
+      setUploadingRec(true);
+      const file = new File([blob], `meeting_${meeting.id}_${Date.now()}.webm`, { type: blob.type || 'audio/webm' });
+      const url = await uploadFile(file);
+      await updateMeeting(meeting.id, { recordingUrl: url });
+    } catch (e) {
+      console.warn('녹음 저장 실패:', e.message);
+    } finally {
+      setUploadingRec(false);
+    }
+  }, [meeting?.id, updateMeeting]);
+
+  const toggleRecording = useCallback(() => {
+    if (recorder.recording) recorder.stop();
+    else recorder.start(persistRecording);
+  }, [recorder, persistRecording]);
+
   const endMeeting = async () => {
     // 이미 다른 사람이 종료한 경우 덮어쓰기 방지
     if (currentStatus === 'done') {
@@ -383,6 +449,7 @@ export function MeetingLiveModal({ open, onClose, meeting, members = [], user, p
       return;
     }
     setShowEndConfirm(false);
+    if (recorder.recording) recorder.stop(); // 녹음 종료 → 오디오 업로드
     setGenerating(true);
     setPhase('review');
     try {
@@ -495,6 +562,12 @@ ${transcriptText || '(기록된 발화 없음)'}
             onEnd={() => setShowEndConfirm(true)}
             generating={generating}
             presence={presence}
+            recording={recorder.recording}
+            interim={recorder.interim}
+            recError={recorder.error}
+            speechSupported={recorder.speechSupported}
+            uploadingRec={uploadingRec}
+            onToggleRecording={toggleRecording}
           />
         )}
         {phase === 'review' && (
@@ -507,6 +580,8 @@ ${transcriptText || '(기록된 발화 없음)'}
             elapsed={elapsed}
             onPost={postToChat}
             onClose={onClose}
+            recordingUrl={liveMeetingData?.recordingUrl || meeting?.recordingUrl}
+            uploadingRec={uploadingRec}
           />
         )}
       </div>

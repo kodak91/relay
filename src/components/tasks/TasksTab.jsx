@@ -166,14 +166,23 @@ function TicketPicker({ tickets, onLink }) {
 function TaskRow({ task, onToggle, tickets = [], onLinkTicket, onUpdateDetail }) {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState(task.detail || '');
+  const [editingDate, setEditingDate] = useState(false);
   const detailRef = useRef(null);
-  const isOverdue = !task.done && taskDate(task) < new Date().toISOString().slice(0, 10);
+  const curDate = taskDate(task);
+  const isOverdue = !task.done && curDate < new Date().toISOString().slice(0, 10);
   const ticket = tickets.find((t) => t.id === task.ticketId)
     || (task.ticketCode ? { id: task.ticketId, ticketCode: task.ticketCode, title: task.ticketTitle || '' } : null);
 
   const saveDetail = () => {
-    if (detail !== (task.detail || '')) onUpdateDetail?.(task.id, detail);
+    if (detail !== (task.detail || '')) onUpdateDetail?.(task.id, { detail });
   };
+
+  // 날짜(마감일) 편집 — 날짜 클릭 → date input, 선택 즉시 저장
+  const changeDate = (newDate) => {
+    setEditingDate(false);
+    if (newDate && newDate !== curDate) onUpdateDetail?.(task.id, { date: newDate });
+  };
+  const dateLabel = curDate?.slice(5).replace('-', '/') || '날짜';
 
   useEffect(() => {
     if (!expanded || !detailRef.current) return;
@@ -199,6 +208,25 @@ function TaskRow({ task, onToggle, tickets = [], onLinkTicket, onUpdateDetail })
           {task.title}
         </span>
         {isOverdue && <span className="tt-overdue-tag">지연</span>}
+        {editingDate ? (
+          <input
+            type="date"
+            className="tt-date-edit"
+            defaultValue={curDate}
+            autoFocus
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => changeDate(e.target.value)}
+            onBlur={() => setEditingDate(false)}
+          />
+        ) : (
+          <span
+            className="tt-date-pill"
+            title="클릭해서 마감일 변경"
+            onClick={(e) => { e.stopPropagation(); setEditingDate(true); }}
+          >
+            📅 {dateLabel}
+          </span>
+        )}
         {ticket ? (
           <span
             className="tt-ticket-badge"
@@ -375,9 +403,9 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
                   ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null, ticketProjectId: projectId }
                   : { ticketId: null, ticketCode: null, ticketTitle: null, ticketProjectId: null }, task);
               }}
-              onUpdateDetail={(taskId, detail) => {
+              onUpdateDetail={(taskId, fields) => {
                 const task = tasks.find((tk) => tk.id === taskId);
-                onUpdateTask(taskId, { detail }, task);
+                onUpdateTask(taskId, fields, task);
               }} />
           ))
         }
@@ -400,9 +428,9 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
                     ? { ticketId, ticketCode: lk?.ticketCode || null, ticketTitle: lk?.title || null, ticketProjectId: projectId }
                     : { ticketId: null, ticketCode: null, ticketTitle: null, ticketProjectId: null }, task);
                 }}
-                onUpdateDetail={(taskId, detail) => {
+                onUpdateDetail={(taskId, fields) => {
                   const task = tasks.find((tk) => tk.id === taskId);
-                  onUpdateTask(taskId, { detail }, task);
+                  onUpdateTask(taskId, fields, task);
                 }} />
             ))}
           </div>
