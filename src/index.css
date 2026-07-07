@@ -1003,9 +1003,10 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
 .mention-pop {
   position: fixed; z-index: 3000;
   min-width: 200px; max-width: 280px; max-height: 240px; overflow-y: auto;
-  background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--r-2);
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-2);
   box-shadow: 0 8px 24px rgba(0,0,0,0.18); padding: 4px;
 }
+[data-theme="dark"] .mention-pop { background: oklch(0.28 0.015 270); }
 .mention-pop-hd { font-size: 10px; color: var(--ink-mute); padding: 4px 8px 6px; font-weight: 700; }
 .mention-item {
   display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
