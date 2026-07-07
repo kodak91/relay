@@ -145,6 +145,17 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     if (distFromBottom < 150) el.scrollTop = el.scrollHeight;
   }, [messages.length, loading]);
 
+  // 채팅 탭으로 (다른 탭에서) 돌아올 때 최하단으로 — 워크스페이스 진입과 동일하게 시작.
+  // chat-scroll 이 새로 마운트되면 스크롤이 최상단이므로 최하단으로 재정렬.
+  useEffect(() => {
+    if (chatTab !== 'chat' || loading) return;
+    requestAnimationFrame(() => {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    });
+    didInitScrollRef.current = true;
+  }, [chatTab, loading]);
+
   const filteredMessages = useMemo(() => {
     const now = Date.now();
     const live = messages.filter((m) => !m.expiresAt || m.expiresAt > now);
