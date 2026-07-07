@@ -11,12 +11,20 @@ export function formatTaskDate(date = new Date()) {
   return `${y}-${m}-${d}`;
 }
 
+// 마감일(deadline) — 오늘부터 이 날까지 완료해야 하는 기한
 export function taskDate(t) {
   if (t.date) return t.date;
   if (t.dueDate) return t.dueDate;
   if (t.due && /^\d{4}-\d{2}-\d{2}$/.test(t.due)) return t.due;
   const ts = t.createdAt?.toDate?.();
   return ts ? formatTaskDate(ts) : formatTaskDate();
+}
+
+// 완료 처리된 날짜 — 히스토리/오늘 배치는 이 값 기준(완료한 날의 태스크로 취급).
+// 레거시(완료일 미기록) 데이터는 마감일로 폴백.
+export function taskCompletedDate(t) {
+  if (t.completedDate) return t.completedDate;
+  return taskDate(t);
 }
 
 function sortTasks(items) {
@@ -90,10 +98,12 @@ export function useTeamTasks(members, projectId) {
 
   const toggleTask = async (uid, taskId, done, task) => {
     const target = task || findTask(uid, taskId);
+    // 완료 시 완료일 기록(완료한 날의 태스크로 배치), 해제 시 제거
+    const fields = { done, completedDate: done ? formatTaskDate() : null };
     if (target?._source === 'project') {
-      await updateDoc(doc(db, 'projects', target._projectId || projectId, 'tasks', taskId), { done });
+      await updateDoc(doc(db, 'projects', target._projectId || projectId, 'tasks', taskId), fields);
     } else {
-      await updateDoc(doc(db, 'users', uid, 'tasks', taskId), { done });
+      await updateDoc(doc(db, 'users', uid, 'tasks', taskId), fields);
     }
     if (target?.ticketId && target?.ticketProjectId) {
       const ticketRef = doc(db, 'projects', target.ticketProjectId, 'tickets', target.ticketId);

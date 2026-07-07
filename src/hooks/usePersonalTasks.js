@@ -100,7 +100,8 @@ export function usePersonalTasks(uid) {
 
   const toggleTask = async (taskId, done) => {
     const task = tasks.find((t) => t.id === taskId);
-    await updateDoc(doc(db, 'users', uid, 'tasks', taskId), { done });
+    // 완료 시 완료일 기록(완료한 날 기준 배치), 해제 시 제거
+    await updateDoc(doc(db, 'users', uid, 'tasks', taskId), { done, completedDate: done ? formatTaskDate() : null });
     if (task?.ticketId && task?.ticketProjectId) {
       const ticketRef = doc(db, 'projects', task.ticketProjectId, 'tickets', task.ticketId);
       try {

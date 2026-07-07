@@ -10,7 +10,7 @@ function fmtDateLabel(date) {
   const days = ['일', '월', '화', '수', '목', '금', '토'];
   return `${d.getDate()}일 (${days[d.getDay()]})`;
 }
-import { useTeamTasks, taskDate, formatTaskDate, PROJECT_TASK_UID } from '../../hooks/useTeamTasks';
+import { useTeamTasks, taskDate, taskCompletedDate, formatTaskDate, PROJECT_TASK_UID } from '../../hooks/useTeamTasks';
 
 function getWeekDates() {
   const now = new Date();
@@ -41,23 +41,29 @@ function Dashboard({ memberTasks, members, today }) {
   const weekDates = useMemo(() => getWeekDates(), []);
 
   const allTasks = useMemo(() => Object.values(memberTasks).flat(), [memberTasks]);
-  const todayTasks = useMemo(() => allTasks.filter((t) => taskDate(t) === today), [allTasks, today]);
-  const todayDoneCount = todayTasks.filter((t) => t.done).length;
-  const todayRate = todayTasks.length > 0 ? todayDoneCount / todayTasks.length : 0;
+  // 오늘 달성률 = 오늘 완료 / (오늘 완료 + 오늘까지 마감이지만 미완료)
+  const doneToday = useMemo(() => allTasks.filter((t) => t.done && taskCompletedDate(t) === today), [allTasks, today]);
+  const openDueToday = useMemo(() => allTasks.filter((t) => !t.done && taskDate(t) <= today), [allTasks, today]);
+  const todayDoneCount = doneToday.length;
+  const todayRelevant = doneToday.length + openDueToday.length;
+  const todayRate = todayRelevant > 0 ? todayDoneCount / todayRelevant : 0;
 
+  // 주간: 완료는 완료일 기준, 미완료는 마감일 기준으로 각 날짜에 집계
   const weekStats = useMemo(() => weekDates.map((date) => {
-    const dt = allTasks.filter((t) => taskDate(t) === date);
-    return { date, total: dt.length, done: dt.filter((t) => t.done).length };
+    const doneOn = allTasks.filter((t) => t.done && taskCompletedDate(t) === date).length;
+    const openDue = allTasks.filter((t) => !t.done && taskDate(t) === date).length;
+    return { date, total: doneOn + openDue, done: doneOn };
   }), [allTasks, weekDates]);
 
   const weekDone = weekStats.reduce((s, d) => s + d.done, 0);
   const weekTotal = weekStats.reduce((s, d) => s + d.total, 0);
   const weekRate = weekTotal > 0 ? weekDone / weekTotal : 0;
 
+  // 오늘의 MVP = 오늘 완료한 태스크가 가장 많은 멤버
   const mvp = useMemo(() => {
     let best = null, bestCount = 0;
     members.forEach((m) => {
-      const cnt = (memberTasks[m.uid] || []).filter((t) => taskDate(t) === today && t.done).length;
+      const cnt = (memberTasks[m.uid] || []).filter((t) => t.done && taskCompletedDate(t) === today).length;
       if (cnt > bestCount) { bestCount = cnt; best = m; }
     });
     return { member: best, count: bestCount };
@@ -75,7 +81,7 @@ function Dashboard({ memberTasks, members, today }) {
         </div>
         <div className="tt-dash-info">
           <div className="tt-dash-label">오늘 달성률</div>
-          <div className="tt-dash-val">{todayDoneCount} / {todayTasks.length} 완료</div>
+          <div className="tt-dash-val">{todayDoneCount} / {todayRelevant} 완료</div>
         </div>
       </div>
 
@@ -344,22 +350,30 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
     });
   }, []);
 
-  const todayTasks = useMemo(() => tasks.filter((t) => taskDate(t) === today), [tasks, today]);
+  // 마감일(deadline) 모델:
+  // - 진행 중: 미완료 && 마감일 >= 오늘 (오늘부터 마감일까지 매일 노출)
+  // - 지연: 미완료 && 마감일 < 오늘
+  // - 완료: 완료한 날짜(completedDate) 기준 배치 (오늘 완료 / 과거는 히스토리)
+  const activeTasks = useMemo(() => tasks.filter((t) => !t.done && taskDate(t) >= today), [tasks, today]);
   const overdueTasks = useMemo(() => tasks.filter((t) => !t.done && taskDate(t) < today), [tasks, today]);
-  const todayDone = todayTasks.filter((t) => t.done).length;
+  const completedToday = useMemo(() => tasks.filter((t) => t.done && taskCompletedDate(t) === today), [tasks, today]);
+  // "오늘" 리스트 = 진행 중(미완료) + 오늘 완료
+  const todayTasks = useMemo(() => [...activeTasks, ...completedToday], [activeTasks, completedToday]);
+  const todayDone = completedToday.length;
   const todayTotal = todayTasks.length;
   const pct = todayTotal > 0 ? todayDone / todayTotal : 0;
 
+  // 히스토리 = 완료 태스크 중 완료일이 과거인 것 → 완료일 기준 그룹
   const historyByDate = useMemo(() => {
-    const past = tasks.filter((t) => taskDate(t) < today);
+    const past = tasks.filter((t) => t.done && taskCompletedDate(t) < today);
     const groups = {};
     past.forEach((t) => {
-      const d = taskDate(t);
+      const d = taskCompletedDate(t);
       if (!groups[d]) groups[d] = [];
       groups[d].push(t);
     });
     return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a));
-  }, [tasks]);
+  }, [tasks, today]);
 
   const historyByYearMonth = useMemo(() => {
     const groups = {};
@@ -386,10 +400,10 @@ function MemberColumn({ member, tasks, onToggle, onUpdateTask, tickets, projectI
         <div className="tt-progress-fill" style={{ width: `${pct * 100}%` }} />
       </div>
 
-      <div className="tt-sec-label">오늘 {todayDone}/{todayTotal}</div>
+      <div className="tt-sec-label">진행 중 {todayDone}/{todayTotal}</div>
       <div className="tt-task-list">
         {todayTasks.length === 0
-          ? <div className="tt-empty">오늘 태스크 없음</div>
+          ? <div className="tt-empty">진행 중인 태스크 없음</div>
           : todayTasks.map((t) => (
             <TaskRow key={t.id} task={t} tickets={tickets}
               onToggle={(id, done) => {
