@@ -38,10 +38,12 @@ export default function Topbar({ project, projects, onSearchOpen, onHamburger })
         <button className="mob-hamburger" onClick={onHamburger} aria-label="메뉴">☰</button>
         <div className="brand">
           <img src={relaySymbol} alt="Relay" className="brand-symbol" />
-          <span style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.04em', color: 'var(--accent)' }}>
+          <span className="brand-word" style={{ fontSize: 20, fontWeight: 900, letterSpacing: '-0.04em', color: 'var(--accent)' }}>
             Relay
           </span>
         </div>
+        {/* 모바일: 현재 워크스페이스/채널 컨텍스트 표시 */}
+        <div className="topbar-mob-ctx">{aiActive ? 'Relay AI' : (project?.name || '채팅')}</div>
 
         <div className="center">
           <div className="crumb">
@@ -61,6 +63,7 @@ export default function Topbar({ project, projects, onSearchOpen, onHamburger })
         </div>
 
         <div className="right">
+          <button className="mob-search-btn" onClick={onSearchOpen} aria-label="검색">⌕</button>
           <div className="user-menu-wrap">
             <button className="avatar-me" style={{ background: user?.photoURL ? 'transparent' : 'oklch(0.45 0.20 270)', position: 'relative', overflow: user?.photoURL ? 'hidden' : 'visible', padding: 0 }} onClick={openMenu}>
               {user?.photoURL ? (
