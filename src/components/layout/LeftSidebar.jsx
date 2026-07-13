@@ -15,7 +15,7 @@ const PROJECT_COLORS = [
   'oklch(0.48 0.21 270)',
 ];
 
-export default function LeftSidebar({ mobileOpen, onMobileClose }) {
+export default function LeftSidebar({ mobileOpen, onMobileClose, onMobileNav }) {
   const { activeProject, setActiveProject, activeChannel, setActiveChannel, user } = useAppStore();
   const { projects, updateProject, deleteProject, joinByCode } = useProjects(user?.uid);
   const active = projects.filter((p) => p.status !== '보관' && p.status !== '삭제됨');
@@ -84,8 +84,18 @@ export default function LeftSidebar({ mobileOpen, onMobileClose }) {
   return (
     <aside className={'col-left' + (mobileOpen ? ' mob-open' : '')}>
       <div className="mob-sidebar-hd">
-        <span style={{ fontWeight: 700, fontSize: 14 }}>워크스페이스</span>
+        <span style={{ fontWeight: 700, fontSize: 14 }}>메뉴</span>
         <button className="mob-sidebar-hd-close" onClick={onMobileClose}>✕</button>
+      </div>
+
+      {/* 모바일 전용 바로가기 — 하단 탭바에 없는 보조 섹션 */}
+      <div className="mob-quicknav">
+        <button onClick={() => { onMobileNav?.('notion'); onMobileClose?.(); }}>
+          <span className="q-ico">🔖</span><span>북마크</span>
+        </button>
+        <button onClick={() => { onMobileNav?.('work'); onMobileClose?.(); }}>
+          <span className="q-ico">✓</span><span>내 작업 · 따라잡기</span>
+        </button>
       </div>
       <div className="hd">
         <h3>워크스페이스</h3>

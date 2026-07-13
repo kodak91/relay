@@ -719,7 +719,7 @@ ${fileLines || '(없음)'}`;
 
       <div className="chat-head">
         <div className="chat-title">
-          <span style={{ fontWeight: 800, fontSize: 15 }}>{activeProjectData?.name || activeProject}</span>
+          <span className="chat-ws-name" style={{ fontWeight: 800, fontSize: 15 }}>{activeProjectData?.name || activeProject}</span>
           {/* Desktop: 팀장 + 멤버관리 */}
           <span className="chat-lead-info">
             {activeProjectData?.leadName && <span>팀장 {activeProjectData.leadName} · </span>}

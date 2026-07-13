@@ -3486,20 +3486,28 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   .composer-act-btn { min-width: 38px; height: 38px; }
   .send { min-height: 40px; }
 
-  /* ── 채팅 헤더 탭 스크롤 ── */
-  .chat-tabs {
-    overflow-x: auto; -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-  .chat-tabs::-webkit-scrollbar { display: none; }
-  .chat-tab { white-space: nowrap; flex-shrink: 0; }
-
-  /* ── 채팅 본문 ── */
-  .chat-head { padding: 8px 12px; }
+  /* ── 채팅 헤더: 상단 탭·중복 워크스페이스명 숨김(하단 탭바/상단바로 대체) ── */
+  .chat-tabs { display: none !important; }        /* 섹션 이동은 하단 탭바로 단일화 */
+  .chat-ws-name { display: none !important; }      /* 워크스페이스명은 상단바에만 */
+  .chat-head { padding: 6px 12px; min-height: 0; }
   .chat-lead-info { display: none !important; }
   .chat-member-btn-mob { display: inline-flex !important; align-items: center; }
   .chat-scroll { padding: 12px 14px 10px; }
   .thread-reply input { font-size: 16px; }
+
+  /* ── 드로어 모바일 바로가기 ── */
+  .mob-quicknav {
+    display: flex !important; gap: 8px; padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .mob-quicknav button {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 10px 8px; border: 1px solid var(--border); border-radius: var(--r-2);
+    background: var(--surface-2); color: var(--ink); font-size: 12px; font-weight: 600;
+    cursor: pointer; -webkit-tap-highlight-color: transparent;
+  }
+  .mob-quicknav button:active { background: var(--hover); }
+  .mob-quicknav .q-ico { font-size: 15px; }
 
   /* ── 모달 → 바텀시트 ── */
   .modal-overlay { align-items: flex-end; padding: 0; }
@@ -3526,4 +3534,5 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   .mob-sidebar-hd { display: none !important; }
   .mob-search-btn { display: none !important; }
   .topbar-mob-ctx { display: none !important; }
+  .mob-quicknav { display: none !important; }
 }

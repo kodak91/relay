@@ -47,18 +47,30 @@ function ProtectedApp() {
 
   useEffect(() => { setMobileDrawerOpen(false); }, [activeProject, activeChannel]);
 
+  // 하단 탭바 = 워크스페이스 내 콘텐츠 이동(단일 소스). 보조 섹션은 드로어로.
   const mobileActiveTab = mobilePanelOpen ? 'work'
     : activeChannel === 'ai' ? 'ai'
-    : (chatTab === 'kb' || chatTab === 'notion') ? 'kb'
+    : activeChannel === 'echo' ? ''      // Scope 는 하단 강조 없음
+    : chatTab === 'kb' ? 'kb'
+    : chatTab === 'tickets' ? 'tickets'
+    : chatTab === 'tasks' ? 'tasks'
+    : chatTab === 'notion' ? ''          // 북마크는 드로어 전용 → 하단 강조 없음
     : 'chat';
 
   const handleMobileTab = (tabId) => {
     setMobilePanelOpen(false);
-    if (tabId === 'projects') { setMobileDrawerOpen(true); return; }
-    if (tabId === 'work') { setMobilePanelOpen(true); return; }
-    if (tabId === 'ai') { setActiveChannel('ai'); return; }
-    if (tabId === 'chat') { setActiveChannel('chat'); setChatTab('chat'); return; }
-    if (tabId === 'kb') { setActiveChannel('chat'); setChatTab('kb'); return; }
+    setMobileDrawerOpen(false);
+    switch (tabId) {
+      case 'projects': setMobileDrawerOpen(true); break;
+      case 'work': setMobilePanelOpen(true); break;
+      case 'ai': setActiveChannel('ai'); break;
+      case 'chat': setActiveChannel('chat'); setChatTab('chat'); break;
+      case 'kb': setActiveChannel('chat'); setChatTab('kb'); break;
+      case 'notion': setActiveChannel('chat'); setChatTab('notion'); break;
+      case 'tickets': setActiveChannel('chat'); setChatTab('tickets'); break;
+      case 'tasks': setActiveChannel('chat'); setChatTab('tasks'); break;
+      default: break;
+    }
   };
 
   if (authLoading) return <LoadingScreen />;
@@ -68,7 +80,7 @@ function ProtectedApp() {
     <div className="app">
       <Topbar project={currentProject} onSearchOpen={() => setSearchOpen(true)} onHamburger={() => setMobileDrawerOpen(true)} />
       <div className="body">
-        <LeftSidebar mobileOpen={mobileDrawerOpen} onMobileClose={() => setMobileDrawerOpen(false)} />
+        <LeftSidebar mobileOpen={mobileDrawerOpen} onMobileClose={() => setMobileDrawerOpen(false)} onMobileNav={handleMobileTab} />
         {mobileDrawerOpen && (
           <div className="mob-drawer-overlay" onClick={() => setMobileDrawerOpen(false)} />
         )}
@@ -94,11 +106,11 @@ function ProtectedApp() {
 
 function MobileTabBar({ activeTab, onTab }) {
   const tabs = [
-    { id: 'projects', ico: '☰', lbl: '채널' },
     { id: 'chat', ico: '💬', lbl: '채팅' },
-    { id: 'kb', ico: '📁', lbl: 'KB' },
+    { id: 'kb', ico: '📚', lbl: '저장소' },
+    { id: 'tickets', ico: '🎫', lbl: '워크트리' },
+    { id: 'tasks', ico: '📋', lbl: '태스크' },
     { id: 'ai', ico: '✦', lbl: 'AI' },
-    { id: 'work', ico: '✓', lbl: '업무' },
   ];
   return (
     <nav className="mob-tabbar">
