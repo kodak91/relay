@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, createContext, useContext } from 'react';
+import { useState, useEffect, useRef, createContext, useContext, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import useAppStore from '../../store/appStore';
@@ -53,7 +53,7 @@ function Avatar({ name, size = 36 }) {
 }
 
 function MsgActions({ m, onReply, onEdit, onDelete, members, onAddTask }) {
-  const { user } = useAppStore();
+  const user = useAppStore((s) => s.user);
   const { onReact } = useContext(MsgContext);
   const [dropOpen, setDropOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -169,10 +169,15 @@ function ThreadToggle({ count, hasNew, open, onClick }) {
   );
 }
 
-function Thread({ items, replyValue, onReplyChange, onSend, senderName, members = [] }) {
+function Thread({ items, onSend, senderName, members = [] }) {
   const { uid, onEditReply, onDeleteReply } = useContext(MsgContext);
   const [editingIndex, setEditingIndex] = useState(null);
   const [editText, setEditText] = useState('');
+
+  // 답글 입력값은 이 스레드 로컬 state — 부모(Message/ChatMain)로 올리지 않아야
+  // 한 글자 칠 때마다 채팅방 전체 메시지 목록이 리렌더되는 걸 막을 수 있다.
+  const [replyValue, setReplyValueLocal] = useState('');
+  const onReplyChange = setReplyValueLocal;
 
   // @멘션 — 스레드 답글에서도 멤버 언급
   const replyRef = useRef(null);
@@ -201,6 +206,12 @@ function Thread({ items, replyValue, onReplyChange, onSend, senderName, members 
     setMOpen(false);
     const pos = start + insert.length;
     setTimeout(() => { const e = replyRef.current; if (e) { e.focus(); e.setSelectionRange(pos, pos); } }, 0);
+  };
+
+  const handleSend = () => {
+    if (!replyValue.trim()) return;
+    onSend(replyValue);
+    setReplyValueLocal('');
   };
 
   return (
@@ -265,7 +276,7 @@ function Thread({ items, replyValue, onReplyChange, onSend, senderName, members 
               if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mItems[mIndex]); return; }
               if (e.key === 'Escape') { setMOpen(false); return; }
             }
-            if (e.key === 'Enter' && replyValue.trim()) onSend();
+            if (e.key === 'Enter') handleSend();
           }}
         />
         {mOpen && (() => {
@@ -289,7 +300,7 @@ function Thread({ items, replyValue, onReplyChange, onSend, senderName, members 
             </div>
           );
         })()}
-        <button className="btn sm accent" onClick={() => replyValue.trim() && onSend()}>전송</button>
+        <button className="btn sm accent" onClick={handleSend}>전송</button>
       </div>
     </div>
   );
@@ -319,8 +330,8 @@ function DonutTimer({ expiresAt }) {
 
 // ─── Message type renderers ──────────────────────────────────────────────
 
-function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onConfirm, onNudge, onEdit, onDelete, senderName, members, onAddTask }) {
-  const { user } = useAppStore();
+function TextMsg({ m, isGrouped, isGroupStart, threadOpen, onToggleThread, onSend, onConfirm, onNudge, onEdit, onDelete, senderName, members, onAddTask }) {
+  const user = useAppStore((s) => s.user);
   const isSender = user?.uid && m.senderUid === user.uid;
   const confirmed = m.confirmedBy?.includes(user?.uid);
   const [nudgeSent, setNudgeSent] = useState(false);
@@ -378,7 +389,7 @@ function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleT
       )}
       <Reactions list={m.reactions} />
       <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-      {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
+      {threadOpen && <Thread items={m.thread || []} onSend={onSend} senderName={senderName} members={members} />}
     </>
   );
 
@@ -410,8 +421,8 @@ function TextMsg({ m, isGrouped, isGroupStart, threadOpen, replyValue, onToggleT
   );
 }
 
-function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onChoose, onDelete, onEditFields, senderName, members, onAddTask }) {
-  const { user } = useAppStore();
+function DecisionMsg({ m, threadOpen, onToggleThread, onSend, onChoose, onDelete, onEditFields, senderName, members, onAddTask }) {
+  const user = useAppStore((s) => s.user);
   const isSender = user?.uid && m.senderUid === user.uid;
   const canDecide = m.targetUid
     ? user?.uid === m.targetUid
@@ -476,14 +487,14 @@ function DecisionMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
         </div>
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
+        {threadOpen && <Thread items={m.thread || []} onSend={onSend} senderName={senderName} members={members} />}
       </div>
     </div>
   );
 }
 
-function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onAct, onDelete, onEdit, senderName, members, onAddTask }) {
-  const { user } = useAppStore();
+function ApprovalMsg({ m, threadOpen, onToggleThread, onSend, onAct, onDelete, onEdit, senderName, members, onAddTask }) {
+  const user = useAppStore((s) => s.user);
   const isSender = user?.uid && m.senderUid === user.uid;
   // targetUid 지정 시 해당 유저만, 미지정 시 lead 역할만 액션 가능
   const canAct = m.targetUid ? user?.uid === m.targetUid : user?.role === 'lead';
@@ -568,14 +579,14 @@ function ApprovalMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange,
         </div>
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
+        {threadOpen && <Thread items={m.thread || []} onSend={onSend} senderName={senderName} members={members} />}
       </div>
     </div>
   );
 }
 
-function ImageMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onEdit, onDelete, senderName, members, onAddTask }) {
-  const { user } = useAppStore();
+function ImageMsg({ m, threadOpen, onToggleThread, onSend, onEdit, onDelete, senderName, members, onAddTask }) {
+  const user = useAppStore((s) => s.user);
   const isMine = user?.uid && m.senderUid === user.uid;
   const [expanded, setExpanded] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -629,14 +640,14 @@ function ImageMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, on
         )}
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
+        {threadOpen && <Thread items={m.thread || []} onSend={onSend} senderName={senderName} members={members} />}
       </div>
     </div>
   );
 }
 
 function VoteMsg({ m, onVote, onDelete, onEditFields, members, onAddTask }) {
-  const { user } = useAppStore();
+  const user = useAppStore((s) => s.user);
   const isSender = user?.uid && m.senderUid === user.uid;
   const totalVotes = (m.options || []).reduce((sum, o) => sum + (o.votes?.length || 0), 0);
   const myVote = (m.options || []).find((o) => (o.votes || []).some((v) => v.uid === user?.uid || v.name === user?.name));
@@ -704,7 +715,7 @@ function VoteMsg({ m, onVote, onDelete, onEditFields, members, onAddTask }) {
 }
 
 function UpdateMsg({ m, onDelete, onEdit, members, onAddTask }) {
-  const { user } = useAppStore();
+  const user = useAppStore((s) => s.user);
   const isMine = user?.uid && m.senderUid === user.uid;
   const [editMode, setEditMode] = useState(false);
   const [editText, setEditText] = useState('');
@@ -770,7 +781,7 @@ function UpdateMsg({ m, onDelete, onEdit, members, onAddTask }) {
 }
 
 function AnnounceMsg({ m, onCollapse, onDelete, onEdit, members, onAddTask }) {
-  const { user } = useAppStore();
+  const user = useAppStore((s) => s.user);
   const isSender = user?.uid && m.senderUid === user.uid;
   const [editMode, setEditMode] = useState(false);
   const [editText, setEditText] = useState('');
@@ -822,7 +833,7 @@ function fmtDuration(s) {
   return `${m}:${ss}`;
 }
 
-function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onSaveSummary, onDelete, senderName, members, onAddTask }) {
+function MeetingMsg({ m, threadOpen, onToggleThread, onSend, onSaveSummary, onDelete, senderName, members, onAddTask }) {
   const [showFull, setShowFull] = useState(false);
   const mins = m.minutes;
   const hasMinutes = mins && (mins.decisions?.length || mins.actions?.length || mins.risks?.length || mins.summary);
@@ -913,15 +924,15 @@ function MeetingMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, 
           )}
         </div>
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
+        {threadOpen && <Thread items={m.thread || []} onSend={onSend} senderName={senderName} members={members} />}
         <Reactions list={m.reactions} />
       </div>
     </div>
   );
 }
 
-function FileMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onEdit, onDelete, senderName, members, onAddTask }) {
-  const { user } = useAppStore();
+function FileMsg({ m, threadOpen, onToggleThread, onSend, onEdit, onDelete, senderName, members, onAddTask }) {
+  const user = useAppStore((s) => s.user);
   const isMine = user?.uid && m.senderUid === user.uid;
   const extMap = { pdf: '📄', ai: '🎨', png: '🖼️', jpg: '🖼️', docx: '📝', xlsx: '📊', txt: '📄', md: '📄' };
   const name = m.fileName || m.file?.name || '파일';
@@ -980,13 +991,13 @@ function FileMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onS
         </div>
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
+        {threadOpen && <Thread items={m.thread || []} onSend={onSend} senderName={senderName} members={members} />}
       </div>
     </div>
   );
 }
 
-function CasualMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, onSend, onDelete, senderName, members, onAddTask }) {
+function CasualMsg({ m, threadOpen, onToggleThread, onSend, onDelete, senderName, members, onAddTask }) {
   return (
     <div className="msg casual-msg" style={{ opacity: 0.9 }}>
       <MsgActions m={m} onReply={() => onToggleThread(m.id)} onDelete={() => onDelete(m.id)} members={members} onAddTask={onAddTask} />
@@ -1002,7 +1013,7 @@ function CasualMsg({ m, threadOpen, replyValue, onToggleThread, onReplyChange, o
         </div>
         <Reactions list={m.reactions} />
         <ThreadToggle count={m.thread?.length} hasNew={m.threadHasNew} open={threadOpen} onClick={() => onToggleThread(m.id)} />
-        {threadOpen && <Thread items={m.thread || []} replyValue={replyValue} onReplyChange={onReplyChange} onSend={onSend} senderName={senderName} members={members} />}
+        {threadOpen && <Thread items={m.thread || []} onSend={onSend} senderName={senderName} members={members} />}
       </div>
     </div>
   );
@@ -1103,7 +1114,7 @@ function AssignMsg({ m, onDelete, members, onAddTask }) {
 // ─── Meeting invite card ─────────────────────────────────────────────────
 
 function MeetingInviteMsg({ m, onRsvp }) {
-  const { user } = useAppStore();
+  const user = useAppStore((s) => s.user);
   const uid = user?.uid;
   const rsvp = m.rsvp || {};
   const myStatus = uid ? rsvp[uid] : null;
@@ -1169,7 +1180,8 @@ function MeetingInviteMsg({ m, onRsvp }) {
 // ─── Meeting alert card (sent automatically when meeting time approaches) ────
 
 function MeetingAlertMsg({ m, onJoinMeeting }) {
-  const { setChatTab, setActiveLiveMeetingId } = useAppStore();
+  const setChatTab = useAppStore((s) => s.setChatTab);
+  const setActiveLiveMeetingId = useAppStore((s) => s.setActiveLiveMeetingId);
 
   const handleJoin = () => {
     if (onJoinMeeting) {
@@ -1211,22 +1223,18 @@ function MeetingAlertMsg({ m, onJoinMeeting }) {
 
 // ─── Main Message dispatcher ─────────────────────────────────────────────
 
-export default function Message({ m, isGrouped, isGroupStart, handlers }) {
-  const { user } = useAppStore();
-  const { openThreads, replyValues, toggleThread, setReplyValue, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, editMsgFields, deleteMsg, rsvpMeeting, addReaction, members, addTaskFromMessage, editReply, deleteReply } = handlers;
-  const threadOpen = openThreads.has(m.id);
-  const replyValue = replyValues[m.id] || '';
+function Message({ m, isGrouped, isGroupStart, threadOpen, handlers }) {
+  const user = useAppStore((s) => s.user);
+  const { toggleThread, sendReply, choose, vote, actApproval, confirmMsg, nudgeMsg, saveMeetingSummary, collapseAnnounce, editMsg, editMsgFields, deleteMsg, rsvpMeeting, addReaction, members, addTaskFromMessage, editReply, deleteReply } = handlers;
 
   const props = {
     m,
     isGrouped,
     isGroupStart,
     threadOpen,
-    replyValue,
     senderName: user?.name || '나',
     onToggleThread: toggleThread,
-    onReplyChange: (v) => setReplyValue(m.id, v),
-    onSend: () => sendReply(m.id),
+    onSend: (text) => sendReply(m.id, text),
     onChoose: choose,
     onVote: vote,
     onAct: actApproval,
@@ -1269,3 +1277,7 @@ export default function Message({ m, isGrouped, isGroupStart, handlers }) {
 
   return <MsgContext.Provider value={ctxValue}>{content}</MsgContext.Provider>;
 }
+
+// handlers/threadOpen 참조가 안정적으로 유지되는 한(ChatMain 쪽 useMemo/useCallback),
+// 실제로 바뀌지 않은 메시지는 여기서 리렌더가 걸러진다.
+export default memo(Message);

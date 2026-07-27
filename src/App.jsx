@@ -14,7 +14,13 @@ import GlobalSearch from './components/search/GlobalSearch';
 import { useProjects } from './hooks/useProjects';
 
 function ProtectedApp() {
-  const { activeChannel, activeProject, user, authLoading, setChatTab, setActiveChannel, chatTab } = useAppStore();
+  const activeChannel = useAppStore((s) => s.activeChannel);
+  const activeProject = useAppStore((s) => s.activeProject);
+  const user = useAppStore((s) => s.user);
+  const authLoading = useAppStore((s) => s.authLoading);
+  const setChatTab = useAppStore((s) => s.setChatTab);
+  const setActiveChannel = useAppStore((s) => s.setActiveChannel);
+  const chatTab = useAppStore((s) => s.chatTab);
   const { projects } = useProjects();
   const msgRefs = useRef({});
   const [searchOpen, setSearchOpen] = useState(false);

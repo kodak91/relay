@@ -46,7 +46,11 @@ function formatDividerLabel(dateStr) {
 }
 
 export default function ChatMain({ msgRefs, onJumpToMessage }) {
-  const { activeProject, chatTab, setChatTab, activeTag, user } = useAppStore();
+  const activeProject = useAppStore((s) => s.activeProject);
+  const chatTab = useAppStore((s) => s.chatTab);
+  const setChatTab = useAppStore((s) => s.setChatTab);
+  const activeTag = useAppStore((s) => s.activeTag);
+  const user = useAppStore((s) => s.user);
   const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
   const { meetings, markNotified } = useMeetings(activeProject);
   const { projects, updateProject, approveMember, rejectMember, removeMember, delegateLead } = useProjects(user?.uid);
@@ -66,7 +70,6 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   }, [activeProject]);
 
   const [openThreads, setOpenThreads] = useState(new Set());
-  const [replyValues, setReplyValues] = useState({});
   const [dragging, setDragging] = useState(false);
   const dragCounter = useRef(0);
   const [uploading, setUploading] = useState(false);
@@ -185,21 +188,27 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
   const announcements = useMemo(() => messages.filter((m) => m.type === 'announce'), [messages]);
 
-  const toggleThread = (mid) => {
+  const toggleThread = useCallback((mid) => {
     setOpenThreads((prev) => {
       const n = new Set(prev);
       if (n.has(mid)) n.delete(mid); else n.add(mid);
       return n;
     });
-  };
+  }, []);
 
-  const setReplyValue = (mid, v) => setReplyValues((prev) => ({ ...prev, [mid]: v }));
+  const sendNotif = useCallback(async (uid, title, body, category = 'general') => {
+    if (!uid) return;
+    await addDoc(collection(db, 'notifications', uid, 'items'), {
+      type: 'action_result', category, title, body: body?.slice(0, 80) || '',
+      fromName: user?.name || '', read: false, createdAt: serverTimestamp(),
+    }).catch(() => {});
+  }, [user]);
 
-  const sendReply = async (mid) => {
-    const v = (replyValues[mid] || '').trim();
+  // 스레드 답글 입력값은 각 메시지(Thread)가 로컬로 들고 있다가, 전송 시 여기로 text를 넘겨받는다.
+  const sendReply = useCallback(async (mid, text) => {
+    const v = (text || '').trim();
     if (!v) return;
     await addReply(activeProject, mid, { senderName: user?.name, senderUid: user?.uid, text: v, ts: nowHM() });
-    setReplyValues((prev) => ({ ...prev, [mid]: '' }));
 
     // 스레드 알림 — @멘션(우선) + 글 작성자(myThread) + 기존 참여자(allThread). 본인·중복 제외.
     const m = messages.find((msg) => msg.id === mid);
@@ -221,41 +230,33 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         .filter((u) => u && !notified.has(u))
         .forEach((u) => { notified.add(u); sendNotif(u, '참여한 스레드에 새 댓글', `${user?.name || '팀원'}: ${v}`, 'allThread'); });
     }
-  };
+  }, [activeProject, addReply, user, messages, activeProjectData, sendNotif]);
 
-  const editReply = async (mid, replyIdx, newText) => {
+  const editReply = useCallback(async (mid, replyIdx, newText) => {
     const m = messages.find((msg) => msg.id === mid);
     if (!m || !newText.trim()) return;
     const newThread = (m.thread || []).map((r, i) =>
       i === replyIdx ? { ...r, text: newText.trim(), editedAt: new Date().toISOString() } : r
     );
     await updateMessageField(activeProject, mid, { thread: newThread });
-  };
+  }, [messages, updateMessageField, activeProject]);
 
-  const deleteReply = async (mid, replyIdx) => {
+  const deleteReply = useCallback(async (mid, replyIdx) => {
     const m = messages.find((msg) => msg.id === mid);
     if (!m) return;
     const newThread = (m.thread || []).filter((_, i) => i !== replyIdx);
     await updateMessageField(activeProject, mid, { thread: newThread });
-  };
+  }, [messages, updateMessageField, activeProject]);
 
-  const sendNotif = async (uid, title, body, category = 'general') => {
-    if (!uid) return;
-    await addDoc(collection(db, 'notifications', uid, 'items'), {
-      type: 'action_result', category, title, body: body?.slice(0, 80) || '',
-      fromName: user?.name || '', read: false, createdAt: serverTimestamp(),
-    }).catch(() => {});
-  };
-
-  const choose = async (mid, letter) => {
+  const choose = useCallback(async (mid, letter) => {
     await updateMessageField(activeProject, mid, { chosen: letter });
     const m = messages.find((msg) => msg.id === mid);
     if (m?.senderUid && m.senderUid !== user?.uid) {
       await sendNotif(m.senderUid, `결정 요청이 처리되었습니다 — ${letter}안`, m.title || m.text);
     }
-  };
+  }, [updateMessageField, activeProject, messages, user, sendNotif]);
 
-  const vote = async (mid, oid) => {
+  const vote = useCallback(async (mid, oid) => {
     const m = messages.find((msg) => msg.id === mid);
     if (!m) return;
     const options = (m.options || []).map((o) => {
@@ -267,9 +268,9 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       return { ...o, votes: filtered };
     });
     await updateMessageField(activeProject, mid, { options });
-  };
+  }, [messages, user, updateMessageField, activeProject]);
 
-  const actApproval = async (mid, action, heldUntil) => {
+  const actApproval = useCallback(async (mid, action, heldUntil) => {
     const m = messages.find((msg) => msg.id === mid);
     if (action === 'approve') {
       await updateMessageField(activeProject, mid, { status: 'approved' });
@@ -290,20 +291,20 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         await sendNotif(m.senderUid, '컨펌이 보류되었습니다 ⏸', heldUntil ? `${heldUntil}까지 · ${m.text}` : m.text);
       }
     }
-  };
+  }, [messages, updateMessageField, activeProject, addTask, user, sendNotif]);
 
-  const confirmMsg = async (mid) => {
+  const confirmMsg = useCallback(async (mid) => {
     if (!user?.uid) return;
     await confirmMessage(activeProject, mid, user.uid);
-  };
+  }, [user, confirmMessage, activeProject]);
 
-  const nudgeMsg = async (mid) => {
+  const nudgeMsg = useCallback(async (mid) => {
     await nudgeMessage(activeProject, mid);
-  };
+  }, [nudgeMessage, activeProject]);
 
-  const saveMeetingSummary = async (mid, summary) => {
+  const saveMeetingSummary = useCallback(async (mid, summary) => {
     await updateMessageField(activeProject, mid, { summary });
-  };
+  }, [updateMessageField, activeProject]);
 
   const handleOpenMeeting = (title = '') => {
     setMeetingInitialTitle(title);
@@ -335,7 +336,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     });
   };
 
-  const rsvpMeeting = async (mid, response) => {
+  const rsvpMeeting = useCallback(async (mid, response) => {
     if (!user?.uid) return;
     const m = messages.find((msg) => msg.id === mid);
     if (!m) return;
@@ -346,7 +347,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       rsvp[user.uid] = response;
     }
     await updateMessageField(activeProject, mid, { rsvp });
-  };
+  }, [user, messages, updateMessageField, activeProject]);
 
   const handleSend = async (rawMsgData) => {
     if (!activeProject) return;
@@ -514,7 +515,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     return () => { window.removeEventListener('dragend', reset); window.removeEventListener('drop', reset); };
   }, []);
 
-  const editMsg = async (mid, newText) => {
+  const editMsg = useCallback(async (mid, newText) => {
     await editMessage(activeProject, mid, newText);
     const m = messages.find((msg) => msg.id === mid);
     if (m?.slackTs && activeProjectData?.slackBotToken && m.slackChannel) {
@@ -522,26 +523,26 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       slackBotUpdate(activeProjectData.slackBotToken, m.slackChannel, m.slackTs, slackText)
         .catch((e) => console.warn('Slack update:', e.message));
     }
-  };
+  }, [editMessage, activeProject, messages, activeProjectData]);
 
-  const editMsgFields = async (mid, fields) => {
+  const editMsgFields = useCallback(async (mid, fields) => {
     await updateDoc(doc(db, 'projects', activeProject, 'messages', mid), {
       ...fields,
       editedAt: new Date().toISOString(),
     });
-  };
+  }, [activeProject]);
 
-  const deleteMsg = async (mid) => {
+  const deleteMsg = useCallback(async (mid) => {
     const m = messages.find((msg) => msg.id === mid);
     await deleteMessage(activeProject, mid);
     if (m?.slackTs && activeProjectData?.slackBotToken && m.slackChannel) {
       slackBotDelete(activeProjectData.slackBotToken, m.slackChannel, m.slackTs)
         .catch((e) => console.warn('Slack delete:', e.message));
     }
-  };
+  }, [messages, deleteMessage, activeProject, activeProjectData]);
 
   // Task 3+4: Add task from message (태스크+) with notification
-  const addTaskFromMessage = async (member, msg) => {
+  const addTaskFromMessage = useCallback(async (member, msg) => {
     if (!member?.uid || !msg) return;
     const taskTitle = (msg.text || '').slice(0, 80) || '메시지 기반 태스크';
     await addDoc(collection(db, 'users', member.uid, 'tasks'), {
@@ -562,7 +563,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       read: false,
       createdAt: serverTimestamp(),
     }).catch(() => {});
-  };
+  }, [user]);
 
   // Task 8: PM AI command handler — 채팅방에서 "/ " 로 호출되는 AI
   const PM_SYSTEM = '당신은 이 워크스페이스의 PM AI입니다. 아래 컨텍스트에는 이 채팅방의 메시지, 태스크, 티켓, 회의, 파일, 멤버 등 프로젝트 전체 데이터가 포함됩니다. 이 데이터를 근거로 회의/티켓/태스크/요약 등 팀 운영 전반을 처리합니다. 한국어로 간결하고 실용적으로 답변하세요.';
@@ -625,7 +626,7 @@ ${fileLines || '(없음)'}`;
     }
   };
 
-  const addReaction = async (mid, emoji) => {
+  const addReaction = useCallback(async (mid, emoji) => {
     if (!user?.uid) return;
     const m = messages.find((msg) => msg.id === mid);
     if (!m) return;
@@ -642,7 +643,7 @@ ${fileLines || '(없음)'}`;
       reactions.push({ e: emoji, uids: [user.uid] });
     }
     await updateMessageField(activeProject, mid, { reactions });
-  };
+  }, [user, messages, updateMessageField, activeProject]);
 
   const handleChatScroll = useCallback(() => {
     const container = scrollRef.current;
@@ -664,14 +665,14 @@ ${fileLines || '(없음)'}`;
   }, []);
 
   // 채팅 alert에서 직접 회의장 입장 (종료된 회의는 KB탭으로 이동)
-  const joinMeetingFromChat = (meetingId) => {
+  const joinMeetingFromChat = useCallback((meetingId) => {
     const m = meetings.find((mtg) => mtg.id === meetingId);
     if (!m || m.status === 'done') {
       setChatTab('kb');
       return;
     }
     setLiveMeetingId(meetingId);
-  };
+  }, [meetings, setChatTab]);
 
   // 회의가 외부에서 종료되면 모달 닫고 KB탭으로 이동
   useEffect(() => {
@@ -682,17 +683,28 @@ ${fileLines || '(없음)'}`;
     }
   }, [liveMeeting?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handlers = {
-    openThreads, replyValues,
-    toggleThread, setReplyValue, sendReply,
+  // 메시지 하나하나(Message)에 그대로 넘어가는 객체 — 참조가 바뀌지 않아야
+  // React.memo(Message)가 실제로 안 바뀐 메시지의 리렌더를 건너뛸 수 있다.
+  const projectMembers = activeProjectData?.members;
+  const handlers = useMemo(() => ({
+    toggleThread, sendReply,
     choose, vote, actApproval, confirmMsg, nudgeMsg,
     saveMeetingSummary, rsvpMeeting,
     editMsg, editMsgFields, deleteMsg, addReaction,
     editReply, deleteReply,
-    members: activeProjectData?.members || [],
+    members: projectMembers || [],
     addTaskFromMessage,
     joinMeetingFromChat,
-  };
+  }), [
+    toggleThread, sendReply,
+    choose, vote, actApproval, confirmMsg, nudgeMsg,
+    saveMeetingSummary, rsvpMeeting,
+    editMsg, editMsgFields, deleteMsg, addReaction,
+    editReply, deleteReply,
+    projectMembers,
+    addTaskFromMessage,
+    joinMeetingFromChat,
+  ]);
 
   if (!activeProject) {
     return (
@@ -904,7 +916,13 @@ ${fileLines || '(없음)'}`;
                     }
                     items.push(
                       <div key={m.id} ref={(el) => { if (msgRefs?.current) msgRefs.current[m.id] = el; }}>
-                        <Message m={m} isGrouped={groupedSet.has(m.id)} isGroupStart={groupStartSet.has(m.id)} handlers={handlers} />
+                        <Message
+                          m={m}
+                          isGrouped={groupedSet.has(m.id)}
+                          isGroupStart={groupStartSet.has(m.id)}
+                          threadOpen={openThreads.has(m.id)}
+                          handlers={handlers}
+                        />
                       </div>
                     );
                   });
