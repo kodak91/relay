@@ -155,7 +155,7 @@ export default function PRPanel() {
                 </div>
 
                 <div style={{ fontSize: 11, color: 'var(--ink-mute)', marginBottom: 12 }}>
-                  데이터 출처: 채팅 {evalDoc.evidence?.chat ?? 0}건 / 태스크 {evalDoc.evidence?.tasks ?? 0}건 / 티켓 {evalDoc.evidence?.tickets ?? 0}건 / 회의 {evalDoc.evidence?.meetings ?? 0}회
+                  데이터 출처: 채팅 {evalDoc.evidence?.chat ?? 0}건 / 태스크 {evalDoc.evidence?.tasks ?? 0}건 / 회의 {evalDoc.evidence?.meetings ?? 0}회
                   {evalDoc.createdAt && ` · 평가일 ${new Date(evalDoc.createdAt).toLocaleString('ko-KR')}`}
                 </div>
 
