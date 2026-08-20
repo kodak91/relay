@@ -40,6 +40,15 @@ export function taskDate(t) {
 
 function sortTasks(items) {
   return [...items].sort((a, b) => {
+    // Manual drag order (if set) wins over date/creation ordering, so a
+    // user's custom sequence survives re-renders and Firestore refreshes.
+    const ao = a.order;
+    const bo = b.order;
+    if (ao != null || bo != null) {
+      if (ao != null && bo != null && ao !== bo) return ao - bo;
+      if (ao != null && bo == null) return -1;
+      if (ao == null && bo != null) return 1;
+    }
     const ad = taskDate(a);
     const bd = taskDate(b);
     if (ad !== bd) return ad.localeCompare(bd);
@@ -139,5 +148,19 @@ export function usePersonalTasks(uid) {
     await Promise.all(tasks.map((t) => deleteDoc(doc(db, 'users', uid, 'tasks', t.id))));
   };
 
-  return { tasks, todayTasks, overdueTasks, weekStats, error, addTask, toggleTask, updateTask, deleteTask, deleteAllTasks };
+  // Persist a manually dragged order for a set of task ids (e.g. one visible
+  // group in the sidebar). Only touches ids that actually moved.
+  const reorderTasks = async (orderedIds) => {
+    if (!uid) return;
+    const byId = new Map(tasks.map((t) => [t.id, t]));
+    await Promise.all(
+      orderedIds.map((id, i) => {
+        const t = byId.get(id);
+        if (!t || t.order === i) return null;
+        return updateDoc(doc(db, 'users', uid, 'tasks', id), { order: i });
+      })
+    );
+  };
+
+  return { tasks, todayTasks, overdueTasks, weekStats, error, addTask, toggleTask, updateTask, deleteTask, deleteAllTasks, reorderTasks };
 }

@@ -441,7 +441,7 @@ function SidebarTicketPicker({ tickets, onLink }) {
   );
 }
 
-function PersonalTaskRow({ task, tickets, activeProjectId, onToggle, onUpdate, onDelete }) {
+function PersonalTaskRow({ task, tickets, activeProjectId, onToggle, onUpdate, onDelete, dragging, dragHandleProps }) {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState(task.detail || '');
   const detailRef = useRef(null);
@@ -461,12 +461,23 @@ function PersonalTaskRow({ task, tickets, activeProjectId, onToggle, onUpdate, o
 
   return (
     <div>
-      <div className={'task-row' + (task.done ? ' done' : '')} style={{ cursor: 'default' }}>
+      <div
+        className={'task-row' + (task.done ? ' done' : '') + (task.important ? ' important' : '') + (dragging ? ' dragging' : '')}
+        style={{ cursor: 'default' }}
+        {...dragHandleProps}
+      >
         <div
           className={'task-check' + (task.done ? ' done-check' : '')}
           onClick={() => onToggle(task.id, !task.done)}
           style={{ cursor: 'pointer', flexShrink: 0 }}
         />
+        <button
+          className={'task-star' + (task.important ? ' on' : '')}
+          onClick={(e) => { e.stopPropagation(); onUpdate(task.id, { important: !task.important }); }}
+          title={task.important ? '중요 해제' : '중요 표시'}
+        >
+          {task.important ? '★' : '☆'}
+        </button>
         <span
           className="task-text"
           style={{ flex: 1, cursor: 'pointer' }}
@@ -529,8 +540,135 @@ function PersonalTaskRow({ task, tickets, activeProjectId, onToggle, onUpdate, o
   );
 }
 
+// Long-press-to-drag reordering for one visible task group (overdue / today /
+// upcoming / done are each their own independent order). Press and hold a row
+// for a moment, then drag up or down to swap its position; release to save.
+const LONG_PRESS_MS = 420;
+const MOVE_CANCEL_PX = 6;
+
+function ReorderableTaskGroup({ tasks, tickets, activeProjectId, onToggle, onUpdate, onDelete, onReorder }) {
+  const [order, setOrder] = useState(() => tasks.map((t) => t.id));
+  // Mirrors `order` for synchronous math inside drag event handlers, which
+  // may run several times between renders; only ever touched outside render.
+  const orderSnapshotRef = useRef(order);
+  const byId = useMemo(() => Object.fromEntries(tasks.map((t) => [t.id, t])), [tasks]);
+  const rowRefs = useRef({});
+  const dragRef = useRef(null);
+  const [dragId, setDragId] = useState(null);
+  const [dragY, setDragY] = useState(0);
+
+  // Keep local order in sync when the incoming task set changes (added,
+  // removed, or moved to another group), preserving whatever order the user
+  // already established.
+  const idsKey = tasks.map((t) => t.id).join(',');
+  useEffect(() => {
+    const ids = idsKey ? idsKey.split(',') : [];
+    const idSet = new Set(ids);
+    const kept = orderSnapshotRef.current.filter((id) => idSet.has(id));
+    const missing = ids.filter((id) => !kept.includes(id));
+    const next = [...kept, ...missing];
+    orderSnapshotRef.current = next;
+    setOrder(next);
+  }, [idsKey]);
+
+  const orderedIds = order.filter((id) => byId[id]);
+
+  const cleanup = () => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onUp);
+  };
+
+  const onMove = (e) => {
+    const st = dragRef.current;
+    if (!st) return;
+    if (!st.active) {
+      if (Math.abs(e.clientY - st.originY) > MOVE_CANCEL_PX) {
+        clearTimeout(st.timer);
+        cleanup();
+        dragRef.current = null;
+      }
+      return;
+    }
+    e.preventDefault();
+    let delta = e.clientY - st.originY;
+    const rowH = st.rowHeight;
+    let idx = orderSnapshotRef.current.indexOf(st.id);
+    while (delta > rowH / 2 && idx < orderSnapshotRef.current.length - 1) {
+      const arr = orderSnapshotRef.current.slice();
+      [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+      orderSnapshotRef.current = arr;
+      idx += 1;
+      st.originY += rowH;
+      delta -= rowH;
+    }
+    while (delta < -rowH / 2 && idx > 0) {
+      const arr = orderSnapshotRef.current.slice();
+      [arr[idx], arr[idx - 1]] = [arr[idx - 1], arr[idx]];
+      orderSnapshotRef.current = arr;
+      idx -= 1;
+      st.originY -= rowH;
+      delta += rowH;
+    }
+    setDragY(delta);
+    setOrder(orderSnapshotRef.current);
+  };
+
+  const onUp = () => {
+    const st = dragRef.current;
+    if (st) clearTimeout(st.timer);
+    dragRef.current = null;
+    setDragId(null);
+    setDragY(0);
+    cleanup();
+    if (st?.active) onReorder(orderSnapshotRef.current.filter((id) => byId[id]));
+  };
+
+  const startPress = (e, id) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const row = rowRefs.current[id];
+    const rowHeight = row?.offsetHeight || 40;
+    const originY = e.clientY;
+    const timer = setTimeout(() => {
+      if (dragRef.current) {
+        dragRef.current.active = true;
+        setDragId(id);
+      }
+    }, LONG_PRESS_MS);
+    dragRef.current = { id, originY, rowHeight, timer, active: false };
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
+  return orderedIds.map((id) => {
+    const task = byId[id];
+    const isDragging = dragId === id;
+    return (
+      <div
+        key={id}
+        ref={(el) => { rowRefs.current[id] = el; }}
+        style={{
+          position: 'relative',
+          zIndex: isDragging ? 5 : 'auto',
+          transform: isDragging ? `translateY(${dragY}px)` : 'none',
+          transition: isDragging ? 'none' : 'transform 120ms ease',
+          touchAction: isDragging ? 'none' : 'pan-y',
+        }}
+      >
+        <PersonalTaskRow
+          task={task} tickets={tickets} activeProjectId={activeProjectId}
+          onToggle={onToggle} onUpdate={onUpdate} onDelete={onDelete}
+          dragging={isDragging}
+          dragHandleProps={{ onPointerDown: (e) => startPress(e, id) }}
+        />
+      </div>
+    );
+  });
+}
+
 function TaskSidebar({ uid, activeProject, taskState }) {
-  const { tasks, todayTasks, overdueTasks, weekStats, error, addTask, toggleTask, updateTask, deleteTask, deleteAllTasks } = taskState;
+  const { tasks, todayTasks, overdueTasks, weekStats, error, addTask, toggleTask, updateTask, deleteTask, deleteAllTasks, reorderTasks } = taskState;
   const { tickets } = useTickets(activeProject);
   const [newTitle, setNewTitle] = useState('');
   const [addError, setAddError] = useState('');
@@ -622,26 +760,20 @@ function TaskSidebar({ uid, activeProject, taskState }) {
             이월 {overdueTasks.length}건
           </div>
         )}
-        {overdueTasks.map((t) => (
-          <PersonalTaskRow key={t.id} task={t} tickets={tickets} activeProjectId={activeProject}
-            onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} />
-        ))}
+        <ReorderableTaskGroup tasks={overdueTasks} tickets={tickets} activeProjectId={activeProject}
+          onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} onReorder={reorderTasks} />
 
         {/* Today's incomplete */}
-        {todayOpenTasks.map((t) => (
-          <PersonalTaskRow key={t.id} task={t} tickets={tickets} activeProjectId={activeProject}
-            onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} />
-        ))}
+        <ReorderableTaskGroup tasks={todayOpenTasks} tickets={tickets} activeProjectId={activeProject}
+          onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} onReorder={reorderTasks} />
 
         {upcomingTasks.length > 0 && (
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-3)', margin: '8px 0 4px', letterSpacing: '0.03em' }}>
             예정 {upcomingTasks.length}건
           </div>
         )}
-        {upcomingTasks.map((t) => (
-          <PersonalTaskRow key={t.id} task={t} tickets={tickets} activeProjectId={activeProject}
-            onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} />
-        ))}
+        <ReorderableTaskGroup tasks={upcomingTasks} tickets={tickets} activeProjectId={activeProject}
+          onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} onReorder={reorderTasks} />
 
         {/* Completed today */}
         {doneTodayTasks.length > 0 && (
@@ -649,10 +781,8 @@ function TaskSidebar({ uid, activeProject, taskState }) {
             <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--emerald)', margin: '8px 0 4px', letterSpacing: '0.03em' }}>
               완료 {doneTodayTasks.length}건
             </div>
-            {doneTodayTasks.map((t) => (
-              <PersonalTaskRow key={t.id} task={t} tickets={tickets} activeProjectId={activeProject}
-                onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} />
-            ))}
+            <ReorderableTaskGroup tasks={doneTodayTasks} tickets={tickets} activeProjectId={activeProject}
+              onToggle={toggleTask} onUpdate={updateTask} onDelete={deleteTask} onReorder={reorderTasks} />
           </>
         )}
       </div>
