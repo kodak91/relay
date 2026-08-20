@@ -2,6 +2,7 @@ import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } fr
 import ReactMarkdown from 'react-markdown';
 import useAppStore from '../../store/appStore';
 import { useMessages } from '../../hooks/useMessages';
+import { useTaggedMessages } from '../../hooks/useTaggedMessages';
 import { useProjects } from '../../hooks/useProjects';
 import { useTasks } from '../../hooks/useTasks';
 import Message from './Message';
@@ -176,12 +177,17 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     if (el) el.scrollTop += el.scrollHeight - prevScrollHeightRef.current;
   }, [messages]);
 
+  // 태그로 필터링 중일 때는 최근 메시지 창(useMessages) 밖의 과거 메시지도
+  // 빠지지 않도록, 해당 태그 전체를 별도로 가져와서 사용한다.
+  const { messages: taggedMessages } = useTaggedMessages(activeProject, activeTag !== 'all' ? activeTag : null);
+
   const filteredMessages = useMemo(() => {
     const now = Date.now();
-    const live = messages.filter((m) => !m.expiresAt || m.expiresAt > now);
+    const source = activeTag === 'all' ? messages : taggedMessages;
+    const live = source.filter((m) => !m.expiresAt || m.expiresAt > now);
     if (activeTag === 'all') return live;
     return live.filter((m) => (m.tags || []).includes(activeTag));
-  }, [messages, activeTag]);
+  }, [messages, taggedMessages, activeTag]);
 
   const { groupedSet, groupStartSet } = useMemo(() => {
     const grouped = new Set();
@@ -919,7 +925,7 @@ ${fileLines || '(없음)'}`;
               </div>
             ) : (
               <>
-                {hasMore && (
+                {activeTag === 'all' && hasMore && (
                   <div style={{ textAlign: 'center', padding: '4px 0 12px' }}>
                     <button
                       onClick={handleLoadMore}
