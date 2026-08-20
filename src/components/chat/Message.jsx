@@ -276,7 +276,9 @@ function Thread({ items, onSend, senderName, members = [] }) {
               if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickMention(mItems[mIndex]); return; }
               if (e.key === 'Escape') { setMOpen(false); return; }
             }
-            if (e.key === 'Enter') handleSend();
+            // 한글 등 IME 조합 중 Enter(마지막 글자 확정)는 전송으로 처리하지 않음 —
+            // 그렇지 않으면 조합 중인 글자가 잘린 채로 전송되어 버림
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); handleSend(); }
           }}
         />
         {mOpen && (() => {
