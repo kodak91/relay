@@ -685,7 +685,12 @@ ${fileLines || '(없음)'}`;
     if (label) setFloatingDate(label);
     clearTimeout(floatTimerRef.current);
     floatTimerRef.current = setTimeout(() => setFloatingDate(''), 1500);
-  }, []);
+
+    // 상단 근처까지 스크롤하면 이전 메시지를 자동으로 더 불러온다(버튼은 폴백으로 유지).
+    if (activeTag === 'all' && hasMore && !loadingMore && container.scrollTop < 200) {
+      handleLoadMore();
+    }
+  }, [activeTag, hasMore, loadingMore, handleLoadMore]);
 
   // 채팅 alert에서 직접 회의장 입장 (종료된 회의는 KB탭으로 이동)
   const joinMeetingFromChat = useCallback((meetingId) => {
