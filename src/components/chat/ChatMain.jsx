@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import useAppStore from '../../store/appStore';
 import { useMessages } from '../../hooks/useMessages';
@@ -51,7 +51,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const setChatTab = useAppStore((s) => s.setChatTab);
   const activeTag = useAppStore((s) => s.activeTag);
   const user = useAppStore((s) => s.user);
-  const { messages, loading, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
+  const { messages, loading, loadingMore, hasMore, loadMore, sendMessage, addReply, updateMessageField, confirmMessage, nudgeMessage, deleteMessage, editMessage } = useMessages(activeProject);
   const { meetings, markNotified } = useMeetings(activeProject);
   const { projects, updateProject, approveMember, rejectMember, removeMember, delegateLead } = useProjects(user?.uid);
   const { tickets, createTicket, updateTicket, deleteTicket } = useTickets(activeProject);
@@ -158,6 +158,23 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     });
     didInitScrollRef.current = true;
   }, [chatTab, loading]);
+
+  // "이전 메시지 더 보기" — 위쪽에 과거 메시지가 붙으면 스크롤 높이가 늘어난 만큼
+  // scrollTop을 보정해서, 보고 있던 위치가 화면에서 그대로 유지되도록 한다.
+  const prevScrollHeightRef = useRef(0);
+  const pendingLoadMoreRef = useRef(false);
+  const handleLoadMore = useCallback(() => {
+    const el = scrollRef.current;
+    if (el) prevScrollHeightRef.current = el.scrollHeight;
+    pendingLoadMoreRef.current = true;
+    loadMore();
+  }, [loadMore]);
+  useLayoutEffect(() => {
+    if (!pendingLoadMoreRef.current) return;
+    pendingLoadMoreRef.current = false;
+    const el = scrollRef.current;
+    if (el) el.scrollTop += el.scrollHeight - prevScrollHeightRef.current;
+  }, [messages]);
 
   const filteredMessages = useMemo(() => {
     const now = Date.now();
@@ -902,6 +919,17 @@ ${fileLines || '(없음)'}`;
               </div>
             ) : (
               <>
+                {hasMore && (
+                  <div style={{ textAlign: 'center', padding: '4px 0 12px' }}>
+                    <button
+                      onClick={handleLoadMore}
+                      disabled={loadingMore}
+                      style={{ fontSize: 11, color: 'var(--ink-mute)', background: 'none', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '4px 12px', cursor: loadingMore ? 'default' : 'pointer' }}
+                    >
+                      {loadingMore ? '불러오는 중…' : '이전 메시지 더 보기'}
+                    </button>
+                  </div>
+                )}
                 {(() => {
                   // Build in chronological order, then reverse for column-reverse layout.
                   // column-reverse: first DOM element = visual bottom → newest messages at bottom.

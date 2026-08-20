@@ -1,7 +1,30 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useMessages } from '../../hooks/useMessages';
+import { collection, query, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import useAppStore from '../../store/appStore';
 import { useKB } from '../../hooks/useKB';
+
+// 채팅 화면(useMessages)은 최근 메시지만 구독하도록 최적화되어 있지만, 여기서는
+// 오래된 첨부파일·링크도 계속 보여야 하므로 별도로 전체 히스토리를 구독한다.
+// 이 탭은 사용자가 열었을 때만 마운트되므로 상시 비용은 없다.
+function useAllProjectMessages(projectId) {
+  const [messages, setMessages] = useState([]);
+
+  useEffect(() => {
+    if (!projectId) { setMessages([]); return; }
+    const q = query(collection(db, 'projects', projectId, 'messages'), orderBy('createdAt', 'asc'));
+    const unsub = onSnapshot(q, (snap) => {
+      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, [projectId]);
+
+  const deleteMessage = async (pid, messageId) => {
+    await deleteDoc(doc(db, 'projects', pid, 'messages', messageId));
+  };
+
+  return { messages, deleteMessage };
+}
 
 const URL_REGEX = /https?:\/\/[^\s<>")\]]+/g;
 const KB_REGEX = /relay-kb:\/\/[^\s)<>"]+/g;
@@ -28,7 +51,7 @@ const FILTER_TABS = [
 ];
 
 export default function KBMediaTab({ projectId }) {
-  const { messages, deleteMessage } = useMessages(projectId);
+  const { messages, deleteMessage } = useAllProjectMessages(projectId);
   const { setKbDeepLink, setChatTab, user } = useAppStore();
   const { folders, saveFromChat } = useKB(projectId);
   const [filter, setFilter] = useState('all');

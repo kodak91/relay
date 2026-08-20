@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useMessages } from '../../hooks/useMessages';
+import { collection, query as fsQuery, orderBy, getDocs } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 import { useGlobalTasks } from '../../hooks/useGlobalTasks';
 import useAppStore from '../../store/appStore';
 
@@ -10,10 +11,24 @@ const TYPE_LABELS = {
 
 export default function GlobalSearch({ isOpen, onClose, projects, onJumpToMessage }) {
   const { activeProject, setChatTab } = useAppStore();
-  const { messages } = useMessages(activeProject);
+  const [messages, setMessages] = useState([]);
   const { tasks } = useGlobalTasks(projects);
   const [query, setQuery] = useState('');
   const inputRef = useRef(null);
+
+  // 채팅 화면은 최근 메시지만 구독(성능)하지만, 검색은 자주 여는 기능이 아니므로
+  // 열릴 때 한 번 전체 히스토리를 읽어와 과거 메시지도 검색되도록 한다. 상시
+  // 구독이 아니라 그때그때 조회라 평소에는 아무 비용도 들지 않는다.
+  useEffect(() => {
+    if (!isOpen || !activeProject) { setMessages([]); return; }
+    let cancelled = false;
+    getDocs(fsQuery(collection(db, 'projects', activeProject, 'messages'), orderBy('createdAt', 'asc')))
+      .then((snap) => {
+        if (!cancelled) setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      })
+      .catch(() => { if (!cancelled) setMessages([]); });
+    return () => { cancelled = true; };
+  }, [isOpen, activeProject]);
 
   useEffect(() => {
     if (isOpen) {
