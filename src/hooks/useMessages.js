@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   collection, query, orderBy, onSnapshot,
   addDoc, updateDoc, deleteDoc, doc, arrayUnion, serverTimestamp,
@@ -8,15 +8,25 @@ import { db } from '../lib/firebase';
 export function useMessages(projectId) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  // id -> message object, reused across snapshots so unchanged messages keep
+  // a stable reference and <Message memo> can actually skip re-rendering them
+  // instead of re-rendering the whole history on every unrelated write.
+  const msgMapRef = useRef(new Map());
 
   useEffect(() => {
+    msgMapRef.current = new Map();
     if (!projectId) { setMessages([]); setLoading(false); return; }
     const q = query(
       collection(db, 'projects', projectId, 'messages'),
       orderBy('createdAt', 'asc')
     );
     const unsub = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const map = msgMapRef.current;
+      snap.docChanges().forEach((change) => {
+        if (change.type === 'removed') map.delete(change.doc.id);
+        else map.set(change.doc.id, { id: change.doc.id, ...change.doc.data() });
+      });
+      setMessages(snap.docs.map((d) => map.get(d.id)));
       setLoading(false);
     });
     return unsub;
