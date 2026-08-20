@@ -34,6 +34,11 @@ const useAppStore = create((set, get) => ({
   kbDeepLink: null,
   setKbDeepLink: (link) => set({ kbDeepLink: link }),
 
+  // 검색 등에서 아직 로드되지 않은(페이지네이션 창 밖의) 채팅 메시지로 이동
+  // 요청이 오면 ChatMain이 이 값을 보고 필요한 만큼 더 불러온 뒤 스크롤한다.
+  pendingJumpMessageId: null,
+  setPendingJumpMessageId: (id) => set({ pendingJumpMessageId: id }),
+
   // Live meeting navigation (from meeting alert → KB > 회의 tab)
   activeLiveMeetingId: null,
   setActiveLiveMeetingId: (id) => set({ activeLiveMeetingId: id }),

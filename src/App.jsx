@@ -37,6 +37,10 @@ function ProtectedApp() {
       el.style.background = 'var(--accent-soft)';
       el.style.borderRadius = '12px';
       setTimeout(() => { el.style.background = ''; el.style.borderRadius = ''; }, 1400);
+    } else {
+      // 채팅창에 아직 로드되지 않은(페이지네이션 창 밖의) 과거 메시지 —
+      // ChatMain이 필요한 만큼 더 불러온 뒤 스크롤하도록 요청만 남긴다.
+      useAppStore.getState().setPendingJumpMessageId(mid);
     }
   };
 

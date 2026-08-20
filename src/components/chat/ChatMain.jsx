@@ -177,6 +177,30 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     if (el) el.scrollTop += el.scrollHeight - prevScrollHeightRef.current;
   }, [messages]);
 
+  // 검색·사이드바 등에서 아직 로드되지 않은(페이지네이션 창 밖의) 과거 메시지로
+  // 이동 요청이 오면, 채팅 탭/전체 태그로 전환하고 찾을 때까지 이전 페이지를
+  // 계속 불러온 뒤 스크롤한다. 전체 히스토리를 다 불러왔는데도 없으면 포기.
+  const pendingJumpMessageId = useAppStore((s) => s.pendingJumpMessageId);
+  const setPendingJumpMessageId = useAppStore((s) => s.setPendingJumpMessageId);
+  const setActiveTag = useAppStore((s) => s.setActiveTag);
+  useEffect(() => {
+    if (!pendingJumpMessageId) return;
+    if (chatTab !== 'chat') { setChatTab('chat'); return; }
+    if (activeTag !== 'all') { setActiveTag('all'); return; }
+    const el = msgRefs?.current?.[pendingJumpMessageId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'background 0.4s';
+      el.style.background = 'var(--accent-soft)';
+      el.style.borderRadius = '12px';
+      setTimeout(() => { el.style.background = ''; el.style.borderRadius = ''; }, 1400);
+      setPendingJumpMessageId(null);
+      return;
+    }
+    if (hasMore) loadMore();
+    else setPendingJumpMessageId(null);
+  }, [pendingJumpMessageId, messages, hasMore, chatTab, activeTag]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // 태그로 필터링 중일 때는 최근 메시지 창(useMessages) 밖의 과거 메시지도
   // 빠지지 않도록, 해당 태그 전체를 별도로 가져와서 사용한다.
   const { messages: taggedMessages } = useTaggedMessages(activeProject, activeTag !== 'all' ? activeTag : null);
