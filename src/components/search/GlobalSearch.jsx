@@ -66,7 +66,7 @@ export default function GlobalSearch({ isOpen, onClose, projects, onJumpToMessag
 
   const handleMsgClick = (m) => {
     setChatTab('chat');
-    onJumpToMessage(m.id);
+    onJumpToMessage(m);
     onClose();
   };
 

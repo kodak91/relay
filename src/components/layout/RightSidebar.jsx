@@ -303,7 +303,7 @@ function CatchupSection({ messages, onJump, uid, notifPerm, onRequestNotif }) {
                 <label className="catchup-check">
                   <input type="checkbox" onChange={() => dismiss(m.id)} />
                 </label>
-                <div className="catchup-body" onClick={() => onJump && onJump(m.id)}>
+                <div className="catchup-body" onClick={() => onJump && onJump(m)}>
                   <span className="catchup-tag" style={isResolved ? { background: 'var(--emerald-bg)', color: 'var(--emerald)', borderColor: 'var(--emerald-line)' } : {}}>
                     {tagLabel}
                   </span>
@@ -353,7 +353,7 @@ function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid, notifPerm
               style={{ position: 'absolute', top: 4, right: 4, border: 0, background: 'none', color: 'var(--ink-mute)', fontSize: 13, cursor: 'pointer', lineHeight: 1, padding: '2px 4px', opacity: 0.5 }}
               title="무시"
             >×</button>
-            <div onClick={() => onJump && onJump(item.id)} style={{ cursor: 'pointer' }}>
+            <div onClick={() => onJump && onJump(item)} style={{ cursor: 'pointer' }}>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 3 }}>
                 <div className="r-tag">{item.tag}</div>
                 {item.projectName && <span style={{ fontSize: 10, color: 'var(--ink-mute)' }}>{item.projectName}</span>}
@@ -386,7 +386,7 @@ function ConfirmSidebar({ pending, held, catchup, onJump, isLead, uid, notifPerm
                 style={{ position: 'absolute', top: 4, right: 4, border: 0, background: 'none', color: 'var(--ink-mute)', fontSize: 13, cursor: 'pointer', lineHeight: 1, padding: '2px 4px', opacity: 0.5 }}
                 title="무시"
               >×</button>
-              <div onClick={() => onJump && onJump(item.id)} style={{ cursor: 'pointer' }}>
+              <div onClick={() => onJump && onJump(item)} style={{ cursor: 'pointer' }}>
                 <div className="r-tag" style={{ color: 'oklch(0.42 0.13 70)' }}>보류</div>
                 <div className="r-ttl">{item.text?.slice(0, 50)}</div>
                 {item.heldUntil && <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 4 }}>📅 {item.heldUntil}까지</div>}

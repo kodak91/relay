@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import useAppStore from '../../store/appStore';
 import { useMessages } from '../../hooks/useMessages';
 import { useTaggedMessages } from '../../hooks/useTaggedMessages';
+import { useMessageContext } from '../../hooks/useMessageContext';
 import { useProjects } from '../../hooks/useProjects';
 import { useTasks } from '../../hooks/useTasks';
 import Message from './Message';
@@ -70,6 +71,11 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     didInitScrollRef.current = false;
   }, [activeProject]);
 
+  // 슬랙식 "메시지로 이동" 컨텍스트(검색 등에서 로드 범위 밖의 메시지를 클릭했을 때
+  // 그 주변만 따로 보여주는 임시 뷰). 위쪽의 스크롤-투-바텀 로직이 참조해야 해서
+  // 여기서 먼저 선언한다 — 실제 조회/전환 로직은 아래쪽에 있다.
+  const [jumpContext, setJumpContext] = useState(null); // { anchorId, messages }
+
   const [openThreads, setOpenThreads] = useState(new Set());
   const [dragging, setDragging] = useState(false);
   const dragCounter = useRef(0);
@@ -97,7 +103,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const meetingNotifRef = useRef(new Set());
 
   // Clear transient state when switching workspace
-  useEffect(() => { setPendingKBSave(null); setLiveMeetingId(null); }, [activeProject]);
+  useEffect(() => { setPendingKBSave(null); setLiveMeetingId(null); setJumpContext(null); }, [activeProject]);
 
   // Send a meeting_alert to chat when a scheduled meeting is ≤5 min away
   useEffect(() => {
@@ -137,8 +143,9 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
   const activeProjectData = useMemo(() => projects.find((p) => p.id === activeProject), [projects, activeProject]);
 
   // Scroll to bottom on initial load; on new messages, scroll only if near bottom.
+  // 메시지 주변 보기(jumpContext) 중에는 라이브 창 변화와 무관하므로 건너뛴다.
   useEffect(() => {
-    if (!scrollRef.current || loading) return;
+    if (!scrollRef.current || loading || jumpContext) return;
     const el = scrollRef.current;
     if (!didInitScrollRef.current) {
       el.scrollTop = el.scrollHeight;
@@ -147,7 +154,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     }
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distFromBottom < 150) el.scrollTop = el.scrollHeight;
-  }, [messages.length, loading]);
+  }, [messages.length, loading, jumpContext]);
 
   // 채팅 탭으로 (다른 탭에서) 돌아올 때 최하단으로 — 워크스페이스 진입과 동일하게 시작.
   // chat-scroll 이 새로 마운트되면 스크롤이 최상단이므로 최하단으로 재정렬.
@@ -177,41 +184,58 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     if (el) el.scrollTop += el.scrollHeight - prevScrollHeightRef.current;
   }, [messages]);
 
-  // 검색·사이드바 등에서 아직 로드되지 않은(페이지네이션 창 밖의) 과거 메시지로
-  // 이동 요청이 오면, 채팅 탭/전체 태그로 전환하고 찾을 때까지 이전 페이지를
-  // 계속 불러온 뒤 스크롤한다. 전체 히스토리를 다 불러왔는데도 없으면 포기.
-  const pendingJumpMessageId = useAppStore((s) => s.pendingJumpMessageId);
-  const setPendingJumpMessageId = useAppStore((s) => s.setPendingJumpMessageId);
-  const setActiveTag = useAppStore((s) => s.setActiveTag);
+  const scrollAndHighlight = (el) => {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.style.transition = 'background 0.4s';
+    el.style.background = 'var(--accent-soft)';
+    el.style.borderRadius = '12px';
+    setTimeout(() => { el.style.background = ''; el.style.borderRadius = ''; }, 1400);
+  };
+
+  // 슬랙식 "메시지로 이동" — 검색·사이드바 등에서 로드 범위 밖의(과거) 메시지를
+  // 클릭하면, 전체 히스토리를 불러오는 대신 그 메시지 주변만 별도로 불러와
+  // 임시로 보여준다. jumpContext가 켜져있는 동안은 그 컨텍스트를 표시하고,
+  // "최신 메시지로 돌아가기"를 누르거나 메시지를 보내면 원래 라이브 뷰로 복귀.
+  const pendingJumpTarget = useAppStore((s) => s.pendingJumpTarget);
+  const setPendingJumpTarget = useAppStore((s) => s.setPendingJumpTarget);
+  const { context: fetchedContext } = useMessageContext(activeProject, pendingJumpTarget);
+
   useEffect(() => {
-    if (!pendingJumpMessageId) return;
+    if (!pendingJumpTarget) return;
     if (chatTab !== 'chat') { setChatTab('chat'); return; }
-    if (activeTag !== 'all') { setActiveTag('all'); return; }
-    const el = msgRefs?.current?.[pendingJumpMessageId];
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.style.transition = 'background 0.4s';
-      el.style.background = 'var(--accent-soft)';
-      el.style.borderRadius = '12px';
-      setTimeout(() => { el.style.background = ''; el.style.borderRadius = ''; }, 1400);
-      setPendingJumpMessageId(null);
+    // 이미 라이브 뷰에 렌더링되어 있으면(늦게 로드된 경우 등) 컨텍스트 없이 바로 스크롤
+    const already = msgRefs?.current?.[pendingJumpTarget.id];
+    if (already) {
+      scrollAndHighlight(already);
+      setPendingJumpTarget(null);
       return;
     }
-    if (hasMore) loadMore();
-    else setPendingJumpMessageId(null);
-  }, [pendingJumpMessageId, messages, hasMore, chatTab, activeTag]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (fetchedContext && fetchedContext.anchorId === pendingJumpTarget.id) {
+      setJumpContext(fetchedContext);
+      setPendingJumpTarget(null);
+    }
+  }, [pendingJumpTarget, chatTab, fetchedContext]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 컨텍스트가 렌더링된 뒤, 대상 메시지로 스크롤·하이라이트
+  useEffect(() => {
+    if (!jumpContext) return;
+    const el = msgRefs?.current?.[jumpContext.anchorId];
+    if (el) scrollAndHighlight(el);
+  }, [jumpContext]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   // 태그로 필터링 중일 때는 최근 메시지 창(useMessages) 밖의 과거 메시지도
   // 빠지지 않도록, 해당 태그 전체를 별도로 가져와서 사용한다.
   const { messages: taggedMessages } = useTaggedMessages(activeProject, activeTag !== 'all' ? activeTag : null);
 
   const filteredMessages = useMemo(() => {
+    if (jumpContext) return jumpContext.messages;
     const now = Date.now();
     const source = activeTag === 'all' ? messages : taggedMessages;
     const live = source.filter((m) => !m.expiresAt || m.expiresAt > now);
     if (activeTag === 'all') return live;
     return live.filter((m) => (m.tags || []).includes(activeTag));
-  }, [messages, taggedMessages, activeTag]);
+  }, [messages, taggedMessages, activeTag, jumpContext]);
 
   const { groupedSet, groupStartSet } = useMemo(() => {
     const grouped = new Set();
@@ -398,6 +422,8 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
 
   const handleSend = async (rawMsgData) => {
     if (!activeProject) return;
+    // 메시지 주변 보기(슬랙식 컨텍스트) 중 새 메시지를 보내면 라이브 뷰로 복귀.
+    setJumpContext(null);
     let msgData = rawMsgData;
 
     // Ticket: create Firestore doc first to get ticketCode + ID for the chat message
@@ -711,10 +737,11 @@ ${fileLines || '(없음)'}`;
     floatTimerRef.current = setTimeout(() => setFloatingDate(''), 1500);
 
     // 상단 근처까지 스크롤하면 이전 메시지를 자동으로 더 불러온다(버튼은 폴백으로 유지).
-    if (activeTag === 'all' && hasMore && !loadingMore && container.scrollTop < 200) {
+    // 컨텍스트 보기 중일 땐 라이브 창과 무관하므로 적용하지 않는다.
+    if (!jumpContext && activeTag === 'all' && hasMore && !loadingMore && container.scrollTop < 200) {
       handleLoadMore();
     }
-  }, [activeTag, hasMore, loadingMore, handleLoadMore]);
+  }, [jumpContext, activeTag, hasMore, loadingMore, handleLoadMore]);
 
   // 채팅 alert에서 직접 회의장 입장 (종료된 회의는 KB탭으로 이동)
   const joinMeetingFromChat = useCallback((meetingId) => {
@@ -954,7 +981,16 @@ ${fileLines || '(없음)'}`;
               </div>
             ) : (
               <>
-                {activeTag === 'all' && hasMore && (
+                {jumpContext ? (
+                  <div style={{ textAlign: 'center', padding: '4px 0 12px' }}>
+                    <button
+                      onClick={() => setJumpContext(null)}
+                      style={{ fontSize: 11, color: 'var(--accent)', background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', borderRadius: 'var(--r-2)', padding: '4px 12px', cursor: 'pointer' }}
+                    >
+                      🔍 메시지 주변 보기 중 · 최신 메시지로 돌아가기 →
+                    </button>
+                  </div>
+                ) : activeTag === 'all' && hasMore && (
                   <div style={{ textAlign: 'center', padding: '4px 0 12px' }}>
                     <button
                       onClick={handleLoadMore}

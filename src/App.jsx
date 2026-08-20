@@ -29,7 +29,13 @@ function ProtectedApp() {
 
   const currentProject = projects.find((p) => p.id === activeProject);
 
-  const jumpToMessage = (mid) => {
+  // target: 메시지 id(문자열) 또는 { id, createdAt, ... } 메시지 객체.
+  // 이미 채팅창에 렌더링된 메시지는 바로 스크롤하고, 아닌 경우(검색 결과 등
+  // 로드 범위 밖의 과거 메시지)엔 객체가 있어야 ChatMain이 그 주변을 슬랙식
+  // 컨텍스트로 따로 불러올 수 있다.
+  const jumpToMessage = (target) => {
+    const mid = typeof target === 'string' ? target : target?.id;
+    if (!mid) return;
     const el = msgRefs.current[mid];
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -37,10 +43,8 @@ function ProtectedApp() {
       el.style.background = 'var(--accent-soft)';
       el.style.borderRadius = '12px';
       setTimeout(() => { el.style.background = ''; el.style.borderRadius = ''; }, 1400);
-    } else {
-      // 채팅창에 아직 로드되지 않은(페이지네이션 창 밖의) 과거 메시지 —
-      // ChatMain이 필요한 만큼 더 불러온 뒤 스크롤하도록 요청만 남긴다.
-      useAppStore.getState().setPendingJumpMessageId(mid);
+    } else if (typeof target === 'object' && target?.createdAt) {
+      useAppStore.getState().setPendingJumpTarget(target);
     }
   };
 
