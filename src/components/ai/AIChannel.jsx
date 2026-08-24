@@ -11,7 +11,7 @@ import useAppStore from '../../store/appStore';
 import { addDoc, updateDoc, doc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
-const PM_MODEL = 'claude-sonnet-4-6';
+const PM_MODEL = 'claude-sonnet-5';
 
 const PM_SYSTEM = `당신은 Relay 팀 협업 플랫폼의 AI PM(Project Manager) 어시스턴트입니다.
 프로젝트의 채팅 메시지, 태스크, 티켓, 회의, 파일 등 모든 리소스 데이터가 아래 컨텍스트에 포함됩니다.

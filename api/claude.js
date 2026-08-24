@@ -3,7 +3,7 @@
 
 const MAX_INPUT_CHARS = 60000;
 const MAX_OUTPUT_TOKENS = 4096;
-const ALLOWED_MODELS = ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6'];
+const ALLOWED_MODELS = ['claude-haiku-4-5-20251001', 'claude-sonnet-5'];
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001';
 const FIREBASE_API_KEY = process.env.VITE_FIREBASE_API_KEY;
 
