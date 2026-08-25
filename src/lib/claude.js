@@ -9,7 +9,10 @@ export async function claudeComplete(prompt, systemPrompt = '', model = null) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt, systemPrompt, idToken, ...(model && { model }) }),
   });
-  if (!res.ok) throw new Error('Claude API error: ' + res.status);
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error ? `${res.status}: ${body.error}` : 'Claude API error: ' + res.status);
+  }
   const data = await res.json();
   return data.text;
 }
