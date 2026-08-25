@@ -14,7 +14,7 @@ const useAppStore = create((set, get) => ({
   activeProject: null,
   setActiveProject: (id) => set({ activeProject: id, activeChannel: 'chat', chatTab: 'chat', activeTag: 'all' }),
 
-  activeChannel: 'chat', // chat | ai | echo | pipeline
+  activeChannel: 'chat', // chat | ai | echo | pipeline | aide
   setActiveChannel: (ch) => set({ activeChannel: ch }),
 
   chatTab: 'chat', // chat | kb | tasks

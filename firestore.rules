@@ -62,6 +62,15 @@ service cloud.firestore {
         allow read, write: if isLead(pid);
       }
 
+      // ── 민감 데이터: 개인 비서(Aide) — 팀장(오너) 개인 vault·브랜드 프로필·기억.
+      // 팀원에게는 절대 노출되면 안 되므로 evaluations와 같은 방식으로 전용 규칙을 둔다.
+      match /aideMemory/{document=**} {
+        allow read, write: if isLead(pid);
+      }
+      match /aideProfile/{document=**} {
+        allow read, write: if isLead(pid);
+      }
+
       // ── 민감 데이터 2: 역할 캡슐(Echo) — 팀장 전체 / 팀원은 본인 것만 ──
       match /echoCapsules/{memberId} {
         allow read: if isLead(pid) || isUser(memberId);
@@ -80,11 +89,13 @@ service cloud.firestore {
 
       // ── 그 외 모든 하위 컬렉션 — 해당 워크스페이스 멤버 ──
       // (messages·tasks·tickets·meetings·kbFiles·kbFolders·bookmarkGroups·notionPages 등)
-      // evaluations/echoCapsules 는 위 전용 규칙이 전담하므로 여기서 제외.
+      // evaluations/echoCapsules/aideMemory/aideProfile 는 위 전용 규칙이 전담하므로 여기서 제외.
       match /{collection}/{document=**} {
         allow read, write: if isMember(pid)
           && collection != 'evaluations'
-          && collection != 'echoCapsules';
+          && collection != 'echoCapsules'
+          && collection != 'aideMemory'
+          && collection != 'aideProfile';
       }
     }
   }

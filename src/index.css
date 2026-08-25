@@ -3547,3 +3547,82 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   .topbar-mob-ctx { display: none !important; }
   .mob-quicknav { display: none !important; }
 }
+
+/* ── 개인 비서(Aide) ── Relay 기존 토큰만 사용, 새 색조/형태 언어 추가하지 않음 */
+.aide-view { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+
+.aide-body { flex: 1; display: grid; grid-template-columns: 260px 1fr 220px; min-height: 0; }
+
+.aide-left, .aide-right {
+  border-right: 1px solid var(--border);
+  padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px;
+}
+.aide-right { border-right: none; border-left: 1px solid var(--border); }
+
+.aide-center { position: relative; min-width: 0; }
+.aide-graph-wrap { position: absolute; inset: 0; }
+.aide-graph-canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+
+.aide-inspector-label {
+  font-size: 10px; letter-spacing: 0.08em; color: var(--ink-mute);
+  font-family: var(--font-mono); margin-bottom: 4px;
+}
+.aide-inspector { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.aide-view .muted, .aide-inspector.muted { color: var(--ink-mute); font-size: 12px; }
+.aide-inspector-path { font-size: 11px; color: var(--ink-mute); font-family: var(--font-mono); }
+.aide-inspector-text { font-size: 12px; line-height: 1.6; color: var(--ink-3); white-space: pre-wrap; }
+.aide-tag-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.aide-tag-row .tag-chip {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line);
+}
+
+.aide-hubs { display: flex; flex-direction: column; gap: 4px; }
+.aide-hub-row {
+  display: flex; justify-content: space-between; gap: 8px; padding: 4px 6px;
+  border-radius: var(--r-1); cursor: pointer; font-size: 12px;
+}
+.aide-hub-row:hover { background: var(--hover); }
+.aide-hub-count { color: var(--ink-mute); font-family: var(--font-mono); font-size: 11px; }
+
+.aide-filter-row { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 0; cursor: pointer; }
+.aide-filter-row input { margin: 0; }
+.aide-filter-row span:nth-child(2) { flex: 1; }
+
+.aide-status { display: flex; align-items: center; gap: 6px; margin-top: auto; font-size: 12px; color: var(--ink-mute); }
+.aide-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-mute); }
+.aide-status-dot.listening { background: var(--emerald); box-shadow: 0 0 6px var(--emerald); }
+.aide-status-dot.thinking { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.aide-level-bar { height: 4px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.aide-level-bar div { height: 100%; background: var(--emerald); transition: width 60ms linear; }
+
+.aide-connect {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 14px; text-align: center; color: var(--ink-mute); font-size: 13px; padding: 24px;
+}
+
+.aide-notice { font-size: 12px; color: var(--rose); background: var(--rose-bg); border: 1px solid var(--rose-line); border-radius: var(--r-2); padding: 6px 10px; }
+
+.aide-card {
+  margin-top: 6px; padding: 10px 12px; border-radius: var(--r-2);
+  background: var(--surface); border: 1px solid var(--border); font-size: 12px; display: flex; flex-direction: column; gap: 6px;
+}
+.aide-card.notice { color: var(--ink-mute); }
+.aide-card-row { cursor: default; }
+.aide-card-row.rose { color: var(--rose); }
+.aide-card-path { color: var(--ink-mute); font-family: var(--font-mono); font-size: 11px; margin-left: 6px; }
+.aide-card-snippet { color: var(--ink-3); font-size: 11px; }
+.aide-card-tag { color: var(--accent); font-size: 11px; margin-left: 6px; }
+.aide-hubs .aide-card-row { cursor: pointer; }
+
+.aide-profile-editor {
+  display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 20px;
+  border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.aide-profile-field { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--ink-mute); flex: 1; min-width: 160px; }
+.aide-profile-field input { border: 1.5px solid var(--border); border-radius: var(--r-1); padding: 6px 8px; font-size: 13px; background: var(--bg); color: var(--ink); }
+
+@media (max-width: 900px) {
+  .aide-body { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+  .aide-left, .aide-right { border: none; border-bottom: 1px solid var(--border); max-height: 160px; }
+}

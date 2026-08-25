@@ -10,6 +10,7 @@ import RightSidebar from './components/layout/RightSidebar';
 import ChatMain from './components/chat/ChatMain';
 import AIChannel from './components/ai/AIChannel';
 import ScopePanel from './components/echo/ScopePanel';
+import AideView from './features/aide/AideView';
 import GlobalSearch from './components/search/GlobalSearch';
 import { useProjects } from './hooks/useProjects';
 
@@ -102,6 +103,8 @@ function ProtectedApp() {
           <AIChannel />
         ) : activeChannel === 'echo' ? (
           <ScopePanel />
+        ) : activeChannel === 'aide' ? (
+          <AideView />
         ) : (
           <ChatMain msgRefs={msgRefs} onJumpToMessage={jumpToMessage} />
         )}

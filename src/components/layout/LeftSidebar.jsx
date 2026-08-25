@@ -198,6 +198,22 @@ export default function LeftSidebar({ mobileOpen, onMobileClose, onMobileNav }) 
         </div>
       )}
 
+      {/* 개인 비서 — 옵시디언 vault 그래프 + 도구 (팀장 전용, 팀원에게 안 보임) */}
+      {user?.role === 'lead' && (
+        <div
+          className={'ai-channel' + (activeChannel === 'aide' ? ' on' : '')}
+          onClick={() => setActiveChannel('aide')}
+          style={{ marginTop: 8 }}
+        >
+          <div className="hd2">
+            <span>🧭</span>
+            <span>개인 비서</span>
+            <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 10, opacity: 0.7 }}>vault</span>
+          </div>
+          <p>내 노트 그래프 · 기억 · 오늘 브리핑</p>
+        </div>
+      )}
+
       {showSlackModal && (
         <SlackModal
           project={activeProjectData}
