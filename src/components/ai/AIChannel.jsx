@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import { claudeComplete } from '../../lib/claude';
 import { useMessages } from '../../hooks/useMessages';
 import { useTasks } from '../../hooks/useTasks';
@@ -392,7 +393,7 @@ ${fileLines || '(없음)'}`;
               style={msg.error ? { background: 'var(--rose-bg)', color: 'var(--rose)', border: '1px solid var(--rose-line)' } : {}}
             >
               {msg.role === 'ai' && !msg.error
-                ? <div className="md-content ai-md"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown></div>
+                ? <div className="md-content ai-md"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{msg.text}</ReactMarkdown></div>
                 : <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{msg.text}</pre>
               }
             </div>

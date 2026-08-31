@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
 import useAppStore from '../../store/appStore';
 import { useTasks } from '../../hooks/useTasks';
 import { useTickets } from '../../hooks/useTickets';
@@ -271,7 +272,7 @@ export default function AideView() {
             )}
             <div className={'ai-msg-bubble' + (msg.error ? ' error' : '')} style={msg.error ? { background: 'var(--rose-bg)', color: 'var(--rose)', border: '1px solid var(--rose-line)' } : {}}>
               {msg.role === 'ai' && !msg.error
-                ? <div className="md-content ai-md"><ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown></div>
+                ? <div className="md-content ai-md"><ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{msg.text}</ReactMarkdown></div>
                 : <pre style={{ margin: 0, fontFamily: 'inherit', fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{msg.text}</pre>}
             </div>
             {msg.card && <ToolCard card={msg.card} onOpenNote={setSelectedId} />}
