@@ -65,7 +65,17 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
-    const text = data.content?.[0]?.text || '';
+    // content는 블록 배열이다 — 항상 index 0이 텍스트라고 가정하면 안 됨(여러 블록이 섞여
+    // 오는 경우 첫 블록이 text가 아니면 조용히 빈 응답이 되어 화면이 비어 보이는 원인이 된다).
+    const text = (data.content || [])
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text)
+      .join('\n')
+      .trim();
+    if (!text) {
+      console.error('Claude API returned no text block:', JSON.stringify(data).slice(0, 500));
+      return res.status(502).json({ error: `모델이 빈 응답을 반환했습니다 (stop_reason: ${data.stop_reason || '알 수 없음'}).` });
+    }
     return res.status(200).json({ text });
   } catch (err) {
     return res.status(500).json({ error: err.message });
