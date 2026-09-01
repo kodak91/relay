@@ -29,12 +29,15 @@ export function useMeetingRecorder({ onFinalText } = {}) {
     setInterim('');
     setRecording(false);
     try { recognitionRef.current?.stop(); } catch { /* noop */ }
-    try {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
-    } catch { /* noop */ }
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== 'inactive') {
+      // 트랙 정리는 mr.onstop 안에서 한다 — 여기서 바로 스트림을 끊으면 레코더가
+      // 마지막 오디오 조각을 내보내기 전에 죽어서 빈 Blob이 되고, 업로드가 조용히
+      // 아무 반응 없이 무시된다(회의 녹음 저장 안 되던 버그의 원인).
+      try { mr.stop(); } catch { /* noop */ }
+    } else {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    }
   }, []);
 
   // 녹음 시작 → 오디오 스트림 + (지원 시)받아쓰기 시작. onStopped(blob) 로 최종 Blob 전달.
@@ -48,6 +51,8 @@ export function useMeetingRecorder({ onFinalText } = {}) {
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mr.mimeType || 'audio/webm' });
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
         onStopped?.(blob);
       };
       mr.start();

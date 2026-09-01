@@ -137,7 +137,7 @@ function LivePhase({ transcript, inputText, setInputText, activeSpeaker, setActi
             </div>
           ))}
         </div>
-        {(recording || interim || recError) && (
+        {(recording || interim || recError || uploadingRec) && (
           <div className="m-rec-strip" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', fontSize: 12, color: recError ? 'var(--rose)' : 'var(--ink-3)', background: recording ? 'oklch(0.96 0.04 25)' : 'var(--surface-2)', borderRadius: 'var(--r-2)', margin: '0 0 6px' }}>
             {recording && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--rose)', flexShrink: 0, animation: 'pulse 1.2s infinite' }} />}
             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
