@@ -878,8 +878,13 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
               );
             })()}
             <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
-            {showAI && (
-              <div className="ai-fab-pop">
+            {showAI && (() => {
+              const r = taWrapRef.current?.getBoundingClientRect();
+              const popStyle = r
+                ? { right: Math.round(window.innerWidth - r.right), bottom: Math.round(window.innerHeight - r.top + 6) }
+                : {};
+              return (
+              <div className="ai-fab-pop" style={popStyle}>
                 <div className="ai-fab-hd">
                   <span>AI 도구</span>
                   <button className="ai-fab-x" onClick={() => setShowAI(false)}>✕</button>
@@ -892,7 +897,8 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
                   </button>
                 ))}
               </div>
-            )}
+              );
+            })()}
           </div>
         )}
 

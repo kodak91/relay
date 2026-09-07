@@ -1029,11 +1029,12 @@ kbd { font-family: var(--font-mono); font-size: 10px; background: var(--surface-
   transition: all 0.14s;
 }
 .ai-fab:hover, .ai-fab.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+/* box-inner 의 overflow:hidden 을 벗어나야 하므로 mention-pop 과 동일하게 position:fixed 사용(좌표는 인라인 지정) */
 .ai-fab-pop {
-  position: absolute; right: 0; bottom: calc(100% + 6px);
+  position: fixed; z-index: 3000;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-3); min-width: 260px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 200; overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12); overflow: hidden;
 }
 .ai-fab-hd { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--ink-3); }
 .ai-fab-x { border: 0; background: transparent; font-size: 14px; color: var(--ink-mute); }
