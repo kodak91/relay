@@ -6,6 +6,7 @@ import { useProjects } from '../../hooks/useProjects';
 import { useGlobalMessages } from '../../hooks/useGlobalMessages';
 import { usePersonalTasks, taskDate, todayStr } from '../../hooks/usePersonalTasks';
 import { useTickets } from '../../hooks/useTickets';
+import { showDesktopNotification } from '../../lib/messageNav';
 
 const TYPE_LABELS = {
   approval: '컨펌', decision: '결정', vote: '투표',
@@ -89,6 +90,7 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
           await addDoc(collection(db, 'notifications', uid, 'items'), {
             type: 'approval_reactivated', title,
             body: m.text?.slice(0, 60) || '',
+            projectId: m.projectId || null, messageId: m.id || null,
             fromName: 'Relay', read: false, createdAt: serverTimestamp(),
           }).catch(() => {});
         };
@@ -155,9 +157,9 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
       if (catchupSeenIds.current.has(m.id)) return;
       const msgMs = m.createdAt?.toMillis?.() ?? (m.createdAt?.seconds ?? 0) * 1000;
       if (msgMs > sessionStart.current) {
-        new Notification('Relay — 따라잡기', {
+        showDesktopNotification('Relay — 따라잡기', {
           body: `${TYPE_LABELS[m.type] || m.type}: ${m.title || m.text?.slice(0, 60) || '(내용 없음)'}`,
-          icon: '/favicon.ico',
+          link: { projectId: m.projectId, message: m },
         });
       }
     });
@@ -176,13 +178,13 @@ export default function RightSidebar({ onJumpToMessage, mobilePanel, onMobilePan
       snap.docChanges().forEach((change) => {
         if (change.type === 'added') {
           if (!initialized) return;
-          if (Notification.permission === 'granted') {
-            const data = change.doc.data();
-            new Notification('Relay — ' + (data.title || '새 알림'), {
-              body: data.body || '',
-              icon: '/favicon.ico',
-            });
-          }
+          const data = change.doc.data();
+          showDesktopNotification('Relay — ' + (data.title || '새 알림'), {
+            body: data.body || '',
+            link: data.projectId && data.messageId
+              ? { projectId: data.projectId, messageId: data.messageId }
+              : null,
+          });
         }
       });
       initialized = true;

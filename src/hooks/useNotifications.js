@@ -76,7 +76,7 @@ export function useNotifications(uid) {
 
 // 알림 생성 헬퍼 — 여러 곳에서 재사용. 수신자 uid 에게 category 별 알림 기록.
 // (수신자 설정 필터링은 읽기 시점에 useNotifications 가 처리)
-export async function pushNotif(uid, { type = 'general', category = 'general', title, body, fromName }) {
+export async function pushNotif(uid, { type = 'general', category = 'general', title, body, fromName, projectId = null, messageId = null }) {
   if (!uid) return;
   await addDoc(collection(db, 'notifications', uid, 'items'), {
     type,
@@ -84,6 +84,7 @@ export async function pushNotif(uid, { type = 'general', category = 'general', t
     title: title || '',
     body: (body || '').slice(0, 80),
     fromName: fromName || '',
+    projectId, messageId, // 알림 클릭 → 해당 메시지로 이동하기 위한 좌표
     read: false,
     createdAt: serverTimestamp(),
   }).catch(() => {});

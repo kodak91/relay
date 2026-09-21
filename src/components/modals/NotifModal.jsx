@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import useAppStore from '../../store/appStore';
 import { useNotifications } from '../../hooks/useNotifications';
+import { navigateToMessage } from '../../lib/messageNav';
 
 // 알림 카테고리 토글 정의
 const CATEGORY_TOGGLES = [
@@ -37,6 +38,15 @@ export default function NotifModal({ onClose }) {
     const result = await Notification.requestPermission();
     setPerm(result);
     setRequesting(false);
+  };
+
+  // 알림 클릭 — 읽음 처리 후, 좌표가 있는 알림은 원본 메시지로 이동
+  const handleItemClick = (n) => {
+    markRead(n.id);
+    if (n.projectId && n.messageId) {
+      navigateToMessage(n.projectId, n.messageId);
+      onClose();
+    }
   };
 
   const permLabel = perm === 'granted' ? '허용됨 ✓' : perm === 'denied' ? '차단됨' : '허용하기';
@@ -76,8 +86,8 @@ export default function NotifModal({ onClose }) {
                     {unreadItems.map((n) => (
                       <button
                         key={n.id}
-                        onClick={() => markRead(n.id)}
-                        title="클릭하면 읽음 처리됩니다"
+                        onClick={() => handleItemClick(n)}
+                        title={n.projectId && n.messageId ? '클릭하면 해당 메시지로 이동합니다' : '클릭하면 읽음 처리됩니다'}
                         style={{
                           textAlign: 'left', padding: '9px 11px', borderRadius: 'var(--r-2)',
                           border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer',

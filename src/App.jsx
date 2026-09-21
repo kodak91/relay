@@ -13,6 +13,7 @@ import ScopePanel from './components/echo/ScopePanel';
 import AideView from './features/aide/AideView';
 import GlobalSearch from './components/search/GlobalSearch';
 import { useProjects } from './hooks/useProjects';
+import { navigateToMessage } from './lib/messageNav';
 
 function ProtectedApp() {
   const activeChannel = useAppStore((s) => s.activeChannel);
@@ -37,6 +38,9 @@ function ProtectedApp() {
   const jumpToMessage = (target) => {
     const mid = typeof target === 'string' ? target : target?.id;
     if (!mid) return;
+    // 다른 프로젝트의 메시지(전체 검색·사이드바·알림)라면 프로젝트부터 전환
+    const pid = typeof target === 'object' ? target?.projectId : null;
+    if (pid && pid !== activeProject) { navigateToMessage(pid, target); return; }
     const el = msgRefs.current[mid];
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });

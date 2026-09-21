@@ -267,13 +267,15 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     });
   }, []);
 
-  const sendNotif = useCallback(async (uid, title, body, category = 'general') => {
+  // messageId — 알림을 눌렀을 때 원본 메시지로 이동하기 위한 좌표(프로젝트 id 와 함께 저장)
+  const sendNotif = useCallback(async (uid, title, body, category = 'general', messageId = null) => {
     if (!uid) return;
     await addDoc(collection(db, 'notifications', uid, 'items'), {
       type: 'action_result', category, title, body: body?.slice(0, 80) || '',
+      projectId: activeProject || null, messageId: messageId || null,
       fromName: user?.name || '', read: false, createdAt: serverTimestamp(),
     }).catch(() => {});
-  }, [user]);
+  }, [user, activeProject]);
 
   // 스레드 답글 입력값은 각 메시지(Thread)가 로컬로 들고 있다가, 전송 시 여기로 text를 넘겨받는다.
   const sendReply = useCallback(async (mid, text) => {
@@ -290,16 +292,16 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       // @멘션 — 답글에서 언급된 멤버
       (activeProjectData?.members || [])
         .filter((mem) => mem.uid && mem.name && v.includes(`@${mem.name}`) && !notified.has(mem.uid))
-        .forEach((mem) => { notified.add(mem.uid); sendNotif(mem.uid, `${user?.name || '팀원'}님이 회원님을 언급했습니다`, v, 'mention'); });
+        .forEach((mem) => { notified.add(mem.uid); sendNotif(mem.uid, `${user?.name || '팀원'}님이 회원님을 언급했습니다`, v, 'mention', mid); });
 
       if (authorUid && !notified.has(authorUid)) {
         notified.add(authorUid);
-        sendNotif(authorUid, '내 글에 새 댓글', `${user?.name || '팀원'}: ${v}`, 'myThread');
+        sendNotif(authorUid, '내 글에 새 댓글', `${user?.name || '팀원'}: ${v}`, 'myThread', mid);
       }
       (m.thread || [])
         .map((r) => r.senderUid)
         .filter((u) => u && !notified.has(u))
-        .forEach((u) => { notified.add(u); sendNotif(u, '참여한 스레드에 새 댓글', `${user?.name || '팀원'}: ${v}`, 'allThread'); });
+        .forEach((u) => { notified.add(u); sendNotif(u, '참여한 스레드에 새 댓글', `${user?.name || '팀원'}: ${v}`, 'allThread', mid); });
     }
   }, [activeProject, addReply, user, messages, activeProjectData, sendNotif]);
 
@@ -323,7 +325,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     await updateMessageField(activeProject, mid, { chosen: letter });
     const m = messages.find((msg) => msg.id === mid);
     if (m?.senderUid && m.senderUid !== user?.uid) {
-      await sendNotif(m.senderUid, `결정 요청이 처리되었습니다 — ${letter}안`, m.title || m.text);
+      await sendNotif(m.senderUid, `결정 요청이 처리되었습니다 — ${letter}안`, m.title || m.text, 'general', mid);
     }
   }, [updateMessageField, activeProject, messages, user, sendNotif]);
 
@@ -348,18 +350,18 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       if (m) {
         await addTask(activeProject, { title: (m.text?.slice(0, 40) || '승인 건') + ' — 후속 처리', fromLead: true, done: true, from: 'approval:' + mid });
         if (m.senderUid && m.senderUid !== user?.uid) {
-          await sendNotif(m.senderUid, '컨펌이 승인되었습니다 ✓', m.text);
+          await sendNotif(m.senderUid, '컨펌이 승인되었습니다 ✓', m.text, 'general', mid);
         }
       }
     } else if (action === 'complete') {
       await updateMessageField(activeProject, mid, { status: 'done' });
       if (m?.senderUid && m.senderUid !== user?.uid) {
-        await sendNotif(m.senderUid, '컨펌이 반려되었습니다', m.text);
+        await sendNotif(m.senderUid, '컨펌이 반려되었습니다', m.text, 'general', mid);
       }
     } else if (action === 'hold') {
       await updateMessageField(activeProject, mid, { status: 'held', heldUntil: heldUntil || null });
       if (m?.senderUid && m.senderUid !== user?.uid) {
-        await sendNotif(m.senderUid, '컨펌이 보류되었습니다 ⏸', heldUntil ? `${heldUntil}까지 · ${m.text}` : m.text);
+        await sendNotif(m.senderUid, '컨펌이 보류되었습니다 ⏸', heldUntil ? `${heldUntil}까지 · ${m.text}` : m.text, 'general', mid);
       }
     }
   }, [messages, updateMessageField, activeProject, addTask, user, sendNotif]);
@@ -461,14 +463,14 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
     // 기능(/) 메시지 — 대상자가 지정된 결정/승인/투표는 대상자에게 알림 (featureChat)
     const FEATURE_TYPES = { decision: '결정 요청', approval: '컨펌 요청', vote: '투표 요청' };
     if (FEATURE_TYPES[msgData.type] && msgData.targetUid && msgData.targetUid !== user?.uid) {
-      sendNotif(msgData.targetUid, `${FEATURE_TYPES[msgData.type]}이 도착했습니다`, msgData.title || msgData.text, 'featureChat');
+      sendNotif(msgData.targetUid, `${FEATURE_TYPES[msgData.type]}이 도착했습니다`, msgData.title || msgData.text, 'featureChat', msgRef?.id);
     }
 
     // @멘션 — 언급된 멤버에게 알림 (본인 제외)
     if (Array.isArray(msgData.mentions)) {
       msgData.mentions
         .filter((uid) => uid && uid !== user?.uid)
-        .forEach((uid) => sendNotif(uid, `${user?.name || '팀원'}님이 회원님을 언급했습니다`, msgData.text, 'mention'));
+        .forEach((uid) => sendNotif(uid, `${user?.name || '팀원'}님이 회원님을 언급했습니다`, msgData.text, 'mention', msgRef?.id));
     }
 
     // Slack: /보고 messages (bot token preferred for edit/delete tracking; fallback to webhook)
@@ -501,7 +503,7 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
         createdAt: serverTimestamp(),
       }).catch((e) => console.warn('Assign task write:', e.message));
       if (msgData.assigneeUid !== user?.uid) {
-        sendNotif(msgData.assigneeUid, '새 업무가 배정되었습니다', msgData.text, 'general');
+        sendNotif(msgData.assigneeUid, '새 업무가 배정되었습니다', msgData.text, 'general', msgRef?.id);
       }
     }
   };
@@ -632,11 +634,13 @@ export default function ChatMain({ msgRefs, onJumpToMessage }) {
       type: 'task_assigned',
       title: '새 태스크가 추가되었습니다',
       body: taskTitle,
+      projectId: activeProject || null,
+      messageId: msg.id || null,
       fromName: user?.name || '팀원',
       read: false,
       createdAt: serverTimestamp(),
     }).catch(() => {});
-  }, [user]);
+  }, [user, activeProject]);
 
   // Task 8: PM AI command handler — 채팅방에서 "/ " 로 호출되는 AI
   const PM_SYSTEM = '당신은 이 워크스페이스의 PM AI입니다. 아래 컨텍스트에는 이 채팅방의 메시지, 태스크, 티켓, 회의, 파일, 멤버 등 프로젝트 전체 데이터가 포함됩니다. 이 데이터를 근거로 회의/티켓/태스크/요약 등 팀 운영 전반을 처리합니다. 한국어로 간결하고 실용적으로 답변하세요.';
