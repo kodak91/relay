@@ -328,6 +328,7 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
   const internalFileRef = useRef(null);
   const actionsRef = useRef(null);
   const taWrapRef = useRef(null);
+  const aiFabRef = useRef(null);
 
   // @멘션 — 입력 시 멤버 목록 팝업, 선택 시 멤버에게 알림
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -877,9 +878,15 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
               </div>
               );
             })()}
-            <button className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
-            {showAI && (
-              <div className="ai-fab-pop">
+            <button ref={aiFabRef} className={'ai-fab' + (showAI ? ' on' : '')} onClick={() => setShowAI((v) => !v)} title="AI 도구">✦</button>
+            {showAI && (() => {
+              // 버튼 기준 좌표를 직접 계산 — 부모 .box-inner 의 overflow:hidden 을 벗어남
+              const r = aiFabRef.current?.getBoundingClientRect();
+              const popStyle = r
+                ? { right: Math.max(12, Math.round(window.innerWidth - r.right)), bottom: Math.round(window.innerHeight - r.top + 6) }
+                : {};
+              return (
+              <div className="ai-fab-pop" style={popStyle}>
                 <div className="ai-fab-hd">
                   <span>AI 도구</span>
                   <button className="ai-fab-x" onClick={() => setShowAI(false)}>✕</button>
@@ -892,7 +899,8 @@ export default function Composer({ onSend, onFileUpload, onOpenMeeting, onPMAI, 
                   </button>
                 ))}
               </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
